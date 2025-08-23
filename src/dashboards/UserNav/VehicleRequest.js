@@ -1,13 +1,25 @@
 // src/components/VehicleRequest.js
-import React from 'react';
+import SidebarLayout from '../../Layouts/SidebarLayout';
 
-function VehicleRequest() {
+export default function VehicleRequest() {
   return (
-    <div>
-      <h1>Request Vehicle Here</h1>
-      <p>This page is under development.</p>
-    </div>
+    <SidebarLayout role="standard">
+      <div>
+        <h3>Vehicle Request</h3>
+        <div className="mb-4">
+          <h5>Request vehicle here</h5>
+          <div className="bg-light p-4 mb-3" style={{ borderRadius: '8px' }}>
+            <p>Under Maintenance</p>
+          </div>
+        </div>
+        <div>
+          <h5>Under Maintenance</h5>
+          <ul className="list-unstyled">
+            <li className="mb-2 p-2 bg-light" style={{ borderRadius: '5px' }}>Vehicle </li>
+            <li className="mb-2 p-2 bg-light" style={{ borderRadius: '5px' }}>Vehicle</li>
+          </ul>
+        </div>
+      </div>
+    </SidebarLayout>
   );
 }
-
-export default VehicleRequest;

@@ -9,8 +9,10 @@ import Signup from './Signup';
 import Profile from './dashboards/UserNav/Profile';
 import Notification from './dashboards/UserNav/Notification';
 //Nav of each Users.
-// Dashboard Components
+// standard usser
 import DashboardUser from './dashboards/DashboardUser';
+import VehicleRequest from './dashboards/UserNav/VehicleRequest';
+import FacilityRequest from './dashboards/UserNav/FacilityRequest'
 //Personnel
 import DashboardPersonnel from './dashboards/DashboardPersonnel';
 import Assets from './dashboards/PersonnelNav/Assets';
@@ -22,11 +24,11 @@ import SysadActivityTracking from './dashboards/SysadNav/SysadActivityTracking';
 //AdminNav
 import DashboardAdmin from './dashboards/DashboardAdmin';
 import WorkOrder from './dashboards/AdminNav/WorkOrder';
-import Vehicle from './dashboards/AdminNav/Vehicle';
-import Facility from './dashboards/AdminNav/Facility';
+import Reservation from './dashboards/AdminNav/Reservation';
 import Reports from './dashboards/AdminNav/Reports';
 import ActivityTracking from './dashboards/AdminNav/ActivityTracking';
 import UserManagement from './dashboards/AdminNav/UserManagement';
+import AssetManagement from './dashboards/AdminNav/AssetManagement';
 
 
 
@@ -43,6 +45,9 @@ function App() {
       
                                               {/* Standard User*/}
         <Route path="/dashboard-user" element={<DashboardUser />} />
+        <Route path="/dashboard-user/VehicleRequest" element={<VehicleRequest/>} />
+        <Route path="/dashboard-user/FacilityRequest" element={<FacilityRequest/>} />
+
 
                                                {/* Personnel*/}
       {/* Personnel - Change to separate routes */}
@@ -57,11 +62,10 @@ function App() {
         <Route path="/dashboard-admin/notification" element={<Notification role="admin" />} />
         <Route path="/dashboard-admin/WorkOrder" element={<WorkOrder />} />
         <Route path="/dashboard-admin/ActivityTracking" element={<ActivityTracking />} />
-        <Route path="/dashboard-admin/Facility" element={<Facility />} />
         <Route path="/dashboard-admin/Reports" element={<Reports />} />
-        <Route path="/dashboard-admin/Vehicle" element={<Vehicle/>} />
         <Route path="/dashboard-admin/UserManagement" element={<UserManagement/>} />
-
+        <Route path="/dashboard-admin/Reservation" element={<Reservation/>} />
+        <Route path="/dashboard-admin/AssetManagement" element={<AssetManagement/>} />
                                         
                                                 {/*SysAdmin*/}
         <Route path="/dashboard-sysadmin" element={<DashboardSysAdmin />} />

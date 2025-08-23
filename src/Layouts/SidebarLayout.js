@@ -29,8 +29,8 @@ const menuConfig = {
     { label: 'Dashboard', path: '/dashboard-user', icon: dashDash, iconActive: dashDashWhite },
     { label: 'Profile', path: '/profile', icon: dashprofile, iconActive: dashprofileWhite },
     { label: 'Notification', path: '/notification', icon: dashnotif, iconActive: dashnotifWhite },
-    { label: 'Vehicle', path: '/vehicle', icon: dashvehicle, iconActive: dashvehicleWhite },
-    { label: 'Facility', path: '/facility', icon: dashfacility, iconActive: dashfacilityWhite },
+    { label: 'VehicleRequest', path: '/dashboard-user/VehicleRequest', icon: dashvehicle, iconActive: dashvehicleWhite },
+    { label: 'FacilityRequest', path: '/dashboard-user/FacilityRequest', icon: dashfacility, iconActive: dashfacilityWhite },
   ],
 
   // Personnel navigation
@@ -47,9 +47,9 @@ const menuConfig = {
     { label: 'Profile', path: '/dashboard-admin/profile', icon: dashprofile, iconActive: dashprofileWhite },
     { label: 'Notification', path: '/dashboard-admin/notification', icon: dashnotif, iconActive: dashnotifWhite },
     { label: 'Work Order', path: '/dashboard-admin/WorkOrder', icon: <FaClipboardList />, iconActive: <FaClipboardList style={{color: 'white'}} /> },
-    { label: 'Facility', path: '/dashboard-admin/Facility', icon: dashfacility, iconActive: dashfacilityWhite },
-    { label: 'Vehicle', path: '/dashboard-admin/Vehicle', icon: dashvehicle, iconActive: dashvehicleWhite },
     { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
+    { label: 'Reservation', path: '/dashboard-admin/Reservation', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
+    { label: 'Asset Management', path: '/dashboard-admin/AssetManagement', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
     { label: 'Activity Tracking', path: '/dashboard-admin/ActivityTracking', icon: <FaHistory />, iconActive: <FaHistory style={{color: 'white'}} /> },
     { label: 'Reports', path: '/dashboard-admin/reports', icon: <FaFileAlt />, iconActive: <FaFileAlt style={{color: 'white'}} /> }
   ],
