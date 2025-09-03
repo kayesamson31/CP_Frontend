@@ -2,9 +2,9 @@ import React from 'react';
 import {Link} from 'react-router-dom'; 
 import LPimage from './assets/LPimage.png';
 import WORicon from './assets/icons/worIcon.png';
-import vehicleIcon from './assets/icons/VehicleIcon.png';
+import Report from './assets/icons/Report.png';
 import NotifIcon from './assets/icons/NotificationIcon.png';
-import FacilityIcon from './assets/icons/facility.png';
+import RoleBased from './assets/icons/RoleBased.png';
 import assetIcon from './assets/icons/AssetIcon.png';
 import ActIcon from './assets/icons/ActivityIcon.png';
 import Layout from './Layout';
@@ -41,7 +41,7 @@ function LandingPage() {
               lineHeight: '1.1'
             }}>
               Track.<br />
-              <span style={{ color: '#1B4B8F' }}>Reserve.</span><br />
+              <span style={{ color: '#1B4B8F' }}>Manage.</span><br />
               Maintain.
             </h1>
             <p style={{
@@ -50,7 +50,7 @@ function LandingPage() {
               marginBottom: '2rem',
               maxWidth: '500px'
             }}>
-              OpenFMS provides a clear overview of all facility and vehicle activities, from work orders to reservations, helping you manage tasks efficiently.
+              OpenFMS offers a centralized view of assets and work orders, making it easier to manage tasks and keep facilities running efficiently.
             </p>
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
               <button style={{
@@ -169,17 +169,17 @@ function LandingPage() {
                 icon: WORicon
               },
               {
-                title: 'Facility Reservation',
-                description: 'Monitor facility status, capacity, and manage reservations efficiently.',
+                title: 'Role-Based Access',
+                description: 'System access tailored to user roles: standard users, personnel, admin officials, and system admins.',
                 color: '#764ba2',
-                icon: FacilityIcon
+                icon: RoleBased
               
               },
               {
-                title: 'Vehicle Reservation',
-                description: 'Keep tabs on your vehicle fleet, maintenance schedules, and usage logs.',
+                title: 'Reporting',
+                description: 'Generate PDF or CSV summaries and charts on facility usage, asset logs, and maintenance records.',
                 color: '#f093fb',
-                icon: vehicleIcon
+                icon: Report
               },
               {
                 title: 'Notification',
@@ -339,11 +339,11 @@ function LandingPage() {
             maxWidth: '600px',
             margin: '0 auto 2.5rem'
           }}>
-            OpenFMS is a web-based Facilities Management System developed to help organizations digitize and streamline 
-            their physical plant operations. Designed for schools, offices, parishes, and other institutions, 
-            the system allows users to manage maintenance schedules, asset records, 
-            work orders, and reservations in one place. Our goal is to make facility operations more organized, efficient, 
-            and accessible, especially for organizations without dedicated management systems.
+            OpenFMS is a web-based system that helps organizations digitize 
+            their maintenance and asset management. It provides tools for 
+            tracking work orders, monitoring maintenance schedules, and 
+            keeping asset records, making facility operations more efficient 
+            and easier to manage.
           </p>
           
         </div>

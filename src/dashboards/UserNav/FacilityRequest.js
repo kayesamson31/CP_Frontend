@@ -1,5 +1,5 @@
 // src/components/FacilityRequest.js
-import SidebarLayout from '../../Layouts/SidebarLayout';
+/*import SidebarLayout from '../../Layouts/SidebarLayout';
 
 export default function FacilityRequest() {
   return (
@@ -22,4 +22,4 @@ export default function FacilityRequest() {
       </div>
     </SidebarLayout>
   );
-}
+} */

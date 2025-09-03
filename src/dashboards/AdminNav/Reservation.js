@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+/* import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, User, Car, Building, Search, Filter, Eye, Check, X, Plus, MoreVertical, Bell } from 'lucide-react';
 import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagement = () => {
   const [activeTab, setActiveTab] = useState('pending');
@@ -379,7 +379,7 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
   return (
     <SidebarLayout role="admin">
     <div style={{ maxWidth: '1280px', margin: '0 auto', padding: '24px', backgroundColor: '#f9fafb', minHeight: '100vh' }}>
-      {/* Header */}
+      {/* Header 
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
           <div>
@@ -420,7 +420,7 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
           </div>
         </div>
 
-        {/* Stats Cards */}
+        {/* Stats Cards 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '16px', marginBottom: '24px' }}>
           {Object.entries(statusCounts).map(([status, count]) => (
             <div key={status} style={{
@@ -437,7 +437,7 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
         </div>
       </div>
 
-      {/* Controls */}
+      {/* Controls 
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
@@ -516,10 +516,10 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
         </div>
       </div>
 
-      {/* Calendar View */}
+      {/* Calendar View 
       {viewMode === 'calendar' && <CalendarView />}
 
-      {/* Status Tabs */}
+      {/* Status Tabs 
       {viewMode === 'list' && (
         <div style={{ marginBottom: '24px' }}>
           <div style={{ 
@@ -564,7 +564,7 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
         </div>
       )}
 
-      {/* Reservations List */}
+      {/* Reservations List
       {viewMode === 'list' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '16px' }}>
           {filteredReservations.length > 0 ? (
@@ -580,7 +580,7 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
         </div>
       )}
 
-      {/* Reservation Detail Modal */}
+      {/* Reservation Detail Modal 
       {selectedReservation && (
         <div style={{
           position: 'fixed',
@@ -648,4 +648,4 @@ import SidebarLayout from '../../Layouts/SidebarLayout';const ReservationManagem
   );
 };
 
-export default ReservationManagement;
+export default ReservationManagement; */

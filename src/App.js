@@ -11,20 +11,24 @@ import Notification from './dashboards/UserNav/Notification';
 //Nav of each Users.
 // standard usser
 import DashboardUser from './dashboards/DashboardUser';
-import VehicleRequest from './dashboards/UserNav/VehicleRequest';
-import FacilityRequest from './dashboards/UserNav/FacilityRequest'
+//import VehicleRequest from './dashboards/UserNav/VehicleRequest';
+//import FacilityRequest from './dashboards/UserNav/FacilityRequest'
+
 //Personnel
 import DashboardPersonnel from './dashboards/DashboardPersonnel';
 import Assets from './dashboards/PersonnelNav/Assets';
 //Sysad
 import DashboardSysAdmin from './dashboards/DashboardSysAdmin';
 import SysadReports from './dashboards/SysadNav/SysadReports';
+import SetupWizard from './dashboards/SysadNav/SetupWizard';
 import SysadUserManagement from './dashboards/SysadNav/SysadUserManagement';
 import SysadActivityTracking from './dashboards/SysadNav/SysadActivityTracking';
+
+
 //AdminNav
 import DashboardAdmin from './dashboards/DashboardAdmin';
 import WorkOrder from './dashboards/AdminNav/WorkOrder';
-import Reservation from './dashboards/AdminNav/Reservation';
+//import Reservation from './dashboards/AdminNav/Reservation';
 import Reports from './dashboards/AdminNav/Reports';
 import ActivityTracking from './dashboards/AdminNav/ActivityTracking';
 import UserManagement from './dashboards/AdminNav/UserManagement';
@@ -45,8 +49,8 @@ function App() {
       
                                               {/* Standard User*/}
         <Route path="/dashboard-user" element={<DashboardUser />} />
-        <Route path="/dashboard-user/VehicleRequest" element={<VehicleRequest/>} />
-        <Route path="/dashboard-user/FacilityRequest" element={<FacilityRequest/>} />
+       {/*  <Route path="/dashboard-user/VehicleRequest" element={<VehicleRequest/>} /> */}
+       {/*  <Route path="/dashboard-user/FacilityRequest" element={<FacilityRequest/>} /> */ }
 
 
                                                {/* Personnel*/}
@@ -64,7 +68,7 @@ function App() {
         <Route path="/dashboard-admin/ActivityTracking" element={<ActivityTracking />} />
         <Route path="/dashboard-admin/Reports" element={<Reports />} />
         <Route path="/dashboard-admin/UserManagement" element={<UserManagement/>} />
-        <Route path="/dashboard-admin/Reservation" element={<Reservation/>} />
+       {/*  <Route path="/dashboard-admin/Reservation" element={<Reservation/>} /> */}
         <Route path="/dashboard-admin/AssetManagement" element={<AssetManagement/>} />
                                         
                                                 {/*SysAdmin*/}
@@ -74,6 +78,8 @@ function App() {
         <Route path="/dashboard-sysadmin/SysadUserManagement" element={<SysadUserManagement/>} />
         <Route path="/dashboard-sysadmin/SysadReports" element={<SysadReports/>} />
         <Route path="/dashboard-sysadmin/SysadActivityTracking" element={<SysadActivityTracking/>} />
+        <Route path="/dashboard-sysadmin/SetupWizard" element={<SetupWizard/>} />
+
 
                                                 {/* Re-used for all users*/}
         <Route path="/profile" element={<Profile />} />

@@ -16,78 +16,79 @@ export default function DashboardUser() {
   const getStatusCounts = () => {
   const defaultStatuses = ['To Review', 'Pending', 'In Progress', 'Completed', 'Rejected', 'Failed', 'Cancelled'];
 
-  return defaultStatuses.map(status => ({
-    label: status,
-    color: '#ffffff',
-    icon: getStatusIcon(status),
-    count: historyData.filter(item => item.status === status).length
-    }));
+return defaultStatuses.map(status => ({
+  label: status,
+  color: '#ffffff',
+  icon: getStatusIcon(status),
+  count: historyData.filter(item => item.status === status).length
+  }));
   };
 
 
-    const getStatusIcon = (status) => {
-    switch (status) {
-        case 'To Review': return toreview;
-        case 'Pending': return pending;
-        case 'In Progress': return inprogress;
-        case 'Completed': return completed;
-        case 'Rejected': return rejected;
-        case 'Failed': return failed;
-        case 'Cancelled': return cancelled;
-        default: return '';
-        }
-      };
-    const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-    const [showDetailsModal, setShowDetailsModal] = useState(false);
+const getStatusIcon = (status) => {
+  switch (status) {
+   case 'To Review': return toreview;
+   case 'Pending': return pending;
+   case 'In Progress': return inprogress;
+   case 'Completed': return completed;
+   case 'Rejected': return rejected;
+   case 'Failed': return failed;
+   case 'Cancelled': return cancelled;
+  default: return '';
+    }
+    };
 
-    const [formData, setFormData] = useState({
-      title: '',
-      category: '',
-      priority: '',
-      location: '',
-      asset: '',
-      description: '',
-      attachment: null,
-      dateNeeded: ''
-      });
+const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
+const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-    const [formErrors, setFormErrors] = useState({});
-    const handleChange = (field, value) => {
-      setFormData(prev => ({ ...prev, [field]: value }));
-      setFormErrors(prev => ({ ...prev, [field]: '' }));
-      };
+const [formData, setFormData] = useState({
+  title: '',
+  category: '',
+  priority: '',
+  location: '',
+  asset: '',
+  description: '',
+  attachment: null,
+  dateNeeded: ''
+  });
 
-    const [showPriorityModal, setShowPriorityModal] = useState(false);
-    const priorities = [
-      { label: 'Low', color: '#00C417' },
-      { label: 'Medium', color: '#FF7308' },
-      { label: 'High', color: '#FF0000' }
-      ];
+const [formErrors, setFormErrors] = useState({});
+const handleChange = (field, value) => {
+  setFormData(prev => ({ ...prev, [field]: value }));
+  setFormErrors(prev => ({ ...prev, [field]: '' }));
+  };
 
-    const [historyData, setHistoryData] = useState([]); // start empty
-    const filteredHistory = historyData.filter(item => {
-      const statusMatch = selectedStatus === 'All' || item.status === selectedStatus;
-      const priorityMatch = selectedPriority === 'All' || item.priority === selectedPriority;
-      return statusMatch && priorityMatch;
+const [showPriorityModal, setShowPriorityModal] = useState(false);
+const priorities = [
+  { label: 'Low', color: '#00C417' },
+  { label: 'Medium', color: '#FF7308' },
+  { label: 'High', color: '#FF0000' }
+  ];
+
+const [historyData, setHistoryData] = useState([]); // start empty
+const filteredHistory = historyData.filter(item => {
+const statusMatch = selectedStatus === 'All' || item.status === selectedStatus;
+const priorityMatch = selectedPriority === 'All' || item.priority === selectedPriority;
+  return statusMatch && priorityMatch;
     });
 
-    const handleAddWorkOrder = () => {
-      const errors = {};
-      if (!formData.title.trim()) errors.title = 'Title is required';
-      if (!formData.category) errors.category = 'Category is required';
-      if (!formData.location.trim()) errors.location = 'Location is required';
-      if (!formData.dateNeeded) errors.dateNeeded = 'Date is required';
+const handleAddWorkOrder = () => {
+const errors = {};
+  if (!formData.title.trim()) errors.title = 'Title is required';
+  if (!formData.category) errors.category = 'Category is required';
+  if (!formData.location.trim()) errors.location = 'Location is required';
+  if (!formData.dateNeeded) errors.dateNeeded = 'Date is required';
 
-      if (Object.keys(errors).length > 0) {
-        setFormErrors(errors);
-        return;
-        }
+  if (Object.keys(errors).length > 0) {
+   setFormErrors(errors);
+   return;
+    }
 
-      const selectedPriority = formData.priority || 'Low';
-      const matchedPriority = priorities.find(p => p.label === selectedPriority);
-      const priorityColor = matchedPriority ? matchedPriority.color : '#00C417';
+const selectedPriority = formData.priority || 'Low';
+const matchedPriority = priorities.find(p => p.label === selectedPriority);
+const priorityColor = matchedPriority ? matchedPriority.color : '#00C417';
 
-      const newItem = {
+const newItem = {
         title: formData.title,
         category: formData.category,
         priority: selectedPriority,
@@ -101,130 +102,130 @@ export default function DashboardUser() {
         color: '#F0D400',
         priorityColor: priorityColor,
         timestamp: new Date().toISOString().split('T')[0]
-          };
+    };
 
-          setHistoryData(prev => [...prev, newItem]);
-          setShowWorkOrderModal(false);
-          setFormData({
-            title: '',
-            category: '',
-            priority: '',
-            location: '',
-            asset: '',
-            description: '',
-            attachment: null,
-            dateNeeded: ''
+setHistoryData(prev => [...prev, newItem]);
+setShowWorkOrderModal(false);
+setFormData({
+       title: '',
+       category: '',
+       priority: '',
+       location: '',
+       asset: '',
+       description: '',
+       attachment: null,
+      dateNeeded: ''
           });
-          setFormErrors({});
+setFormErrors({});
           };
 
-            const handleCancelRequest = (indexInFiltered) => {
-            const itemToCancel = filteredHistory[indexInFiltered];
-            const realIndex = historyData.findIndex(item =>
-                item.description === itemToCancel.description &&
-                item.timestamp === itemToCancel.timestamp &&
-                item.status === itemToCancel.status
-              );
+const handleCancelRequest = (indexInFiltered) => {
+const itemToCancel = filteredHistory[indexInFiltered];
+const realIndex = historyData.findIndex(item =>
+  item.description === itemToCancel.description &&
+  item.timestamp === itemToCancel.timestamp &&
+  item.status === itemToCancel.status
+         );
 
-            if (realIndex !== -1) {
-              setHistoryData(prevData => {
-                const updatedData = [...prevData];
-                updatedData[realIndex] = {
-                 ...updatedData[realIndex],
-                 status: 'Cancelled',
-                 color: '#B0B0B0',
-                 reason: 'Cancelled by user'
-                      };
-                  return updatedData;
-                 });
-                }
-              };
+if (realIndex !== -1) {
+  setHistoryData(prevData => {
+  const updatedData = [...prevData];
+  updatedData[realIndex] = {
+  ...updatedData[realIndex],
+  status: 'Cancelled',
+  color: '#B0B0B0',
+  reason: 'Cancelled by user'
+  };
+  
+  return updatedData;
+  });
+  }
+  };
 
-            const handleCancelModal = () => {
-              setShowWorkOrderModal(false);
-                setFormData({
-                title: '',
-                category: '',
-                priority: '',
-                location: '',
-                asset: '',
-                description: '',
-                attachment: null,
-                dateNeeded: ''
-                  });
-                  setFormErrors({});
+const handleCancelModal = () => {
+  setShowWorkOrderModal(false);
+  setFormData({
+  title: '',
+  category: '',
+  priority: '',
+  location: '',
+  asset: '',
+  description: '',
+  attachment: null,
+  dateNeeded: ''
+            });
+  setFormErrors({});
                 };  
 
-            return (
-                
-              <SidebarLayout>
-                <Container fluid style={{ backgroundColor: '#FFFFFFFF', minHeight: '100vh', padding: 0 }}>  
-                 <Row>
+return (    
+  <SidebarLayout>
+  <Container fluid style={{ backgroundColor: '#FFFFFFFF', minHeight: '100vh', padding: 0 }}>  
+  <Row>
                                                              
-                                                              {/* Main Content */}
+{/* Main Content */}
 
-                <Col
-                  md={10}
-                  className="p-4 d-flex justify-content-center align-items-start"
-                    style={{
-                      backgroundColor: '#FFFFFF',
-                      minHeight: '100vh',
-                      paddingLeft: '15px', // Padding for better space utilization
-                      paddingRight: '15px', // Padding to avoid content touching the edges
-                      marginLeft: 'auto', // Centering the content
-                      marginRight: 'auto', // Centering the content
-                      flex: 1, // This ensures that the main content takes full available width
-                    }}
-                  >       
+  <Col
+    md={10}
+    className="p-4 d-flex justify-content-center align-items-start"
+    style={{
+     backgroundColor: '#FFFFFF',
+     minHeight: '100vh',
+     paddingLeft: '15px', // Padding for better space utilization
+     paddingRight: '15px', // Padding to avoid content touching the edges
+     marginLeft: 'auto', // Centering the content
+     marginRight: 'auto', // Centering the content
+     flex: 1, // This ensures that the main content takes full available width
+            }}
+            >       
 
-                                                              {/* Status Cards */}
+{/* Status Cards */}
 
-                <Row className="w-100">
-                 <Row className="mb-4">
-                  {getStatusCounts().map((status) => (
-                    <Col md={3} sm={6} xs={12} key={status.label} className="mb-3">
-                      <Card
-                    style={{
-                    backgroundColor: status.color,
-                    cursor: 'pointer',
-                    color: '#04172AFF',
-                    minHeight: '90px',
-                    boxShadow: '0 3px 8px #ECEBF0',
-                    borderRadius: '12px',
-                    border: selectedStatus === status.label
-                             ? '3px solid #337FCA' // active card border
-                             : '2px solid #ECEBF0', // default border (light gray)
-                    transition: 'transform 0.2s ease-in-out',
-                           }}
-                    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
-                    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                    onClick={() => { setSelectedStatus(status.label); }}
-                      >
+ <Row className="w-100">
+ <Row className="mb-4">
+{getStatusCounts().map((status) => (
+<Col md={3} sm={6} xs={12} key={status.label} className="mb-3">
+<Card
+  style={{
+    backgroundColor: status.color,
+    cursor: 'pointer',
+    color: '#04172AFF',
+    minHeight: '90px',
+    boxShadow: '0 3px 8px #ECEBF0',
+    borderRadius: '12px',
+    border: selectedStatus === status.label
+    ? '3px solid #337FCA' // active card border
+    : '2px solid #ECEBF0', // default border (light gray)
+    transition: 'transform 0.2s ease-in-out',
+           }}
+    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
+    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+    onClick={() => { setSelectedStatus(status.label); }}
+    >
 
-                      <Card.Body className="d-flex align-items-center justify-content-between p-3">
-                      <div style={{ transform: 'translateX(20px)' }}>
-                      <h6 style={{ margin: 0, fontSize: '20px' }}>{status.label}</h6>
-                      <small>{status.count > 0 ? `${status.count} items` : 'No requests'}</small>
-                      </div>
+    <Card.Body className="d-flex align-items-center justify-content-between p-3">
+    <div style={{ transform: 'translateX(20px)' }}>
+   <h6 style={{ margin: 0, fontSize: '20px' }}>{status.label}</h6>
+   <small>{status.count > 0 ? `${status.count} items` : 'No requests'}</small>
+   </div>
 
-                      <div style={{ paddingRight: '40px' }}>
-                      <img src={status.icon} alt={status.label} style={{ width: '35px', height: '35px' }} />
-                      </div>
-                      </Card.Body>
-                         </Card>
-                          </Col>
-                             ))}
-                            </Row>
+  <div style={{ paddingRight: '40px' }}>
+  <img src={status.icon} alt={status.label} style={{ width: '35px', height: '35px' }} />
+  </div>
+  </Card.Body>
+  </Card>
+  </Col>
+  ))}
+ </Row>
                
-                                                 {/* Priority Level Text Aligned to Right */}
+{/* Priority Level Text Aligned to Right */}
 
-                        <div className="d-flex justify-content-end mb-2">
-                         <span
-                          style={{
-                          color: '#284CFF',
-                          textDecoration: 'underline',
-                          cursor: 'pointer',
-                          fontWeight: '600'
+  <div className="d-flex justify-content-end mb-2">
+    <span
+      style={{
+      color: '#284CFF',
+      textDecoration: 'underline',
+      cursor: 'pointer',
+      fontWeight: '600'
                                   }}
                           onClick={() => setShowPriorityModal(true)}
                           >

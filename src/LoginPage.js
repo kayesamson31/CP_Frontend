@@ -16,18 +16,17 @@ function LoginPage() {
     localStorage.setItem('userEmail', email);
     
     // For now, dummy name (later backend na magsesend ng real name)
-    localStorage.setItem('userName', 'User of ' + email);
-    localStorage.setItem('userRole', role); // <--- eto idagdag mo
-    // redirect based on role
-    if (role === 'standard') navigate('/dashboard-user');
-    else if (role === 'personnel') navigate('/dashboard-personnel');
-    else if (role === 'admin') navigate('/dashboard-admin');
-    else if (role === 'sysadmin') navigate('/dashboard-sysadmin');
-  };
+    localStorage.setItem('userName', email.split('@')[0]);     localStorage.setItem('userRole', role); // <--- eto idagdag mo
+        // redirect based on role
+        if (role === 'standard') navigate('/dashboard-user');
+        else if (role === 'personnel') navigate('/dashboard-personnel');
+        else if (role === 'admin') navigate('/dashboard-admin');
+        else if (role === 'sysadmin') navigate('/dashboard-sysadmin');
+      };
 
-  const handleGoogleSignIn = () => {
-    alert('Google Sign-In Clicked (Mock only)');
-  };
+    const handleGoogleSignIn = () => {
+      alert('Google Sign-In Clicked (Mock only)');
+     };
 
   return (
     <Layout>
@@ -48,16 +47,17 @@ function LoginPage() {
           width: '100%',
           maxWidth: '450px',
         }}>
-          <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
-            <img 
-              src={OpenFMSLogo}
-              alt="OpenFMS Logo"
-              style={{ width: '130px', height: '75px' }}
+        
+        <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+          <img 
+            src={OpenFMSLogo}
+            alt="OpenFMS Logo"
+            style={{ width: '130px', height: '75px' }}
             />
             <h2 style={{ color: '#555', fontSize: '1.5rem', marginTop: '0.2rem' }}>
               Welcome Back
             </h2>
-          </div>
+        </div>
 
           <label style={{ fontWeight: '500', color: '#1B4B8F' }}>Email</label>
           <input
