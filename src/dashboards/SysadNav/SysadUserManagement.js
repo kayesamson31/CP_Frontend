@@ -5,22 +5,18 @@ import SidebarLayout from '../../Layouts/SidebarLayout';
 export default function SysAdUserManagement() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
-  const [organizations, setOrganizations] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [orgFilter, setOrgFilter] = useState('');
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showBulkUpload, setShowBulkUpload] = useState(false);
-  const [showAuditLogs, setShowAuditLogs] = useState(false);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [resetUser, setResetUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [bulkUploadFile, setBulkUploadFile] = useState(null);
-  const [auditLogs, setAuditLogs] = useState([]);
 
   // System-level roles that System Admin can assign
   const roles = ['Standard User', 'Personnel', 'Admin Official'];
@@ -31,7 +27,6 @@ export default function SysAdUserManagement() {
     email: '',
     role: 'Standard User',
     status: 'Active',
-    organization: '',
     password: '',
     confirmPassword: ''
   });
@@ -79,32 +74,6 @@ export default function SysAdUserManagement() {
     { id: 3, name: 'Organization C', status: 'Active' }
   ];
 
-  const mockAuditLogs = [
-    {
-      id: 1,
-      action: 'User Created',
-      targetUser: 'Juan Dela Cruz',
-      performedBy: 'System Admin',
-      timestamp: '2024-08-27 10:30:00',
-      details: 'Created new Admin Official for Organization A'
-    },
-    {
-      id: 2,
-      action: 'Role Updated',
-      targetUser: 'Maria Santos',
-      performedBy: 'System Admin',
-      timestamp: '2024-08-26 15:45:00',
-      details: 'Changed role from Standard User to Personnel'
-    },
-    {
-      id: 3,
-      action: 'Account Deactivated',
-      targetUser: 'Pedro Garcia',
-      performedBy: 'System Admin',
-      timestamp: '2024-08-25 09:15:00',
-      details: 'Account deactivated due to inactivity'
-    }
-  ];
 
   // Simulated fetch functions
   const fetchUsers = async () => {
@@ -113,7 +82,6 @@ export default function SysAdUserManagement() {
       setError(null);
       await new Promise(resolve => setTimeout(resolve, 800));
       setUsers(mockUsers);
-      setOrganizations(mockOrganizations);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -121,14 +89,7 @@ export default function SysAdUserManagement() {
     }
   };
 
-  const fetchAuditLogs = async () => {
-    try {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setAuditLogs(mockAuditLogs);
-    } catch (err) {
-      console.error('Failed to fetch audit logs:', err);
-    }
-  };
+
 
   useEffect(() => {
     fetchUsers();
@@ -140,11 +101,10 @@ export default function SysAdUserManagement() {
                             user.email?.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesRole = !roleFilter || user.role === roleFilter;
       const matchesStatus = !statusFilter || user.status === statusFilter;
-      const matchesOrg = !orgFilter || user.organization === orgFilter;
-      return matchesSearch && matchesRole && matchesStatus && matchesOrg;
+      return matchesSearch && matchesRole && matchesStatus;
     });
     setFilteredUsers(filtered);
-  }, [users, searchTerm, roleFilter, statusFilter, orgFilter]);
+  }, [users, searchTerm, roleFilter, statusFilter]);
 
   // --- Event Handlers ---
   const handleAddUser = async (e) => {
@@ -270,24 +230,16 @@ export default function SysAdUserManagement() {
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-4">
           <div>
-            <h3 className="mb-0">System Administrator — User Management</h3>
-            <p className="text-muted mb-0">Manage users across all organizations in the system</p>
+            <h3 className="mb-0">User Management</h3>
+            <p className="text-muted mb-0">Manage users in the system</p>
           </div>
           <div>
-            <button 
-              className="btn btn-outline-info me-2"
-              onClick={() => {
-                setShowAuditLogs(!showAuditLogs);
-                if (!showAuditLogs) fetchAuditLogs();
-              }}
-            >
-              📋 Audit Logs
-            </button>
+           
             <button 
               className="btn btn-outline-primary me-2"
               onClick={() => setShowBulkUpload(!showBulkUpload)}
             >
-              📄 Bulk Upload
+              Bulk upload
             </button>
             <button 
               className="btn btn-primary"
@@ -298,41 +250,7 @@ export default function SysAdUserManagement() {
           </div>
         </div>
 
-        {/* Statistics Cards */}
-        <div className="row mb-4">
-          <div className="col-md-3">
-            <div className="card bg-primary text-white">
-              <div className="card-body">
-                <h6>Total Users</h6>
-                <h3>{users.length}</h3>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card bg-success text-white">
-              <div className="card-body">
-                <h6>Active Users</h6>
-                <h3>{users.filter(u => u.status === 'Active').length}</h3>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card bg-warning text-white">
-              <div className="card-body">
-                <h6>Admin Officials</h6>
-                <h3>{users.filter(u => u.role === 'Admin Official').length}</h3>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card bg-info text-white">
-              <div className="card-body">
-                <h6>Organizations</h6>
-                <h3>{organizations.length}</h3>
-              </div>
-            </div>
-          </div>
-        </div>
+
 
         {/* Filters */}
         <div className="bg-light p-4 mb-4 rounded">
@@ -366,16 +284,7 @@ export default function SysAdUserManagement() {
                 <option value="Inactive">Inactive</option>
               </select>
             </div>
-            <div className="col-md-3">
-              <select 
-                className="form-select"
-                value={orgFilter}
-                onChange={(e) => setOrgFilter(e.target.value)}
-              >
-                <option value="">All Organizations</option>
-                {organizations.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
-              </select>
-            </div>
+           
           </div>
         </div>
 
@@ -388,7 +297,6 @@ export default function SysAdUserManagement() {
                   <th>Name</th>
                   <th>Email</th>
                   <th>Role</th>
-                  <th>Organization</th>
                   <th>Status</th>
                   <th>Date Created</th>
                   <th>Last Login</th>
@@ -406,7 +314,6 @@ export default function SysAdUserManagement() {
                     </td>
                     <td>{user.email}</td>
                     <td>{user.role}</td>
-                    <td>{user.organization}</td>
                     <td>
                       <span className={`badge ${user.status==='Active'?'bg-success':'bg-secondary'}`}>
                         {user.status}
@@ -516,18 +423,7 @@ export default function SysAdUserManagement() {
                           {roles.map(r => <option key={r} value={r}>{r}</option>)}
                         </select>
                       </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Organization</label>
-                        <select 
-                          className="form-select mb-3" 
-                          value={newUser.organization}
-                          onChange={(e)=>setNewUser({...newUser, organization:e.target.value})} 
-                          required
-                        >
-                          <option value="">Select Organization</option>
-                          {organizations.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
-                        </select>
-                      </div>
+                     
                     </div>
                     <div className="row">
                       <div className="col-md-6">
@@ -604,16 +500,7 @@ export default function SysAdUserManagement() {
                         {roles.map(r => <option key={r} value={r}>{r}</option>)}
                       </select>
                     </div>
-                    <div className="col-md-6">
-                      <label className="form-label">Organization</label>
-                      <select 
-                        className="form-select mb-3" 
-                        value={editingUser.organization}
-                        onChange={(e)=>setEditingUser({...editingUser, organization:e.target.value})}
-                      >
-                        {organizations.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
-                      </select>
-                    </div>
+                   
                   </div>
                 </div>
                 <div className="modal-footer">
@@ -686,43 +573,7 @@ export default function SysAdUserManagement() {
         )}
 
         {/* Audit Logs */}
-        {showAuditLogs && (
-          <div className="mt-4">
-            <div className="card">
-              <div className="card-header">
-                <h5 className="mb-0">Audit Logs - Recent Activity</h5>
-              </div>
-              <div className="card-body">
-                <div className="table-responsive">
-                  <table className="table table-sm">
-                    <thead>
-                      <tr>
-                        <th>Timestamp</th>
-                        <th>Action</th>
-                        <th>Target User</th>
-                        <th>Performed By</th>
-                        <th>Details</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {auditLogs.map(log => (
-                        <tr key={log.id}>
-                          <td><small>{log.timestamp}</small></td>
-                          <td>
-                            <span className="badge bg-primary">{log.action}</span>
-                          </td>
-                          <td>{log.targetUser}</td>
-                          <td>{log.performedBy}</td>
-                          <td><small>{log.details}</small></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+
       </div>
     </SidebarLayout>
   );

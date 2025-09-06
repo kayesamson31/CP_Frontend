@@ -16,24 +16,55 @@ export default function DashboardSyAdmin() {
   });
   
   const [showSetupDetails, setShowSetupDetails] = useState(false);
+  const [usersList, setUsersList] = useState([]);
+  const [assetsList, setAssetsList] = useState([]);
+
+  // Sample data for demonstration
+  const generateSampleUsers = (count) => {
+    const sampleUsers = [];
+    for (let i = 1; i <= Math.min(count, 10); i++) {
+      sampleUsers.push({
+        id: i,
+        name: `User ${i}`,
+        email: `user${i}@company.com`,
+        department: ['IT', 'HR', 'Finance', 'Operations'][Math.floor(Math.random() * 4)],
+        status: Math.random() > 0.1 ? 'Active' : 'Inactive',
+        lastLogin: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toLocaleDateString()
+      });
+    }
+    return sampleUsers;
+  };
+
+  const generateSampleAssets = (count) => {
+    const sampleAssets = [];
+    const assetTypes = ['Laptop', 'Desktop', 'Monitor', 'Printer', 'Server', 'Router', 'Phone'];
+    const locations = ['Office A', 'Office B', 'Warehouse', 'Remote'];
+    
+    for (let i = 1; i <= Math.min(count, 10); i++) {
+      sampleAssets.push({
+        id: i,
+        name: `${assetTypes[Math.floor(Math.random() * assetTypes.length)]} ${i}`,
+        assetId: `AST-${String(i).padStart(4, '0')}`,
+        type: assetTypes[Math.floor(Math.random() * assetTypes.length)],
+        location: locations[Math.floor(Math.random() * locations.length)],
+        status: Math.random() > 0.15 ? 'Operational' : 'Maintenance',
+        assignedTo: Math.random() > 0.3 ? `User ${Math.floor(Math.random() * 20) + 1}` : 'Unassigned'
+      });
+    }
+    return sampleAssets;
+  };
 
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
       if (endpoint.includes('users')) {
         return {
-          data: [
-            { id: 1, name: 'John API User', email: 'john@api.com', status: 'active' },
-            { id: 2, name: 'Jane API User', email: 'jane@api.com', status: 'active' }
-          ],
+          data: generateSampleUsers(50),
           count: 50
         };
       } else if (endpoint.includes('assets')) {
         return {
-          data: [
-            { id: 1, name: 'API Asset 1', category: 'Equipment', status: 'operational' },
-            { id: 2, name: 'API Asset 2', category: 'Infrastructure', status: 'operational' }
-          ],
+          data: generateSampleAssets(30),
           count: 30
         };
       }
@@ -99,29 +130,13 @@ export default function DashboardSyAdmin() {
           systemHealth: userCount > 0 || assetCount > 0 ? 'Good' : 'Warning',
           wizardData: wizardData
         });
+
+        // Generate sample data for lists
+        setUsersList(generateSampleUsers(userCount));
+        setAssetsList(generateSampleAssets(assetCount));
       } else {
         const { userCount, assetCount } = parseUploadedData(wizardData);
            
-        if (wizardData.userImportMethod === 'api' && wizardData.apiConfig?.usersEndpoint && !userCount) {
-          fetchAPIData(wizardData.apiConfig.usersEndpoint, wizardData.apiConfig.apiKey)
-            .then(result => {
-              setDashboardData(prev => ({
-                ...prev,
-                totalUsers: result.count
-              }));
-            });
-        }
-
-        if (wizardData.assetImportMethod === 'api' && wizardData.apiConfig?.assetsEndpoint && !assetCount) {
-          fetchAPIData(wizardData.apiConfig.assetsEndpoint)
-            .then(result => {
-              setDashboardData(prev => ({
-                ...prev,
-                totalAssets: result.count
-              }));
-            });
-        }
-
         const completedSteps = Object.values({
           organizationInfo: wizardData.orgData.name && wizardData.orgData.email,
           usersUpload: !wizardData.skippedSteps.users && wizardData.uploadedFiles.users,
@@ -142,6 +157,10 @@ export default function DashboardSyAdmin() {
           wizardData: wizardData,
           skippedSteps: wizardData.skippedSteps
         }));
+
+        // Generate sample data for lists if data exists
+        if (userCount > 0) setUsersList(generateSampleUsers(userCount));
+        if (assetCount > 0) setAssetsList(generateSampleAssets(assetCount));
       }
     } else {
       setDashboardData(prev => ({
@@ -198,24 +217,10 @@ export default function DashboardSyAdmin() {
       setupProgress: 100,
       systemHealth: 'Good'
     });
-  };
 
-  const handleResetDemo = () => {
-    localStorage.removeItem('justCompleted');
-    localStorage.removeItem('setupWizardCompleted');
-    localStorage.removeItem('setupWizardData');
-    setSetupCompleted(false);
-    setDashboardData({
-      totalUsers: 0,
-      totalAssets: 0,
-      setupStatus: {
-        organizationInfo: false,
-        usersUpload: false,
-        assetsUpload: false
-      },
-      setupProgress: 0,
-      systemHealth: 'Critical'
-    });
+    // Generate sample data
+    setUsersList(generateSampleUsers(userCount));
+    setAssetsList(generateSampleAssets(assetCount));
   };
 
   // Function to handle CSV upload
@@ -265,28 +270,18 @@ export default function DashboardSyAdmin() {
           systemHealth: newProgress > 66 ? 'Good' : newProgress > 33 ? 'Warning' : 'Critical',
           skippedSteps: wizardData.skippedSteps
         }));
+
+        // Generate sample data for the uploaded type
+        if (type === 'users') {
+          setUsersList(generateSampleUsers(rowCount));
+        } else {
+          setAssetsList(generateSampleAssets(rowCount));
+        }
         
         alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${rowCount} records.`);
       }
     };
     reader.readAsText(file);
-  };
-
-  // System-level activities only
-  const recentActivities = setupCompleted && dashboardData.totalUsers > 0 ? [
-    { id: 1, action: 'Users imported via CSV', count: `${dashboardData.totalUsers} users`, time: '1 day ago', type: 'import' },
-    { id: 2, action: 'Assets imported via CSV', count: `${dashboardData.totalAssets} assets`, time: '1 day ago', type: 'import' },
-    { id: 3, action: 'System backup completed', time: '2 days ago', type: 'system' },
-    { id: 4, action: 'Database optimization run', time: '1 week ago', type: 'system' },
-    { id: 5, action: 'API connection verified', time: '1 week ago', type: 'system' }
-  ] : [];
-
-  const getActivityIcon = (type) => {
-    switch (type) {
-      case 'import': return '📥';
-      case 'system': return '⚙️';
-      default: return '📌';
-    }
   };
 
   const getSystemHealthColor = (health) => {
@@ -298,6 +293,12 @@ export default function DashboardSyAdmin() {
     }
   };
 
+  const getStatusBadgeClass = (status) => {
+    if (status === 'Active' || status === 'Operational') return 'bg-success';
+    if (status === 'Inactive' || status === 'Maintenance') return 'bg-warning';
+    return 'bg-secondary';
+  };
+
   return (
     <SidebarLayout role="sysadmin">
       <div>
@@ -305,12 +306,10 @@ export default function DashboardSyAdmin() {
         <div className="d-flex justify-content-between align-items-center mb-4">
           <div>
             <h2 className="mb-1">System Administrator Dashboard</h2>
-            {setupCompleted && dashboardData.totalUsers > 0 && (
-              <small className="text-muted">
-                <i className="bi bi-clock me-1"></i>
-                Last updated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-              </small>
-            )}
+            <small className="text-muted">
+              <i className="bi bi-clock me-1"></i>
+              Last updated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+            </small>
           </div>
           
           {/* Quick Actions - Top Right */}
@@ -322,7 +321,7 @@ export default function DashboardSyAdmin() {
               <i className="bi bi-plus-circle me-1"></i>Add Asset
             </button>
             <button className={`btn btn-success btn-sm ${!setupCompleted ? 'disabled' : ''}`}>
-              <i className="bi bi-file-earmark-arrow-up me-1"></i>Import
+              <i className="bi bi-file-earmark-arrow-up me-1"></i>Bulk Import
             </button>
           </div>
         </div>
@@ -456,7 +455,7 @@ export default function DashboardSyAdmin() {
         {/* Main Dashboard Cards */}
         <div className="row mb-4">
           {/* Total Users Card */}
-          <div className="col-md-6 col-xl-3 mb-3">
+          <div className="col-md-4 mb-3">
             <div className="card h-100 border-0 shadow-sm">
               <div className="card-body">
                 <div className="d-flex align-items-center justify-content-between">
@@ -471,17 +470,12 @@ export default function DashboardSyAdmin() {
                     <small className="text-muted">Registered users</small>
                   </div>
                 </div>
-                <div className="mt-3">
-                  <small className="text-muted">
-                    {dashboardData.totalUsers > 0 ? 'System users configured' : 'Upload users via setup wizard'}
-                  </small>
-                </div>
               </div>
             </div>
           </div>
 
           {/* Total Assets Card */}
-          <div className="col-md-6 col-xl-3 mb-3">
+          <div className="col-md-4 mb-3">
             <div className="card h-100 border-0 shadow-sm">
               <div className="card-body">
                 <div className="d-flex align-items-center justify-content-between">
@@ -496,19 +490,12 @@ export default function DashboardSyAdmin() {
                     <small className="text-muted">Managed assets</small>
                   </div>
                 </div>
-                <div className="mt-3">
-                  <small className="text-muted">
-                    {dashboardData.totalAssets > 0 ? 'Assets configured' : 'Upload assets via setup wizard'}
-                  </small>
-                </div>
               </div>
             </div>
           </div>
 
-          
-
           {/* System Health Card */}
-          <div className="col-md-6 col-xl-3 mb-3">
+          <div className="col-md-4 mb-3">
             <div className="card h-100 border-0 shadow-sm">
               <div className="card-body">
                 <div className="d-flex align-items-center justify-content-between">
@@ -521,7 +508,9 @@ export default function DashboardSyAdmin() {
                     <h6 className="card-title mb-1 text-muted">System Health</h6>
                     <h4 className="mb-0">{dashboardData.systemHealth}</h4>
                     <small className={`text-${getSystemHealthColor(dashboardData.systemHealth)}`}>
-                      All systems operational
+                      {dashboardData.systemHealth === 'Good' ? 'All systems operational' : 
+                       dashboardData.systemHealth === 'Warning' ? 'Needs attention' : 
+                       'Setup required'}
                     </small>
                   </div>
                 </div>
@@ -530,147 +519,116 @@ export default function DashboardSyAdmin() {
           </div>
         </div>
 
-        {/* System Health Status - Moved to top section */}
-        {setupCompleted && dashboardData.totalUsers > 0 && (
-          <div className="card border-0 shadow-sm mb-4">
-            <div className="card-header bg-white border-bottom">
-              <h5 className="card-title mb-0">System Health & Status</h5>
-            </div>
-            <div className="card-body">
-              <div className="row text-center">
-                <div className="col-md-3">
-                  <div className="mb-2">
-                    <div className="bg-success rounded-circle d-inline-flex align-items-center justify-content-center" style={{width: '40px', height: '40px'}}>
-                      <i className="bi bi-check-lg text-white"></i>
-                    </div>
-                  </div>
-                  <h6 className="mb-1">Database</h6>
-                  <small className="text-success">Operational</small>
-                </div>
-                <div className="col-md-3">
-                  <div className="mb-2">
-                    <div className="bg-success rounded-circle d-inline-flex align-items-center justify-content-center" style={{width: '40px', height: '40px'}}>
-                      <i className="bi bi-check-lg text-white"></i>
-                    </div>
-                  </div>
-                  <h6 className="mb-1">API Services</h6>
-                  <small className="text-success">Running</small>
-                </div>
-                <div className="col-md-3">
-                  <div className="mb-2">
-                    <div className="bg-success rounded-circle d-inline-flex align-items-center justify-content-center" style={{width: '40px', height: '40px'}}>
-                      <i className="bi bi-wifi text-white"></i>
-                    </div>
-                  </div>
-                  <h6 className="mb-1">Network</h6>
-                  <small className="text-success">Stable</small>
-                </div>
-                <div className="col-md-3">
-                  <div className="mb-2">
-                    <div className="bg-info rounded-circle d-inline-flex align-items-center justify-content-center" style={{width: '40px', height: '40px'}}>
-                      <i className="bi bi-arrow-clockwise text-white"></i>
-                    </div>
-                  </div>
-                  <h6 className="mb-1">Last Backup</h6>
-                  <small className="text-info">24h ago</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Organization Summary & Recent Activity */}
-        <div className="row mb-4">
-          <div className="col-lg-8">
-            <div className="card border-0 shadow-sm mb-4">
+
+        {/* Users and Assets Lists */}
+        <div className="row">
+          {/* Users List */}
+          <div className="col-lg-6 mb-4">
+            <div className="card border-0 shadow-sm">
               <div className="card-header bg-white border-bottom">
                 <div className="d-flex justify-content-between align-items-center">
-                  <h5 className="card-title mb-0">Organization Summary</h5>
-                  {setupCompleted && (
-                    <span className="badge bg-success">System Active</span>
-                  )}
+                  <h5 className="card-title mb-0">Recent Users</h5>
+                  <button className={`btn btn-primary btn-sm ${!setupCompleted ? 'disabled' : ''}`}>
+                    <i className="bi bi-eye me-1"></i>View All
+                  </button>
                 </div>
               </div>
-              <div className="card-body">
-                {setupCompleted || (dashboardData.wizardData && dashboardData.wizardData.orgData.name) ? (
-                  <div className="row">
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label text-muted small">Organization Name</label>
-                        <p className="mb-0 fw-semibold">
-                          {dashboardData.wizardData ? dashboardData.wizardData.orgData.name : 'TechCorp Industries'}
-                        </p>
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label text-muted small">System Administrator</label>
-                        <p className="mb-0">
-                          {dashboardData.wizardData ? dashboardData.wizardData.orgData.email : 'admin@company.com'}
-                        </p>
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label text-muted small">Setup Date</label>
-                        <p className="mb-0">
-                          {dashboardData.wizardData ? 
-                            new Date(dashboardData.wizardData.completedDate || Date.now()).toLocaleDateString() : 
-                            new Date().toLocaleDateString()
-                          }
-                        </p>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="mb-3">
-                        <label className="form-label text-muted small">User Capacity</label>
-                        <p className="mb-0">{dashboardData.totalUsers}/500 users</p>
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label text-muted small">Contact Phone</label>
-                        <p className="mb-0">
-                          {dashboardData.wizardData && dashboardData.wizardData.orgData.phone || 'Not provided'}
-                        </p>
-                      </div>
-                    </div>
+              <div className="card-body p-0">
+                {usersList.length > 0 ? (
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th className="border-0">Name</th>
+                          <th className="border-0">Department</th>
+                          <th className="border-0">Status</th>
+                          <th className="border-0">Last Login</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {usersList.map((user) => (
+                          <tr key={user.id}>
+                            <td>
+                              <div>
+                                <div className="fw-semibold">{user.name}</div>
+                                <small className="text-muted">{user.email}</small>
+                              </div>
+                            </td>
+                            <td>{user.department}</td>
+                            <td>
+                              <span className={`badge ${getStatusBadgeClass(user.status)}`}>
+                                {user.status}
+                              </span>
+                            </td>
+                            <td>
+                              <small className="text-muted">{user.lastLogin}</small>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="text-center py-4">
-                    <i className="bi bi-building fs-1 text-muted mb-3"></i>
-                    <p className="text-muted">Organization information will appear here after completing setup wizard</p>
+                    <i className="bi bi-people fs-1 text-muted mb-3"></i>
+                    <p className="text-muted">No users uploaded yet</p>
+                    <p className="text-muted small">Complete setup wizard to import users</p>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="col-lg-4">
+          {/* Assets List */}
+          <div className="col-lg-6 mb-4">
             <div className="card border-0 shadow-sm">
               <div className="card-header bg-white border-bottom">
-                <h5 className="card-title mb-0">Recent System Activity</h5>
+                <div className="d-flex justify-content-between align-items-center">
+                  <h5 className="card-title mb-0">Recent Assets</h5>
+                  <button className={`btn btn-info btn-sm ${!setupCompleted ? 'disabled' : ''}`}>
+                    <i className="bi bi-eye me-1"></i>View All
+                  </button>
+                </div>
               </div>
-              <div className="card-body">
-                {setupCompleted && dashboardData.totalUsers > 0 ? (
-                  <div className="list-group list-group-flush">
-                    {recentActivities.map((activity) => (
-                      <div key={activity.id} className="list-group-item border-0 px-0 py-2">
-                        <div className="d-flex align-items-center">
-                          <div className="me-2">
-                            <span className="fs-6">{getActivityIcon(activity.type)}</span>
-                          </div>
-                          <div className="flex-grow-1">
-                            <div className="d-flex justify-content-between">
-                              <h6 className="mb-0 small">{activity.action}</h6>
-                              <small className="text-muted">{activity.time}</small>
-                            </div>
-                            <p className="mb-0 text-muted small">
-                              {activity.count}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+              <div className="card-body p-0">
+                {assetsList.length > 0 ? (
+                  <div className="table-responsive">
+                    <table className="table table-hover mb-0">
+                      <thead className="table-light">
+                        <tr>
+                          <th className="border-0">Asset</th>
+                          <th className="border-0">Type</th>
+                          <th className="border-0">Location</th>
+                          <th className="border-0">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {assetsList.map((asset) => (
+                          <tr key={asset.id}>
+                            <td>
+                              <div>
+                                <div className="fw-semibold">{asset.name}</div>
+                                <small className="text-muted">{asset.assetId}</small>
+                              </div>
+                            </td>
+                            <td>{asset.type}</td>
+                            <td>{asset.location}</td>
+                            <td>
+                              <span className={`badge ${getStatusBadgeClass(asset.status)}`}>
+                                {asset.status}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <div className="text-center py-3">
-                    <i className="bi bi-clock-history fs-4 text-muted mb-2"></i>
-                    <p className="text-muted small">Activity tracking will begin after setup</p>
+                  <div className="text-center py-4">
+                    <i className="bi bi-building fs-1 text-muted mb-3"></i>
+                    <p className="text-muted">No assets uploaded yet</p>
+                    <p className="text-muted small">Complete setup wizard to import assets</p>
                   </div>
                 )}
               </div>

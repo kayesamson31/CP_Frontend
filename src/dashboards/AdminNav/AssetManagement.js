@@ -1,228 +1,569 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import SidebarLayout from '../../Layouts/SidebarLayout';
-import { Search, Plus, Edit2, Eye, Settings, User, Clock, CheckCircle, AlertCircle, XCircle, Calendar, History } from 'lucide-react';
-
-// Mock SidebarLayout component
-
+// src/dashboards/AdminNav/AssetManagement.js
+import React, { useState, useEffect } from "react";
+import SidebarLayout from "../../Layouts/SidebarLayout";
+import {
+  Container,
+  Row,
+  Col,
+  Form,
+  Button,
+  Table,
+  Modal,
+  Alert,
+  Badge,
+  Card,
+  Dropdown  
+} from "react-bootstrap";
 
 export default function AssetManagement() {
-  // Sample data with nextMaintenanceDate
-  const [assets] = useState([
-    { id: 'A001', name: 'Laptop Dell XPS 13', category: 'IT Equipment', status: 'operational', assignee: 'John Smith', location: 'Office Floor 2', acquisitionDate: '2023-01-15', value: 1200, nextMaintenanceDate: '2025-09-15' },
-    { id: 'A002', name: 'Projector Epson', category: 'Presentation', status: 'under_maintenance', assignee: 'Sarah Johnson', location: 'Conference Room A', acquisitionDate: '2022-08-20', value: 800, nextMaintenanceDate: '2025-08-20' },
-    { id: 'A003', name: 'Office Chair Herman Miller', category: 'Furniture', status: 'operational', assignee: 'Mike Davis', location: 'Workspace 15', acquisitionDate: '2023-03-10', value: 450, nextMaintenanceDate: '2025-12-10' },
-    { id: 'A004', name: 'Server HP ProLiant', category: 'IT Equipment', status: 'retired', assignee: 'IT Team', location: 'Server Room', acquisitionDate: '2020-05-12', value: 2500, nextMaintenanceDate: null },
-    { id: 'A005', name: 'Printer Canon MX920', category: 'Office Equipment', status: 'operational', assignee: 'Reception', location: 'Front Desk', acquisitionDate: '2023-02-28', value: 300, nextMaintenanceDate: '2025-10-28' },
-    { id: 'A006', name: 'Whiteboard Mobile', category: 'Presentation', status: 'under_maintenance', assignee: 'Training Room', location: 'Training Center', acquisitionDate: '2022-11-05', value: 200, nextMaintenanceDate: '2025-08-30' }
-  ]);
+  // State for assets - will be populated from backend
+  const [assets, setAssets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [personnel] = useState([
-    { id: 'P001', name: 'John Smith', department: 'Engineering', email: 'john.smith@company.com' },
-    { id: 'P002', name: 'Sarah Johnson', department: 'Marketing', email: 'sarah.johnson@company.com' },
-    { id: 'P003', name: 'Mike Davis', department: 'Operations', email: 'mike.davis@company.com' },
-    { id: 'P004', name: 'Lisa Chen', department: 'HR', email: 'lisa.chen@company.com' },
-    { id: 'P005', name: 'Tom Wilson', department: 'Finance', email: 'tom.wilson@company.com' }
-  ]);
+  // Add these state variables for task management
+const [tasks, setTasks] = useState([]);
+const [personnel] = useState([
+  { id: "PER-001", name: "Juan Dela Cruz", department: "Maintenance", email: "juan.delacruz@company.com" },
+  { id: "PER-002", name: "Maria Santos", department: "Engineering", email: "maria.santos@company.com" },
+  { id: "PER-003", name: "Pedro Garcia", department: "Operations", email: "pedro.garcia@company.com" },
+  { id: "PER-004", name: "Ana Reyes", department: "Admin", email: "ana.reyes@company.com" },
+  { id: "PER-005", name: "Roberto Cruz", department: "IT", email: "roberto.cruz@company.com" },
+  { id: "PER-006", name: "Lisa Fernandez", department: "Facilities", email: "lisa.fernandez@company.com" }
+]);
 
-  const [tasks, setTasks] = useState([
-    { id: 'T001', assetId: 'A002', assigneeId: 'P003', title: 'Replace projector bulb', description: 'Projector bulb needs replacement', priority: 'high', dueDate: '2024-08-25', status: 'pending' },
-    { id: 'T002', assetId: 'A006', assigneeId: 'P004', title: 'Fix whiteboard wheels', description: 'Mobile whiteboard wheels are loose', priority: 'medium', dueDate: '2024-08-28', status: 'in_progress' },
-    { id: 'T003', assetId: 'A001', assigneeId: 'P001', title: 'Software update', description: 'Update laptop OS and security patches', priority: 'medium', dueDate: '2024-08-30', status: 'completed', completedDate: '2024-08-23' },
-    { id: 'T004', assetId: 'A005', assigneeId: 'P002', title: 'Printer maintenance', description: 'Clean and replace toner cartridge', priority: 'low', dueDate: '2024-08-26', status: 'failed', failureReason: 'Toner not available in stock' },
-    { id: 'T005', assetId: 'A002', assigneeId: 'P002', title: 'Equipment inspection', description: 'Routine quarterly inspection and testing', priority: 'medium', dueDate: '2025-08-11', status: 'pending' },
-    { id: 'T006', assetId: 'A001', assigneeId: 'P003', title: 'Maintenance Completed', description: 'Regular maintenance service completed successfully', priority: 'medium', dueDate: '2024-08-23', status: 'completed', completedDate: '2024-08-23' },
-    { id: 'T007', assetId: 'A001', assigneeId: 'P005', title: 'Assigned to Technician', description: 'Asset assigned to technician for routine check', priority: 'low', dueDate: '2024-08-10', status: 'completed', completedDate: '2024-08-10' }
-  ]);
+const [predefinedTasks] = useState([
+  'Check-up / Inspection',
+  'Cleaning',
+  'Lubrication / Greasing',
+  'Calibration',
+  'Testing & Diagnostics',
+  'Repairs / Minor Fixes',
+  'Replacement of Parts',
+  'Safety Compliance Check'
+]);
 
-  const [taskSearchTerm, setTaskSearchTerm] = useState('');
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all');
+// Add Asset Modal states
+const [showAddAssetModal, setShowAddAssetModal] = useState(false);
+const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+const [newAsset, setNewAsset] = useState({
+  name: '',
+  category: 'Facilities & Building Infra',
+  location: '',
+  status: 'Operational',
+  acquisitionDate: '',
+  nextMaintenance: '',
+  task: ''
+});
+const [csvFile, setCsvFile] = useState(null);
+const [csvPreview, setCsvPreview] = useState([]);
 
-  const [predefinedTasks] = useState([
-    'Equipment Maintenance',
-    'Safety Inspection',
-    'Software Update',
-    'Calibration Check',
-    'Cleaning Service',
-    'Battery Replacement',
-    'Performance Review',
-    'Inventory Check'
-  ]);
-  
-  const [showAdvancedScheduleModal, setShowAdvancedScheduleModal] = useState(false);
-  const [advancedSchedule, setAdvancedSchedule] = useState({
-    assetId: '',
-    assigneeId: '',
-    taskType: 'predefined',
-    predefinedTask: '',
-    customTaskTitle: '',
-    customTaskDescription: '',
-    description: '',
-    scheduleDate: '',
-    scheduleTime: '',
-    repeat: 'none'
-  });
+// Add these after the existing state variables
+const [showMaintenanceScheduleModal, setShowMaintenanceScheduleModal] = useState(false);
+const [nextMaintenanceSchedule, setNextMaintenanceSchedule] = useState({
+  assetId: '',
+  assigneeId: '',
+  scheduledDate: '',
+  scheduledTime: '',
+  repeat: 'none'
+});
 
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [isEditingTask, setIsEditingTask] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
+// Modal states for task assignment
+const [showTaskModal, setShowTaskModal] = useState(false);
+const [newTask, setNewTask] = useState({
+  assetId: '',
+  assigneeId: '',
+  title: '',
+  description: '',
+  priority: 'medium',
+  dueDate: '',
+  dueTime: '',
+  taskType: 'predefined',
+  status: 'pending'
+});
 
-  // State management
-  const [activeTab, setActiveTab] = useState('assets');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  // Personnel list for assignment
+  const personnelList = [
+    { id: "PER-001", name: "Juan Dela Cruz" },
+    { id: "PER-002", name: "Maria Santos" },
+    { id: "PER-003", name: "Pedro Garcia" },
+    { id: "PER-004", name: "Ana Reyes" },
+    { id: "PER-005", name: "Roberto Cruz" },
+    { id: "PER-006", name: "Lisa Fernandez" }
+  ];
+
+  // Helper function to get maintenance status
+  const getMaintenanceStatus = (schedule) => {
+    if (!schedule) return null;
+    
+    const now = new Date();
+    const dueDate = new Date(schedule.dueDateTime);
+    
+    if (schedule.status === 'completed' || schedule.status === 'failed') {
+      return schedule.status;
+    }
+    
+    if (now > dueDate) {
+      return 'overdue';
+    }
+    
+    return schedule.status;
+  };
+
+  // Sample hardcoded data for visualization with maintenance schedules
+  const sampleAssets = [
+    {
+      id: "AST-001",
+      name: "Main Building HVAC System",
+      category: "HVAC Equipment",
+      location: "Main Building - Ground Floor",
+      status: "Operational",
+      lastMaintenance: "2024-08-15",
+      task: "Regular cleaning and filter replacement",
+      acquisitionDate: "2023-05-15",
+      nextMaintenance: "2024-09-15",
+      maintenanceHistory: [
+        { date: "2024-08-15", task: "Filter replacement and system cleaning", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-07-10", task: "Coolant level check and refill", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-06-20", task: "Routine inspection", assigned: "Juan Dela Cruz", status: "completed" }
+      ],
+      remarks: [
+        {
+          user: "Juan Dela Cruz",
+          timestamp: "2024-08-20T10:30:00Z",
+          content: "System is running smoothly after recent maintenance. Temperature control is optimal."
+        }
+      ]
+    },
+    {
+      id: "AST-002",
+      name: "Security Camera System - Block A",
+      category: "Safety Equipment",
+      location: "Block A - All Floors",
+      status: "Under Maintenance",
+      lastMaintenance: "2024-08-18",
+      acquisitionDate: "2023-05-15",
+      nextMaintenance: "2024-09-16",
+      task: "Camera lens cleaning and software update",
+      maintenanceSchedule: {
+        taskDescription: "Camera 3 lens replacement and system calibration",
+        assignedPersonnel: "PER-002",
+        assignedPersonnelName: "Maria Santos",
+        scheduledDateTime: "2024-09-05T09:00:00Z",
+        dueDateTime: "2024-09-05T17:00:00Z",
+        status: "in progress",
+        createdBy: "Admin",
+        createdAt: "2024-09-04T10:00:00Z",
+        startedAt: "2024-09-05T09:15:00Z",
+        completedAt: null,
+        comments: "Started lens replacement. Waiting for calibration tools."
+      },
+      maintenanceHistory: [
+        { date: "2024-08-18", task: "Camera 3 lens replacement due to scratches", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-07-25", task: "Software update and system calibration", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-07-01", task: "Monthly inspection and cleaning", assigned: "Juan Dela Cruz", status: "completed" }
+      ],
+      remarks: [
+        {
+          user: "Maria Santos",
+          timestamp: "2024-08-18T14:15:00Z",
+          content: "Camera 3 on 2nd floor needs lens replacement. Image quality is compromised."
+        },
+        {
+          user: "Pedro Garcia",
+          timestamp: "2024-08-19T09:00:00Z",
+          content: "Replacement lens has been ordered. ETA is next week."
+        }
+      ]
+    },
+    {
+      id: "AST-003",
+      name: "Garden Sprinkler System",
+      category: "Groundskeeping Tools",
+      location: "Front Garden & Courtyard",
+      status: "Operational",
+      lastMaintenance: "2024-08-10",
+      acquisitionDate: "2023-05-15",
+      nextMaintenance: "2024-09-15",
+      task: "Nozzle cleaning and water pressure check",
+      maintenanceHistory: [
+        { date: "2024-08-10", task: "Nozzle cleaning and water pressure adjustment", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-07-15", task: "Timer system calibration", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-06-30", task: "Seasonal maintenance check", assigned: "Juan Dela Cruz", status: "completed" }
+      ],
+      remarks: []
+    },
+    {
+      id: "AST-004",
+      name: "Conference Room Tables (Set A)",
+      category: "Carpentry/Structural Assets",
+      location: "Conference Room A",
+      status: "Operational",
+      lastMaintenance: "2024-08-12",
+      acquisitionDate: "2023-05-15",
+      nextMaintenance: "2024-09-15",
+      task: "Surface polishing and hardware check",
+      maintenanceHistory: [
+        { date: "2024-08-12", task: "Wood polish application and hardware tightening", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-07-05", task: "Scratch repair on table surface", assigned: "Juan Dela Cruz", status: "completed" }
+      ],
+      remarks: [
+        {
+          user: "Ana Reyes",
+          timestamp: "2024-08-13T11:20:00Z",
+          content: "Tables look great after polishing. One table leg still wobbles slightly."
+        }
+      ]
+    },
+    {
+      id: "AST-005",
+      name: "Backup Generator Unit 1",
+      category: "Electrical Equipment",
+      location: "Generator Room",
+      status: "Retired",
+      lastMaintenance: "2024-05-30",
+      acquisitionDate: "2023-05-15",
+      nextMaintenance: null,
+      task: "Final inspection before retirement",
+      maintenanceHistory: [
+        { date: "2024-05-30", task: "Final inspection and documentation", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-04-20", task: "Engine oil change and battery check", assigned: "Juan Dela Cruz", status: "completed" },
+        { date: "2024-03-15", task: "Load testing and fuel system check", assigned: "Juan Dela Cruz", status: "completed" }
+      ],
+      remarks: [
+        {
+          user: "Roberto Cruz",
+          timestamp: "2024-05-30T16:45:00Z",
+          content: "Unit retired due to age and frequent breakdowns. Replacement unit AST-012 now in service."
+        }
+      ]
+    },
+    {
+      id: "AST-006",
+      name: "Floor Cleaning Equipment",
+      category: "Miscellaneous / General Facilities ",
+      location: "Janitor's Storage Room",
+      status: "Under Maintenance",
+      lastMaintenance: "2024-08-16",
+      acquisitionDate: "2023-05-15",
+      nextMaintenance: "2024-09-15",
+      task: "Motor repair and brush replacement",
+      maintenanceSchedule: {
+        taskDescription: "Motor replacement and complete overhaul",
+        assignedPersonnel: "PER-006",
+        assignedPersonnelName: "Lisa Fernandez",
+        scheduledDateTime: "2024-09-04T08:00:00Z",
+        dueDateTime: "2024-09-04T16:00:00Z",
+        status: "overdue",
+        createdBy: "Admin",
+        createdAt: "2024-09-03T15:00:00Z",
+        startedAt: null,
+        completedAt: null,
+        comments: null
+      },
+      maintenanceHistory: [
+        { date: "2024-08-16", task: "Motor diagnostic and repair attempt", assigned: "Juan Dela Cruz", status: "failed" },
+        { date: "2024-07-20", task: "Routine cleaning and lubrication", assigned: "Juan Dela Cruz", status: "completed" }
+      ],
+      remarks: [
+        {
+          user: "Lisa Fernandez",
+          timestamp: "2024-08-16T13:30:00Z",
+          content: "Motor making unusual noise. Technician says it might need replacement."
+        }
+      ]
+    }
+  ];
+
+  // Mock function to simulate API call - replace with actual API call later
+  const fetchAssets = async () => {
+    try {
+      setLoading(true);
+      
+      // TODO: Replace this with actual API call
+      // const response = await fetch('/api/assets');
+      // const data = await response.json();
+      // setAssets(data);
+      
+      // For now, simulate loading and return sample data for visualization
+      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
+      setAssets(sampleAssets); // Using sample data for visualization
+      
+    } catch (err) {
+      setError('Failed to load assets');
+      console.error('Error fetching assets:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load assets on component mount
+  useEffect(() => {
+    fetchAssets();
+  }, []);
+
+  // State for editing
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("");
   const [selectedAsset, setSelectedAsset] = useState(null);
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [newTask, setNewTask] = useState({
-    assetId: '',
-    assigneeId: '',
-    title: '',
-    description: '',
-    priority: 'medium',
-    dueDate: '',
-    dueTime: '',
-    taskType: 'predefined',
-    status: 'pending'
-  });
   const [isEditing, setIsEditing] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
 
+  // Filtered assets
+  const filteredAssets = assets.filter(
+    (asset) =>
+      (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
+        asset.id?.toLowerCase().includes(search.toLowerCase())) &&
+      (statusFilter === "" || asset.status === statusFilter) &&
+      (categoryFilter === "" || asset.category === categoryFilter)
+  );
 
+  // Handle asset update
+  const handleUpdateAsset = async () => {
+    if (editingAsset) {
+      try {
+        // TODO: Replace with actual API call
+        // await fetch(`/api/assets/${editingAsset.id}`, {
+        //   method: 'PUT',
+        //   headers: { 'Content-Type': 'application/json' },
+        //   body: JSON.stringify(editingAsset)
+        // });
 
-// Check for overdue tasks on component mount and periodically
-useEffect(() => {
-  checkAndUpdateOverdueTasks();
-  
-  // Check every hour for overdue tasks
-  const interval = setInterval(checkAndUpdateOverdueTasks, 3600000);
-  
-  return () => clearInterval(interval);
-}, [tasks]);
-
-// Get unique categories
-const categories = [...new Set(assets.map(asset => asset.category))];
-
-  // Helper function to calculate days until maintenance
-  const getDaysUntilMaintenance = (maintenanceDate) => {
-    if (!maintenanceDate) return null;
-    const today = new Date();
-    const maintenance = new Date(maintenanceDate);
-    const timeDiff = maintenance.getTime() - today.getTime();
-    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    return daysDiff;
-  };
-
-  // Helper function to format maintenance status
-  const formatMaintenanceStatus = (maintenanceDate) => {
-    if (!maintenanceDate) return { text: 'Not scheduled', className: 'text-muted' };
-    
-    const days = getDaysUntilMaintenance(maintenanceDate);
-    
-    if (days < 0) {
-      return { 
-        text: `Overdue: ${new Date(maintenanceDate).toLocaleDateString()}`, 
-        className: 'text-danger fw-bold' 
-      };
-    } else if (days === 0) {
-      return { 
-        text: 'Due today', 
-        className: 'text-warning fw-bold' 
-      };
-    } else if (days <= 7) {
-      return { 
-        text: `In ${days} day${days === 1 ? '' : 's'}`, 
-        className: 'text-warning' 
-      };
-    } else {
-      return { 
-        text: `In ${days} days`, 
-        className: 'text-muted' 
-      };
-    }
-  };
-
-  // Helper function to check if a task is overdue and update status
-const checkAndUpdateOverdueTasks = () => {
-  const today = new Date();
-  today.setHours(23, 59, 59, 999); // End of today
-  
-  const updatedTasks = tasks.map(task => {
-    if ((task.status === 'pending' || task.status === 'in_progress') && task.dueDate) {
-      const dueDate = new Date(task.dueDate);
-      if (dueDate < today) {
-        return { ...task, status: 'overdue' };
+        // For now, update local state
+        const updatedAssets = assets.map(asset => 
+          asset.id === editingAsset.id ? editingAsset : asset
+        );
+        setAssets(updatedAssets);
+        
+        setIsEditing(false);
+        setSelectedAsset(editingAsset);
+        setEditingAsset(null);
+        
+        // Success message
+        alert('Asset updated successfully!');
+      } catch (err) {
+        console.error('Error updating asset:', err);
+        alert('Failed to update asset. Please try again.');
       }
     }
-    return task;
-  });
+  };
   
-  // Only update if there are changes
-  const hasChanges = updatedTasks.some((task, index) => task.status !== tasks[index].status);
-  if (hasChanges) {
-    setTasks(updatedTasks);
+// Handle next maintenance scheduling
+const handleScheduleNextMaintenance = async () => {
+  if (nextMaintenanceSchedule.scheduledDate && nextMaintenanceSchedule.assigneeId) {
+    try {
+      // Get personnel name
+      const assignedPersonnel = personnel.find(p => p.id === nextMaintenanceSchedule.assigneeId);
+      
+      // Create the scheduled maintenance object
+      const scheduledMaintenance = {
+        date: nextMaintenanceSchedule.scheduledDate,
+        time: nextMaintenanceSchedule.scheduledTime || '09:00',
+        assignedPersonnel: assignedPersonnel?.name,
+        repeat: nextMaintenanceSchedule.repeat,
+        createdAt: new Date().toISOString()
+      };
+      
+      // Update the asset with next maintenance schedule
+      const updatedAssets = assets.map(asset => 
+        asset.id === nextMaintenanceSchedule.assetId 
+          ? { 
+              ...asset, 
+              nextMaintenance: nextMaintenanceSchedule.scheduledDate,
+              nextMaintenanceTime: nextMaintenanceSchedule.scheduledTime || '09:00',
+              nextMaintenanceRepeat: nextMaintenanceSchedule.repeat,
+              nextMaintenanceAssigned: assignedPersonnel?.name
+            }
+          : asset
+      );
+      setAssets(updatedAssets);
+      
+      // Update selected asset if it's the same one
+      if (selectedAsset && selectedAsset.id === nextMaintenanceSchedule.assetId) {
+        const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
+        setSelectedAsset(updatedSelectedAsset);
+      }
+      
+      setShowMaintenanceScheduleModal(false);
+      alert(`Next maintenance scheduled successfully! ${nextMaintenanceSchedule.repeat !== 'none' ? `Will repeat ${nextMaintenanceSchedule.repeat}.` : ''}`);
+      
+      // Reset form
+      setNextMaintenanceSchedule({
+        assetId: '',
+        assigneeId: '',
+        scheduledDate: '',
+        scheduledTime: '',
+        repeat: 'none'
+      });
+      
+    } catch (err) {
+      console.error('Error scheduling maintenance:', err);
+      alert('Failed to schedule maintenance. Please try again.');
+    }
+  } else {
+    alert('Please fill in the required fields.');
   }
 };
 
-// Helper function to check if a single task is overdue
-const isTaskOverdue = (task) => {
-  if (task.status === 'completed' || task.status === 'failed') return false;
-  if (!task.dueDate) return false;
-  
-  const today = new Date();
-  const dueDate = new Date(task.dueDate);
-  return dueDate < today;
+// Handle manual asset addition
+const handleAddAsset = async () => {
+  if (newAsset.name && newAsset.category && newAsset.location) {
+    try {
+      const asset = {
+        ...newAsset,
+        id: `AST-${String(assets.length + 1).padStart(3, '0')}`,
+        lastMaintenance: null,
+        maintenanceHistory: [],
+        remarks: []
+      };
+      
+      setAssets(prevAssets => [...prevAssets, asset]);
+      setShowAddAssetModal(false);
+      
+      // Reset form
+      setNewAsset({
+        name: '',
+        category: 'Facilities & Building Infra',
+        location: '',
+        status: 'Operational',
+        acquisitionDate: '',
+        nextMaintenance: '',
+        task: ''
+      });
+      
+      alert('Asset added successfully!');
+    } catch (err) {
+      console.error('Error adding asset:', err);
+      alert('Failed to add asset. Please try again.');
+    }
+  } else {
+    alert('Please fill in all required fields.');
+  }
 };
 
-  // Get recent activity for an asset
-  const getRecentActivity = (assetId) => {
-    return tasks
-      .filter(task => task.assetId === assetId)
-      .sort((a, b) => {
-        const dateA = a.completedDate || a.dueDate;
-        const dateB = b.completedDate || b.dueDate;
-        return new Date(dateB) - new Date(dateA);
-      })
-      .slice(0, 3);
-  };
+// Handle CSV file selection
+const handleCsvFileChange = (event) => {
+  const file = event.target.files[0];
+  if (file && file.type === 'text/csv') {
+    setCsvFile(file);
+    
+    // Preview CSV content
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n');
+      const preview = lines.slice(0, 6); // Show first 5 rows + header
+      setCsvPreview(preview.map(line => line.split(',')));
+    };
+    reader.readAsText(file);
+  } else {
+    alert('Please select a valid CSV file.');
+  }
+};
 
-  // Filter assets
-  const filteredAssets = useMemo(() => {
-    return assets.filter(asset => {
-      const matchesSearch = asset.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           asset.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           asset.assignee.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || asset.status === statusFilter;
-      const matchesCategory = categoryFilter === 'all' || asset.category === categoryFilter;
+// Handle bulk CSV upload
+const handleBulkUpload = async () => {
+  if (!csvFile) {
+    alert('Please select a CSV file first.');
+    return;
+  }
+  
+  try {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim());
       
-      return matchesSearch && matchesStatus && matchesCategory;
-    });
-  }, [assets, searchTerm, statusFilter, categoryFilter]);
+      const newAssets = [];
+      for (let i = 1; i < lines.length; i++) {
+        if (lines[i].trim()) {
+          const values = lines[i].split(',').map(v => v.trim());
+          const asset = {
+            id: `AST-${String(assets.length + newAssets.length + 1).padStart(3, '0')}`,
+            name: values[headers.indexOf('name')] || values[0],
+            category: values[headers.indexOf('category')] || values[1] || 'Facilities & Building Infra',
+            location: values[headers.indexOf('location')] || values[2],
+            status: values[headers.indexOf('status')] || values[3] || 'Operational',
+            acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || '',
+            nextMaintenance: values[headers.indexOf('nextMaintenance')] || values[5] || '',
+            task: values[headers.indexOf('task')] || values[6] || '',
+            lastMaintenance: null,
+            maintenanceHistory: [],
+            remarks: []
+          };
+          newAssets.push(asset);
+        }
+      }
+      
+      setAssets(prevAssets => [...prevAssets, ...newAssets]);
+      setShowBulkUploadModal(false);
+      setCsvFile(null);
+      setCsvPreview([]);
+      
+      alert(`Successfully uploaded ${newAssets.length} assets!`);
+    };
+    reader.readAsText(csvFile);
+    
+  } catch (err) {
+    console.error('Error uploading CSV:', err);
+    alert('Failed to upload CSV. Please check the format and try again.');
+  }
+};
 
-  // Filter tasks
-  const filteredTasks = useMemo(() => {
-    return tasks.filter(task => {
-      const asset = assets.find(a => a.id === task.assetId);
-      const assignee = personnel.find(p => p.id === task.assigneeId);
-      
-      const matchesSearch = task.title.toLowerCase().includes(taskSearchTerm.toLowerCase()) ||
-                           asset?.name.toLowerCase().includes(taskSearchTerm.toLowerCase()) ||
-                           assignee?.name.toLowerCase().includes(taskSearchTerm.toLowerCase());
-      const matchesStatus = taskStatusFilter === 'all' || task.status === taskStatusFilter;
-      
-      return matchesSearch && matchesStatus;
-    });
-  }, [tasks, taskSearchTerm, taskStatusFilter, assets, personnel]);
-
-  // Handle asset update
-  const handleUpdateAsset = () => {
-    if (editingAsset) {
-      // In a real app, you'd update the state here
-      setIsEditing(false);
-      setSelectedAsset(editingAsset);
-      setEditingAsset(null);
-      alert('Asset updated successfully!');
-    }
-  };
+// Handle export to CSV
+const handleExportReport = () => {
+  try {
+    // Prepare CSV headers
+    const headers = [
+      'Asset ID',
+      'Asset Name', 
+      'Category',
+      'Location',
+      'Status',
+      'Acquisition Date',
+      'Last Maintenance',
+      'Next Maintenance',
+      'Task',
+      'Assigned Personnel',
+      'Remarks Count'
+    ];
+    
+    // Prepare CSV data
+    const csvData = [
+      headers.join(','),
+      ...filteredAssets.map(asset => [
+        asset.id,
+        `"${asset.name}"`,
+        `"${asset.category}"`,
+        `"${asset.location}"`,
+        asset.status,
+        asset.acquisitionDate || '',
+        asset.lastMaintenance || '',
+        asset.nextMaintenance || '',
+        `"${asset.task || ''}"`,
+        asset.nextMaintenanceAssigned || '',
+        asset.remarks?.length || 0
+      ].join(','))
+    ].join('\n');
+    
+    // Create and download file
+    const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `assets_report_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+  } catch (err) {
+    console.error('Error exporting report:', err);
+    alert('Failed to export report. Please try again.');
+  }
+};
 
   const handleStartEdit = () => {
     setIsEditing(true);
@@ -233,56 +574,51 @@ const isTaskOverdue = (task) => {
     setIsEditing(false);
     setEditingAsset(null);
   };
-
-  // Status badge component
-  const StatusBadge = ({ status }) => {
-    const statusConfig = {
-      operational: { className: 'badge bg-success', icon: CheckCircle, text: 'Operational' },
-      under_maintenance: { className: 'badge bg-warning', icon: AlertCircle, text: 'Under Maintenance' },
-      retired: { className: 'badge bg-secondary', icon: XCircle, text: 'Retired' }
-    };
-
-    const config = statusConfig[status];
-    const IconComponent = config.icon;
-
-    return (
-      <span className={config.className}>
-        <IconComponent size={12} className="me-1" />
-        {config.text}
-      </span>
-    );
-  };
-
-  // Task Status badge component
-  // Task Status badge component
-const TaskStatusBadge = ({ status }) => {
-  const statusConfig = {
-    pending: { className: 'badge bg-secondary', icon: Clock, text: 'Pending' },
-    in_progress: { className: 'badge bg-primary', icon: AlertCircle, text: 'In Progress' },
-    completed: { className: 'badge bg-success', icon: CheckCircle, text: 'Completed' },
-    failed: { className: 'badge bg-danger', icon: XCircle, text: 'Failed' },
-    overdue: { className: 'badge bg-danger', icon: AlertCircle, text: 'Overdue' }
-  };
-
-    const config = statusConfig[status];
-    const IconComponent = config.icon;
-
-    return (
-      <span className={config.className}>
-        <IconComponent size={12} className="me-1" />
-        {config.text}
-      </span>
-    );
-  };
-
-  // Handle task creation
-  const handleCreateTask = () => {
-    if (newTask.title && newTask.assetId && newTask.assigneeId) {
+  // Handle task creation and auto-update asset status
+const handleCreateTask = async () => {
+  if (newTask.title && newTask.assetId && newTask.assigneeId) {
+    try {
       const task = {
         ...newTask,
-        id: `T${String(tasks.length + 1).padStart(3, '0')}`
+        id: `TSK-${String(tasks.length + 1).padStart(3, '0')}`,
+        createdAt: new Date().toISOString(),
+        status: 'pending'
       };
-      setTasks([...tasks, task]);
+      
+      // Add task to tasks array
+      setTasks(prevTasks => [...prevTasks, task]);
+      
+      // Get personnel name
+      const assignedPersonnel = personnel.find(p => p.id === newTask.assigneeId);
+      
+      // Create maintenance schedule object
+      const maintenanceSchedule = {
+        taskDescription: newTask.title,
+        assignedPersonnel: newTask.assigneeId,
+        assignedPersonnelName: assignedPersonnel?.name,
+        scheduledDateTime: `${newTask.dueDate}T${newTask.dueTime || '09:00:00'}`,
+        dueDateTime: `${newTask.dueDate}T${newTask.dueTime || '17:00:00'}`,
+        status: 'pending',
+        createdBy: 'Admin',
+        createdAt: new Date().toISOString(),
+        startedAt: null,
+        completedAt: null,
+        comments: newTask.description || null
+      };
+      
+      // Update asset with maintenance schedule and status
+      const updatedAssets = assets.map(asset => 
+        asset.id === newTask.assetId 
+          ? { 
+              ...asset, 
+              status: "Under Maintenance",
+              maintenanceSchedule: maintenanceSchedule
+            }
+          : asset
+      );
+      setAssets(updatedAssets);
+      
+      // Reset form
       setNewTask({
         assetId: '',
         assigneeId: '',
@@ -294,1138 +630,1029 @@ const TaskStatusBadge = ({ status }) => {
         taskType: 'predefined',
         status: 'pending'
       });
+      
       setShowTaskModal(false);
+      alert('Task assigned successfully! Asset status updated to Under Maintenance.');
+      
+    } catch (err) {
+      console.error('Error creating task:', err);
+      alert('Failed to create task. Please try again.');
     }
-  };
-
-  const handleStartEditTask = () => {
-    setIsEditingTask(true);
-    setEditingTask({...selectedTask});
-  };
-
-  const handleUpdateTask = () => {
-  if (editingTask) {
-    // Validate remarks for overdue tasks being completed
-    if (editingTask.status === 'completed' && selectedTask.status === 'overdue' && !editingTask.delayRemarks?.trim()) {
-      alert('Please provide remarks explaining the delay before completing this overdue task.');
-      return;
-    }
-    
-    const updatedTasks = tasks.map(task => 
-      task.id === editingTask.id ? editingTask : task
-    );
-    setTasks(updatedTasks);
-    setIsEditingTask(false);
-    setSelectedTask(editingTask);
-    setEditingTask(null);
-    alert('Task updated successfully!');
+  } else {
+    alert('Please fill in all required fields.');
   }
 };
 
-  const handleCancelEditTask = () => {
-    setIsEditingTask(false);
-    setEditingTask(null);
+
+  // Get status badge variant for maintenance schedule
+  const getStatusBadgeVariant = (status) => {
+    switch(status) {
+      case 'pending': return 'secondary';
+      case 'in progress': return 'primary';
+      case 'completed': return 'success';
+      case 'failed': return 'danger';
+      case 'overdue': return 'warning';
+      default: return 'secondary';
+    }
   };
+
+  // Format date and time
+  const formatDateTime = (dateTime) => {
+    return new Date(dateTime).toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <SidebarLayout role="admin">
+        <Container fluid>
+          <h3>Asset Management</h3>
+          <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '300px' }}>
+            <div>Loading assets...</div>
+          </div>
+        </Container>
+      </SidebarLayout>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <SidebarLayout role="admin">
+        <Container fluid>
+          <h3>Asset Management</h3>
+          <Alert variant="danger">
+            <Alert.Heading>Error Loading Assets</Alert.Heading>
+            <p>{error}</p>
+            <Button variant="outline-danger" onClick={fetchAssets}>
+              Try Again
+            </Button>
+          </Alert>
+        </Container>
+      </SidebarLayout>
+    );
+  }
 
   return (
     <SidebarLayout role="admin">
-      <div>
-        {/* Header */}
+      <Container fluid>
         <div className="d-flex justify-content-between align-items-center mb-4">
           <div>
-            <h2 className="fw-bold mb-1">Asset Management</h2>
-            <p className="text-muted mb-0">Manage and track all company assets</p>
+            <h3 className="mb-1">Asset Management</h3>
+            <p className="text-muted mb-0">Manage and oversee all company assets</p>
           </div>
           <div className="d-flex gap-2">
-            <button
-              className="btn btn-outline-primary"
-              onClick={() => setShowAdvancedScheduleModal(true)}
-            >
-              <Clock size={16} className="me-2" />
-              Advanced Schedule
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowTaskModal(true)}
-            >
-              <Plus size={16} className="me-2" />
-              Assign Task
-            </button>
-          </div>
+
+  <Button 
+    variant="primary"
+    onClick={() => setShowTaskModal(true)}
+  >
+    <i className="fas fa-plus me-2"></i>
++ Assign Task
+  </Button>
+
+    <Button 
+  variant="outline-success"
+  onClick={handleExportReport}
+>
+  <i className="fas fa-download me-2"></i>
+  Export Report
+</Button>
+
+ <Dropdown>
+  <Dropdown.Toggle variant="outline-primary">
+    <i className="fas fa-plus me-2"></i>
+    Add New Asset
+  </Dropdown.Toggle>
+  <Dropdown.Menu>
+    <Dropdown.Item onClick={() => setShowAddAssetModal(true)}>
+      <i className="fas fa-plus me-2"></i>Manual Entry
+    </Dropdown.Item>
+    <Dropdown.Item onClick={() => setShowBulkUploadModal(true)}>
+      <i className="fas fa-upload me-2"></i>Bulk Upload (CSV)
+    </Dropdown.Item>
+  </Dropdown.Menu>
+</Dropdown>
+  {/* Add Asset Modal */}
+<Modal show={showAddAssetModal} onHide={() => setShowAddAssetModal(false)} size="lg">
+  <Modal.Header closeButton>
+    <Modal.Title>Add New Asset</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <Row className="g-3">
+      <Col md={6}>
+        <Form.Group>
+          <Form.Label>Asset Name *</Form.Label>
+          <Form.Control
+            type="text"
+            value={newAsset.name}
+            onChange={(e) => setNewAsset({...newAsset, name: e.target.value})}
+            placeholder="Enter asset name"
+            required
+          />
+        </Form.Group>
+      </Col>
+      <Col md={6}>
+        <Form.Group>
+          <Form.Label>Category *</Form.Label>
+          <Form.Select
+            value={newAsset.category}
+            onChange={(e) => setNewAsset({...newAsset, category: e.target.value})}
+            required
+          >
+            <option value="">All Categories</option>
+            <option value="HVAC Equipment">HVAC Equipment</option>
+              <option value="Electrical Equipment">Electrical Equipment</option>
+              <option value="Plumbing Fixtures">Plumbing Fixtures</option>
+              <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
+              <option value="Office Equipment">Office Equipment</option>
+              <option value="Safety Equipment">Safety Equipment</option>
+              <option value="Groundskeeping Tools">Groundskeeping Tools</option>
+              <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
+          </Form.Select>
+        </Form.Group>
+      </Col>
+      <Col md={6}>
+        <Form.Group>
+          <Form.Label>Location *</Form.Label>
+          <Form.Control
+            type="text"
+            value={newAsset.location}
+            onChange={(e) => setNewAsset({...newAsset, location: e.target.value})}
+            placeholder="Enter asset location"
+            required
+          />
+        </Form.Group>
+      </Col>
+      <Col md={6}>
+        <Form.Group>
+          <Form.Label>Status</Form.Label>
+          <Form.Select
+            value={newAsset.status}
+            onChange={(e) => setNewAsset({...newAsset, status: e.target.value})}
+          >
+            <option value="Operational">Operational</option>
+            <option value="Under Maintenance">Under Maintenance</option>
+            <option value="Retired">Retired</option>
+          </Form.Select>
+        </Form.Group>
+      </Col>
+      <Col md={6}>
+        <Form.Group>
+          <Form.Label>Acquisition Date</Form.Label>
+          <Form.Control
+            type="date"
+            value={newAsset.acquisitionDate}
+            onChange={(e) => setNewAsset({...newAsset, acquisitionDate: e.target.value})}
+          />
+        </Form.Group>
+      </Col>
+      <Col md={6}>
+        <Form.Group>
+          <Form.Label>Next Maintenance Date</Form.Label>
+          <Form.Control
+            type="date"
+            value={newAsset.nextMaintenance}
+            onChange={(e) => setNewAsset({...newAsset, nextMaintenance: e.target.value})}
+          />
+        </Form.Group>
+      </Col>
+      <Col xs={12}>
+        <Form.Group>
+          <Form.Label>Task/Notes</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={2}
+            value={newAsset.task}
+            onChange={(e) => setNewAsset({...newAsset, task: e.target.value})}
+            placeholder="Enter any initial tasks or notes"
+          />
+        </Form.Group>
+      </Col>
+    </Row>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowAddAssetModal(false)}>
+      Cancel
+    </Button>
+    <Button variant="primary" onClick={handleAddAsset}>
+      <i className="fas fa-plus me-2"></i>
+      Add Asset
+    </Button>
+  </Modal.Footer>
+</Modal>
+
+{/* Bulk Upload Modal */}
+<Modal show={showBulkUploadModal} onHide={() => setShowBulkUploadModal(false)} size="xl">
+  <Modal.Header closeButton>
+    <Modal.Title>Bulk Upload Assets (CSV)</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <Alert variant="info">
+      <strong>CSV Format:</strong> name, category, location, status, acquisitionDate, nextMaintenance, task
+      <br />
+      <small>Header row should match these column names (case sensitive)</small>
+    </Alert>
+    
+    <Form.Group className="mb-3">
+      <Form.Label>Select CSV File</Form.Label>
+      <Form.Control
+        type="file"
+        accept=".csv"
+        onChange={handleCsvFileChange}
+      />
+    </Form.Group>
+    
+    {csvPreview.length > 0 && (
+      <div>
+        <h6>Preview:</h6>
+        <Table bordered size="sm">
+          <tbody>
+            {csvPreview.map((row, index) => (
+              <tr key={index}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex} className={index === 0 ? 'fw-bold bg-light' : ''}>
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </div>
+    )}
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowBulkUploadModal(false)}>
+      Cancel
+    </Button>
+    <Button 
+      variant="primary" 
+      onClick={handleBulkUpload}
+      disabled={!csvFile}
+    >
+      <i className="fas fa-upload me-2"></i>
+      Upload Assets
+    </Button>
+  </Modal.Footer>
+</Modal>
+</div>
         </div>
 
-        {/* Tabs */}
-        <ul className="nav nav-tabs mb-4">
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === 'assets' ? 'active' : ''}`}
-              onClick={() => setActiveTab('assets')}
+        {/* Sample Data Notice */}
+        <Alert variant="info" className="mb-3">
+          <strong>Admin Panel:</strong> You can view and edit asset details. 
+          Sample data is currently displayed for demonstration purposes.
+        </Alert>
+
+        {/* Search & Filter Section */}
+        <Row className="mb-3">
+          <Col md={4}>
+            <Form.Control
+              type="text"
+              placeholder="Search assets by name, ID, or location..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </Col>
+          <Col md={3}>
+            <Form.Select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <Settings size={16} className="me-2" />
-              Assets
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === 'tasks' ? 'active' : ''}`}
-              onClick={() => setActiveTab('tasks')}
+              <option value="">All Status</option>
+              <option value="Operational">Operational</option>
+              <option value="Under Maintenance">Under Maintenance</option>
+              <option value="Retired">Retired</option>
+            </Form.Select>
+          </Col>
+          <Col md={3}>
+            <Form.Select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
             >
-              <Clock size={16} className="me-2" />
-              Tasks
-            </button>
-          </li>
-        </ul>
+              <option value="">All Categories</option>
+              <option value="HVAC Equipment">HVAC Equipment</option>
+              <option value="Electrical Equipment">Electrical Equipment</option>
+              <option value="Plumbing Fixtures">Plumbing Fixtures</option>
+              <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
+              <option value="Office Equipment">Office Equipment</option>
+              <option value="Safety Equipment">Safety Equipment</option>
+              <option value="Groundskeeping Tools">Groundskeeping Tools</option>
+              <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
+            </Form.Select>
+          </Col>
+        </Row>
 
-        {activeTab === 'assets' && (
-          <>
-            {/* Search and Filter Bar */}
-            <div className="card mb-4">
-              <div className="card-body">
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <div className="position-relative">
-                      <Search size={16} className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" />
-                      <input
-                        type="text"
-                        className="form-control ps-5"
-                        placeholder="Search assets by name, ID, or assignee..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <select
-                      className="form-select"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="all">All Status</option>
-                      <option value="operational">Operational</option>
-                      <option value="under_maintenance">Under Maintenance</option>
-                      <option value="retired">Retired</option>
-                    </select>
-                  </div>
-                  <div className="col-md-3">
-                    <select
-                      className="form-select"
-                      value={categoryFilter}
-                      onChange={(e) => setCategoryFilter(e.target.value)}
-                    >
-                      <option value="all">All Categories</option>
-                      {categories.map(category => (
-                        <option key={category} value={category}>{category}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
+        {/* Assets Table */}
+        <Table bordered hover responsive>
+          <thead className="table-light">
+            <tr>
+              <th>Asset ID</th>
+              <th>Asset Name</th>
+              <th>Category</th>
+              <th>Location</th>
+              <th>Status</th>
+              <th>Last Maintenance</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredAssets.length > 0 ? (
+              filteredAssets.map((asset) => {
+              
+                return (
+                  <tr key={asset.id}>
+                    <td>{asset.id}</td>
+                    <td>{asset.name}</td>
+                    <td>{asset.category}</td>
+                    <td>{asset.location}</td>
+                    <td>
+                      <span className={`badge ${
+                        asset.status === 'Operational' ? 'bg-success' :
+                        asset.status === 'Under Maintenance' ? 'bg-warning' :
+                        'bg-secondary'
+                      }`}>
+                        {asset.status}
+                      </span>
+                    </td>
+                    <td>{asset.lastMaintenance}</td>
+                    
+                    <td>
+                      <div className="btn-group btn-group-sm">
+                        <Button
+                          size="sm"
+                          variant="primary"
+                          onClick={() => setSelectedAsset(asset)}
+                        >
+                          <i className="fas fa-eye me-1"></i>
+                          View
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
+            ) : (
+              <tr>
+                <td colSpan="7" className="text-center text-muted py-4">
+                  {assets.length === 0 
+                    ? `No assets available. Add new assets to get started.`
+                    : `No assets found matching your search criteria.`
+                  }
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
 
-            {/* Assets Table */}
-            <div className="card">
-              <div className="table-responsive">
-                <table className="table table-hover mb-0">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Asset</th>
-                      <th>Category</th>
-                      <th>Status</th>
-                      <th>Location</th>
-                      <th>Next Maintenance</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredAssets.map((asset) => {
-                      const maintenanceStatus = formatMaintenanceStatus(asset.nextMaintenanceDate);
-                      return (
-                        <tr key={asset.id}>
-                          <td>
-                            <div>
-                              <div className="fw-semibold">{asset.name}</div>
-                              <small className="text-muted">{asset.id}</small>
-                            </div>
-                          </td>
-                          <td>{asset.category}</td>
-                          <td>
-                            <StatusBadge status={asset.status} />
-                          </td>
-                          <td>{asset.location}</td>
-                          <td>
-                            <small className={maintenanceStatus.className}>
-                              {maintenanceStatus.text}
-                            </small>
-                          </td>
-                          <td>
-                            <div className="btn-group btn-group-sm">
-                              <button 
-                                className="btn btn-outline-primary btn-sm"
-                                onClick={() => setSelectedAsset(asset)}
-                              >
-                                View
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
+        {/* Show info message when no assets exist */}
+        {assets.length === 0 && (
+          <Alert variant="info">
+            <Alert.Heading>No Assets Available</Alert.Heading>
+            <p>
+              Add assets to the system to start managing your organization's inventory. 
+              Assets can be tracked, maintained, and monitored from this interface.
+            </p>
+          </Alert>
         )}
 
-        {activeTab === 'tasks' && (
-          <>
-            {/* Task Search and Filter Bar */}
-            <div className="card mb-4">
-              <div className="card-body">
-                <div className="row g-3">
-                  <div className="col-md-8">
-                    <div className="position-relative">
-                      <Search size={16} className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" />
-                      <input
-                        type="text"
-                        className="form-control ps-5"
-                        placeholder="Search tasks by title, asset, or assignee..."
-                        value={taskSearchTerm}
-                        onChange={(e) => setTaskSearchTerm(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="col-md-4">
-                    <select
-                      className="form-select"
-                      value={taskStatusFilter}
-                      onChange={(e) => setTaskStatusFilter(e.target.value)}
-                    >
-                      <option value="pending">Pending</option>
-<option value="in_progress">In Progress</option>
-<option value="completed">Completed</option>
-<option value="failed">Failed</option>
-<option value="overdue">Overdue</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Tasks List */}
-            <div className="card">
-              <div className="card-header">
-                <h5 className="card-title mb-0">Task Management ({filteredTasks.length} tasks)</h5>
-              </div>
-              <div className="card-body p-0">
-                {filteredTasks.length === 0 ? (
-                  <div className="p-4 text-center text-muted">
-                    <Clock size={48} className="mb-3 opacity-50" />
-                    <p>No tasks found matching your criteria.</p>
-                  </div>
-                ) : (
-                  filteredTasks.map((task, index) => {
-                    const asset = assets.find(a => a.id === task.assetId);
-                    const assignee = personnel.find(p => p.id === task.assigneeId);
-                    return (
- <div key={task.id} className={`p-3 ${index !== filteredTasks.length - 1 ? 'border-bottom' : ''} ${
-      task.status === 'overdue' ? 'bg-danger bg-opacity-10 border-start border-danger border-3' : ''
-    }`}>                        
-    <div className="d-flex justify-content-between align-items-start">
-                          <div className="flex-grow-1">
-                            <div className="d-flex align-items-center gap-2 mb-1">
-                              <h6 className="mb-0">{task.title}</h6>
-                              <span className={`badge ${
-                                task.priority === 'high' ? 'bg-danger' :
-                                task.priority === 'medium' ? 'bg-warning' : 'bg-success'
-                              }`}>
-                                {task.priority}
-                              </span>
-                              <TaskStatusBadge status={task.status} />
-                            </div>
-                            <div className="d-flex gap-4 text-sm">
-                              <small className="text-muted">Due: <span className="text-dark">{task.dueDate}</span></small>
-                              <small className="text-muted">Asset: <span className="text-dark">{asset?.name}</span></small>
-                            </div>
-                          </div>
-                          
-                          <div className="ms-3">
-                            <button 
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() => setSelectedTask(task)}
-                            >
-                              View Details
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Asset Detail Modal */}
-        {selectedAsset && (
-          <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog modal-xl modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">
-                    {isEditing ? 'Edit Asset' : 'Asset Details'}
-                  </h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => {
-                      setSelectedAsset(null);
-                      setIsEditing(false);
-                      setEditingAsset(null);
-                    }}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <div className="row">
-                    {/* Left Column - Asset Details */}
-                    <div className="col-lg-7">
-                      {!isEditing ? (
-                        // View Mode
-                        <div className="row g-3">
-                          <div className="col-md-6">
-                            <strong>ID:</strong> {selectedAsset.id}
-                          </div>
-                          <div className="col-md-6">
-                            <strong>Name:</strong> {selectedAsset.name}
-                          </div>
-                          <div className="col-md-6">
-                            <strong>Category:</strong> {selectedAsset.category}
-                          </div>
-                          <div className="col-md-6">
-                            <strong>Status:</strong> <StatusBadge status={selectedAsset.status} />
-                          </div>
-                          <div className="col-md-6">
-                            <strong>Location:</strong> {selectedAsset.location}
-                          </div>
-                          <div className="col-md-12">
-  <strong>Acquisition Date:</strong> {new Date(selectedAsset.acquisitionDate).toLocaleDateString()}
-</div>
-                          <div className="col-md-12">
-                            <div className="row">
-                              <div className="col-md-6">
-                                <strong>Next Maintenance:</strong>
-                              </div>
-                              <div className="col-md-6">
-                                {(() => {
-                                  const maintenanceStatus = formatMaintenanceStatus(selectedAsset.nextMaintenanceDate);
-                                  return (
-                                    <span className={maintenanceStatus.className}>
-                                      {maintenanceStatus.text}
-                                    </span>
-                                  );
-                                })()}
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        // Edit Mode
-                        <div className="row g-3">
-                          <div className="col-md-6">
-                            <label className="form-label">ID</label>
-                            <input 
-                              type="text" 
-                              className="form-control" 
-                              value={editingAsset.id} 
-                              disabled 
-                            />
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label">Name</label>
-                            <input 
-                              type="text" 
-                              className="form-control" 
-                              value={editingAsset.name}
-                              onChange={(e) => setEditingAsset({...editingAsset, name: e.target.value})}
-                            />
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label">Category</label>
-                            <select 
-                              className="form-select"
-                              value={editingAsset.category}
-                              onChange={(e) => setEditingAsset({...editingAsset, category: e.target.value})}
-                            >
-                              {categories.map(category => (
-                                <option key={category} value={category}>{category}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label">Status</label>
-                            <select 
-                              className="form-select"
-                              value={editingAsset.status}
-                              onChange={(e) => setEditingAsset({...editingAsset, status: e.target.value})}
-                            >
-                              <option value="operational">Operational</option>
-                              <option value="under_maintenance">Under Maintenance</option>
-                              <option value="retired">Retired</option>
-                            </select>
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label">Location</label>
-                            <input 
-                              type="text" 
-                              className="form-control" 
-                              value={editingAsset.location}
-                              onChange={(e) => setEditingAsset({...editingAsset, location: e.target.value})}
-                            />
-                          </div>
-                          
-                          <div className="col-md-6">
-                          <label className="form-label">Acquisition Date</label>
-                          <input 
-                            type="date" 
-                            className="form-control" 
-                            value={editingAsset.acquisitionDate}
-                            onChange={(e) => setEditingAsset({...editingAsset, acquisitionDate: e.target.value})}
-                          />
-                        </div>
-                          
-                          <div className="col-md-12">
-                            <label className="form-label">
-                              <Calendar size={16} className="me-2" />
-                              Next Maintenance Date
-                            </label>
-                            <input 
-                              type="date" 
-                              className="form-control" 
-                              value={editingAsset.nextMaintenanceDate || ''}
-                              onChange={(e) => setEditingAsset({...editingAsset, nextMaintenanceDate: e.target.value})}
-                            />
-                            <small className="form-text text-muted">
-                              Leave empty if no maintenance is scheduled
-                            </small>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Right Column - Recent Activity */}
-                    <div className="col-lg-5">
-                      <div className="border-start ps-4">
-                        <div className="d-flex align-items-center mb-3">
-                          <History size={20} className="me-2 text-primary" />
-                          <h6 className="mb-0">Recent Activity</h6>
-                        </div>
-                        
-                        {(() => {
-                          const recentActivity = getRecentActivity(selectedAsset.id);
-                          
-                          if (recentActivity.length === 0) {
-                            return (
-                              <div className="text-muted text-center py-4">
-                                <Clock size={32} className="opacity-50 mb-2" />
-                                <p className="mb-0">No recent activity found</p>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div className="activity-list">
-                              {recentActivity.map((task, index) => {
-                                const assignee = personnel.find(p => p.id === task.assigneeId);
-                                const activityDate = task.completedDate || task.dueDate;
-                                return (
-                                  <div key={task.id} className={`activity-item mb-3 ${index !== recentActivity.length - 1 ? 'pb-3 border-bottom' : ''}`}>
-                                    <div className="d-flex align-items-start">
-                                      <div className="activity-icon me-3 mt-1">
-                                        {task.status === 'completed' ? (
-                                          <CheckCircle size={16} className="text-success" />
-                                        ) : task.status === 'failed' ? (
-                                          <XCircle size={16} className="text-danger" />
-                                        ) : task.status === 'in_progress' ? (
-                                          <AlertCircle size={16} className="text-warning" />
-                                        ) : (
-                                          <Clock size={16} className="text-secondary" />
-                                        )}
-                                      </div>
-                                      <div className="flex-grow-1">
-                                        <div className="activity-content">
-                                          <div className="fw-medium text-sm mb-1">{task.title}</div>
-                                          <div className="text-muted text-xs">
-                                            {new Date(activityDate).toLocaleDateString('en-US', {
-                                              month: 'short',
-                                              day: 'numeric',
-                                              year: 'numeric'
-                                            })} — {task.status === 'completed' ? 'Completed' : 
-                                              task.status === 'failed' ? 'Failed' : 
-                                              task.status === 'in_progress' ? 'In Progress' : 'Pending'}
-                                          </div>
-                                          {assignee && (
-                                            <div className="text-muted text-xs mt-1">
-                                              Assigned to: {assignee.name}
-                                            </div>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          );
-                        })()}
-
-                        {/* View Full History Button */}
-                        <div className="mt-4">
-                          <button 
-                            className="btn btn-outline-primary btn-sm w-100"
-                            onClick={() => {
-                              setActiveTab('tasks');
-                              setSelectedAsset(null);
-                              setTaskSearchTerm(selectedAsset.name);
-                            }}
-                          >
-                            <History size={14} className="me-2" />
-                            View Full Task History
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  {!isEditing ? (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-primary"
-                        onClick={handleStartEdit}
-                      >
-                        <Edit2 size={14} className="me-2" />
-                        Edit Asset
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={() => setSelectedAsset(null)}
-                      >
-                        Close
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-success"
-                        onClick={handleUpdateAsset}
-                      >
-                        <CheckCircle size={14} className="me-2" />
-                        Save Changes
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={handleCancelEdit}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Task Detail Modal */}
-        {selectedTask && (
-          <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">
-                    {isEditingTask ? 'Edit Task' : 'Task Details'}
-                  </h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => {
-                      setSelectedTask(null);
-                      setIsEditingTask(false);
-                      setEditingTask(null);
-                    }}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  {!isEditingTask ? (
-                    <div className="row g-3">
-                      <div className="col-12">
-                        <h6>{selectedTask.title}</h6>
-                        <p className="text-muted">{selectedTask.description}</p>
-                      </div>
-                      <div className="col-md-6">
-                        <strong>Status:</strong> <TaskStatusBadge status={selectedTask.status} />
-                      </div>
-                      <div className="col-md-6">
-                        <strong>Priority:</strong> 
-                        <span className={`badge ms-2 ${
-                          selectedTask.priority === 'high' ? 'bg-danger' :
-                          selectedTask.priority === 'medium' ? 'bg-warning' : 'bg-success'
-                        }`}>
-                          {selectedTask.priority}
-                        </span>
-                      </div>
-                      <div className="col-md-6">
-                        <strong>Due Date:</strong> {selectedTask.dueDate}
-                      </div>
-                      <div className="col-md-6">
-                        <strong>Asset:</strong> {assets.find(a => a.id === selectedTask.assetId)?.name}
-                      </div>
-                      <div className="col-md-6">
-                        <strong>Assignee:</strong> {personnel.find(p => p.id === selectedTask.assigneeId)?.name}
-                      </div>
-                      {selectedTask.completedDate && (
+        {/* Detailed Asset Modal */}
+        <Modal
+          show={!!selectedAsset}
+          onHide={() => {
+            setSelectedAsset(null);
+            setIsEditing(false);
+            setEditingAsset(null);
+          }}
+          size="xl"
+        >
+          {selectedAsset && (
+            <>
+              <Modal.Header closeButton>
+                <Modal.Title>
+                  {isEditing ? 'Edit Asset Details' : 'Asset Details'}
+                </Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <Row>
+                  {/* Left Column - Asset Information */}
+                  <Col lg={8}>
+                    {!isEditing ? (
+                      // View Mode
+                      <div className="row g-3">
                         <div className="col-md-6">
-                          <strong>Completed:</strong> {selectedTask.completedDate}
+                          <Form.Group>
+                            <Form.Label><strong>Asset ID:</strong></Form.Label>
+                            <Form.Control type="text" value={selectedAsset.id} readOnly />
+                          </Form.Group>
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="row g-3">
-                      <div className="col-12">
-                        <label className="form-label">Title</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={editingTask.title}
-                          onChange={(e) => setEditingTask({...editingTask, title: e.target.value})}
-                        />
-                      </div>
-                      <div className="col-12">
-                        <label className="form-label">Description</label>
-                        <textarea
-                          className="form-control"
-                          rows={3}
-                          value={editingTask.description}
-                          onChange={(e) => setEditingTask({...editingTask, description: e.target.value})}
-                        />
-                      </div>
-                      {editingTask && editingTask.status === 'overdue' && (
-  <div className="col-12">
-    <div className="alert alert-warning">
-      <AlertCircle size={16} className="me-2" />
-      This task is overdue. Please provide remarks explaining the delay.
-    </div>
-    <label className="form-label">Delay Remarks <span className="text-danger">*</span></label>
-    <textarea
-      className="form-control"
-      rows={3}
-      value={editingTask.delayRemarks || ''}
-      onChange={(e) => setEditingTask({...editingTask, delayRemarks: e.target.value})}
-      placeholder="Explain the reason for the delay..."
-      required={editingTask.status === 'overdue'}
-    />
-  </div>
-)}
-                      <div className="col-md-6">
-                        <label className="form-label">Status</label>
-                        <select
-                          className="form-select"
-                          value={editingTask.status}
-                          onChange={(e) => setEditingTask({...editingTask, status: e.target.value})}
-                        >
-                          <option value="pending">Pending</option>
-<option value="in_progress">In Progress</option>
-<option value="completed">Completed</option>
-<option value="failed">Failed</option>
-<option value="overdue">Overdue</option>
-                        </select>
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Priority</label>
-                        <select
-                          className="form-select"
-                          value={editingTask.priority}
-                          onChange={(e) => setEditingTask({...editingTask, priority: e.target.value})}
-                        >
-                          <option value="low">Low</option>
-                          <option value="medium">Medium</option>
-                          <option value="high">High</option>
-                        </select>
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Due Date</label>
-                        <input
-                          type="date"
-                          className="form-control"
-                          value={editingTask.dueDate}
-                          onChange={(e) => setEditingTask({...editingTask, dueDate: e.target.value})}
-                        />
-                      </div>
-                      <div className="col-md-6">
-                        <label className="form-label">Assignee</label>
-                        <select
-                          className="form-select"
-                          value={editingTask.assigneeId}
-                          onChange={(e) => setEditingTask({...editingTask, assigneeId: e.target.value})}
-                        >
-                          {personnel.map(person => (
-                            <option key={person.id} value={person.id}>{person.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <div className="modal-footer">
-                  {!isEditingTask ? (
-  <>
-    {selectedTask.status === 'pending' && (
-      <button
-        type="button"
-        className="btn btn-primary"
-        onClick={handleStartEditTask}
-      >
-        <Edit2 size={14} className="me-2" />
-        Edit Task
-      </button>
-    )}
-    <button
-      type="button"
-      className="btn btn-secondary"
-      onClick={() => setSelectedTask(null)}
-    >
-      Close
-    </button>
-  </>
-) : (
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-success"
-                        onClick={handleUpdateTask}
-                      >
-                        <CheckCircle size={14} className="me-2" />
-                        Save Changes
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
-                        onClick={handleCancelEditTask}
-                      >
-                        Cancel
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label><strong>Asset Name:</strong></Form.Label>
+                            <Form.Control type="text" value={selectedAsset.name} readOnly />
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label><strong>Category:</strong></Form.Label>
+                            <Form.Control type="text" value={selectedAsset.category} readOnly />
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label><strong>Status:</strong></Form.Label>
+                            <div className="pt-2">
+                              <span className={`badge ${
+                                selectedAsset.status === 'Operational' ? 'bg-success' :
+                                selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+                                'bg-secondary'
+                              }`}>
+                                {selectedAsset.status}
+                              </span>
+                            </div>
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label><strong>Location:</strong></Form.Label>
+                            <Form.Control type="text" value={selectedAsset.location} readOnly />
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label><strong>Acquisition Date:</strong></Form.Label>
+                            <Form.Control type="text" value={selectedAsset.acquisitionDate} readOnly />
+                          </Form.Group>
+                        </div>
 
-        {/* Task Creation Modal */}
-        {showTaskModal && (
-          <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Assign New Task</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowTaskModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <div className="row g-3">
-                    <div className="col-md-6">
-                      <label className="form-label">Select Asset</label>
-                      <select
-                        className="form-select"
-                        value={newTask.assetId}
-                        onChange={(e) => setNewTask({...newTask, assetId: e.target.value})}
-                      >
-                        <option value="">Select Asset</option>
-                        {assets.map(asset => (
-                          <option key={asset.id} value={asset.id}>{asset.name} ({asset.id})</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label">Assign To</label>
-                      <select
-                        className="form-select"
-                        value={newTask.assigneeId}
-                        onChange={(e) => setNewTask({...newTask, assigneeId: e.target.value})}
-                      >
-                        <option value="">Select Personnel</option>
-                        {personnel.map(person => (
-                          <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="col-12">
-                      <div className="d-flex gap-3 mb-3">
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="radio"
-                            name="taskType"
-                            id="predefinedTask"
-                            value="predefined"
-                            checked={newTask.taskType === 'predefined'}
-                            onChange={(e) => setNewTask({...newTask, taskType: e.target.value})}
-                          />
-                          <label className="form-check-label" htmlFor="predefinedTask">
-                            Predefined Task
-                          </label>
-                        </div>
-                        <div className="form-check">
-                          <input
-                            className="form-check-input"
-                            type="radio"
-                            name="taskType"
-                            id="customTask"
-                            value="custom"
-                            checked={newTask.taskType === 'custom'}
-                            onChange={(e) => setNewTask({...newTask, taskType: e.target.value})}
-                          />
-                          <label className="form-check-label" htmlFor="customTask">
-                            Custom Task
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                    {newTask.taskType === 'predefined' ? (
-                      <div className="col-12">
-                        <label className="form-label">Select Task</label>
-                        <select
-                          className="form-select"
-                          value={newTask.title}
-                          onChange={(e) => setNewTask({...newTask, title: e.target.value})}
-                        >
-                          <option value="">Choose a task</option>
-                          {predefinedTasks.map(task => (
-                            <option key={task} value={task}>{task}</option>
-                          ))}
-                        </select>
+                        <div className="col-md-12">
+  <Form.Group>
+    <Form.Label><strong>Next Maintenance:</strong></Form.Label>
+    <div className="d-flex align-items-center gap-3">
+      <Form.Control 
+        type="text" 
+        value={selectedAsset.nextMaintenance || 'Not scheduled'} 
+        readOnly 
+        className="flex-grow-1"
+      />
+      <Button 
+        variant="outline-primary" 
+        size="sm"
+        onClick={() => {
+          setNextMaintenanceSchedule({
+            assetId: selectedAsset.id,
+            assigneeId: '',
+            scheduledDate: '',
+            scheduledTime: '',
+            repeat: 'none'
+          });
+          setShowMaintenanceScheduleModal(true);
+        }}
+      >
+        <i className="fas fa-calendar-plus me-1"></i>
+        Schedule
+      </Button>
+    </div>
+    {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
+      <Form.Text className="text-muted">
+        <i className="fas fa-repeat me-1"></i>
+        Repeats: {selectedAsset.nextMaintenanceRepeat}
+      </Form.Text>
+    )}
+  </Form.Group>
+</div>
+                        
                       </div>
                     ) : (
-                      <div className="col-12">
-                        <label className="form-label">Task Title</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={newTask.title}
-                          onChange={(e) => setNewTask({...newTask, title: e.target.value})}
-                          placeholder="Enter custom task title"
-                        />
+                      // Edit Mode
+                      <div className="row g-3">
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label>Asset ID</Form.Label>
+                            <Form.Control type="text" value={editingAsset.id} disabled />
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label>Asset Name *</Form.Label>
+                            <Form.Control 
+                              type="text" 
+                              value={editingAsset.name}
+                              onChange={(e) => setEditingAsset({...editingAsset, name: e.target.value})}
+                              required
+                            />
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label>Category *</Form.Label>
+                            <Form.Select
+                              value={editingAsset.category}
+                              onChange={(e) => setEditingAsset({...editingAsset, category: e.target.value})}
+                              required
+                            >
+                              <option value="">All Categories</option>
+                              <option value="HVAC Equipment">HVAC Equipment</option>
+                              <option value="Electrical Equipment">Electrical Equipment</option>
+                              <option value="Plumbing Fixtures">Plumbing Fixtures</option>
+                              <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
+                              <option value="Office Equipment">Office Equipment</option>
+                              <option value="Safety Equipment">Safety Equipment</option>
+                              <option value="Groundskeeping Tools">Groundskeeping Tools</option>
+                              <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
+                            </Form.Select>
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label>Status *</Form.Label>
+                            <Form.Select
+                              value={editingAsset.status}
+                              onChange={(e) => setEditingAsset({...editingAsset, status: e.target.value})}
+                              required
+                            >
+                              <option value="Operational">Operational</option>
+                              <option value="Under Maintenance">Under Maintenance</option>
+                              <option value="Retired">Retired</option>
+                            </Form.Select>
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label>Location *</Form.Label>
+                            <Form.Control 
+                              type="text" 
+                              value={editingAsset.location}
+                              onChange={(e) => setEditingAsset({...editingAsset, location: e.target.value})}
+                              required
+                            />
+                          </Form.Group>
+                        </div>
+                        <div className="col-md-6">
+                          <Form.Group>
+                            <Form.Label>Acquisition Date</Form.Label>
+                            <Form.Control 
+                              type="date" 
+                              value={editingAsset.acquisitionDate}
+                              onChange={(e) => setEditingAsset({...editingAsset, acquisitionDate: e.target.value})}
+                            />
+                          </Form.Group>
+                        </div>
+                       <div className="col-md-4">
+  <Form.Group>
+    <Form.Label>Next Maintenance Date</Form.Label>
+    <Form.Control 
+      type="date" 
+      value={editingAsset.nextMaintenance || ''}
+      onChange={(e) => setEditingAsset({...editingAsset, nextMaintenance: e.target.value})}
+    />
+  </Form.Group>
+</div>
+<div className="col-md-4">
+  <Form.Group>
+    <Form.Label>Next Maintenance Time</Form.Label>
+    <Form.Control 
+      type="time" 
+      value={editingAsset.nextMaintenanceTime || ''}
+      onChange={(e) => setEditingAsset({...editingAsset, nextMaintenanceTime: e.target.value})}
+    />
+  </Form.Group>
+</div>
+<div className="col-md-4">
+  <Form.Group>
+    <Form.Label>Repeat Schedule</Form.Label>
+    <Form.Select
+      value={editingAsset.nextMaintenanceRepeat || 'none'}
+      onChange={(e) => setEditingAsset({...editingAsset, nextMaintenanceRepeat: e.target.value})}
+    >
+      <option value="none">No Repeat</option>
+      <option value="weekly">Weekly</option>
+      <option value="monthly">Monthly</option>
+      <option value="yearly">Yearly</option>
+      <option value="custom">Custom</option>
+    </Form.Select>
+  </Form.Group>
+</div>
                       </div>
                     )}
-                    <div className="col-12">
-                      <label className="form-label">Description</label>
-                      <textarea
-                        className="form-control"
-                        rows={3}
-                        value={newTask.description}
-                        onChange={(e) => setNewTask({...newTask, description: e.target.value})}
-                        placeholder="Enter task description"
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label">Priority</label>
-                      <select
-                        className="form-select"
-                        value={newTask.priority}
-                        onChange={(e) => setNewTask({...newTask, priority: e.target.value})}
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                      </select>
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label">Due Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={newTask.dueDate}
-                        onChange={(e) => setNewTask({...newTask, dueDate: e.target.value})}
-                      />
-                    </div>
-                    <div className="col-md-4">
-                      <label className="form-label">Due Time</label>
-                      <input
-                        type="time"
-                        className="form-control"
-                        value={newTask.dueTime}
-                        onChange={(e) => setNewTask({...newTask, dueTime: e.target.value})}
-                      />
-                    </div>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowTaskModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={handleCreateTask}
-                  >
-                    <Plus size={14} className="me-2" />
-                    Create Task
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
 
-        {/* Advanced Schedule Modal */}
-        {showAdvancedScheduleModal && (
-          <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog modal-lg modal-dialog-centered">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Advanced Task Scheduling</h5>
-                  <button
-                    type="button"
-                    className="btn-close"
-                    onClick={() => setShowAdvancedScheduleModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <label className="form-label">Select Asset</label>
-                    <select
-                      className="form-select"
-                      value={advancedSchedule.assetId}
-                      onChange={(e) => setAdvancedSchedule({...advancedSchedule, assetId: e.target.value})}
-                    >
-                      <option value="">Select Asset</option>
-                      {assets.map(asset => (
-                        <option key={asset.id} value={asset.id}>{asset.name} ({asset.id})</option>
-                      ))}
-                    </select>
-                  </div>
 
-                  <div className="mb-3">
-                    <label className="form-label">Assign To</label>
-                    <select
-                      className="form-select"
-                      value={advancedSchedule.assigneeId}
-                      onChange={(e) => setAdvancedSchedule({...advancedSchedule, assigneeId: e.target.value})}
-                    >
-                      <option value="">Select Personnel</option>
-                      {personnel.map(person => (
-                        <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label">Task Type</label>
-                    <div className="d-flex gap-3">
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name="taskType"
-                          id="predefined"
-                          value="predefined"
-                          checked={advancedSchedule.taskType === 'predefined'}
-                          onChange={(e) => setAdvancedSchedule({...advancedSchedule, taskType: e.target.value})}
-                        />
-                        <label className="form-check-label" htmlFor="predefined">
-                          Predefined Tasks
-                        </label>
-                      </div>
-                      <div className="form-check">
-                        <input
-                          className="form-check-input"
-                          type="radio"
-                          name="taskType"
-                          id="custom"
-                          value="custom"
-                          checked={advancedSchedule.taskType === 'custom'}
-                          onChange={(e) => setAdvancedSchedule({...advancedSchedule, taskType: e.target.value})}
-                        />
-                        <label className="form-check-label" htmlFor="custom">
-                          Custom Task
-                        </label>
-                      </div>
+                    {/* Maintenance History */}
+                    <div className="mt-4">
+                      <h6>Maintenance History</h6>
+                      <Table bordered size="sm" className="mt-2">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Tasks</th>
+                            <th>Assigned</th>
+                            <th>Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedAsset.maintenanceHistory?.length > 0 ? (
+                            selectedAsset.maintenanceHistory.map((entry, idx) => (
+                              <tr key={idx}>
+                                <td>{entry.date}</td>
+                                <td>{entry.task}</td>
+                                <td>{entry.assigned}</td>
+                                <td>
+                                  <Badge bg={entry.status === 'completed' ? 'success' : entry.status === 'failed' ? 'danger' : 'secondary'}>
+                                    {entry.status}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="4" className="text-center text-muted">
+                                No maintenance history available
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </Table>
                     </div>
-                  </div>
-
-                  {advancedSchedule.taskType === 'predefined' && (
-                    <div className="mb-3">
-                      <label className="form-label">Select Task</label>
-                      <select
-                        className="form-select"
-                        value={advancedSchedule.predefinedTask}
-                        onChange={(e) => setAdvancedSchedule({...advancedSchedule, predefinedTask: e.target.value})}
-                      >
-                        <option value="">Choose a task</option>
-                        {predefinedTasks.map(task => (
-                          <option key={task} value={task}>{task}</option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-
-                  {advancedSchedule.taskType === 'custom' && (
-                    <>
-                      <div className="mb-3">
-                        <label className="form-label">Task Title</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={advancedSchedule.customTaskTitle}
-                          onChange={(e) => setAdvancedSchedule({...advancedSchedule, customTaskTitle: e.target.value})}
-                          placeholder="Enter custom task title"
-                        />
-                      </div>
-                      <div className="mb-3">
-                        <label className="form-label">Task Description</label>
-                        <textarea
-                          className="form-control"
-                          rows={2}
-                          value={advancedSchedule.customTaskDescription}
-                          onChange={(e) => setAdvancedSchedule({...advancedSchedule, customTaskDescription: e.target.value})}
-                          placeholder="Enter task description"
-                        />
-                      </div>
-                    </>
-                  )}
-
-                  <div className="mb-3">
-                    <label className="form-label">Additional Notes (Optional)</label>
-                    <textarea
-                      className="form-control"
-                      rows={2}
-                      value={advancedSchedule.description}
-                      onChange={(e) => setAdvancedSchedule({...advancedSchedule, description: e.target.value})}
-                      placeholder="Add any additional notes or instructions..."
-                    />
-                  </div>
-
-                  <div className="row mb-3">
-                    <div className="col-md-6">
-                      <label className="form-label">Schedule Date</label>
-                      <input
-                        type="date"
-                        className="form-control"
-                        value={advancedSchedule.scheduleDate}
-                        onChange={(e) => setAdvancedSchedule({...advancedSchedule, scheduleDate: e.target.value})}
-                      />
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label">Schedule Time</label>
-                      <input
-                        type="time"
-                        className="form-control"
-                        value={advancedSchedule.scheduleTime}
-                        onChange={(e) => setAdvancedSchedule({...advancedSchedule, scheduleTime: e.target.value})}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="mb-3">
-                    <label className="form-label">Repeat Schedule</label>
-                    <select
-                      className="form-select"
-                      value={advancedSchedule.repeat}
-                      onChange={(e) => setAdvancedSchedule({...advancedSchedule, repeat: e.target.value})}
-                    >
-                      <option value="none">No Repeat</option>
-                      <option value="weekly">Weekly</option>
-                      <option value="monthly">Monthly</option>
-                      <option value="yearly">Yearly</option>
-                      <option value="custom">Custom Interval</option>
-                    </select>
-                  </div>
-
-                  {advancedSchedule.repeat === 'custom' && (
-                    <div className="alert alert-info">
-                      <small>Custom interval scheduling will be configured in the next step after saving this schedule.</small>
-                    </div>
-                  )}
-                </div>
-                <div className="modal-footer">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() => setShowAdvancedScheduleModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      if (advancedSchedule.assetId && advancedSchedule.assigneeId && 
-                          (advancedSchedule.predefinedTask || advancedSchedule.customTaskTitle)) {
-                        
-                        const taskTitle = advancedSchedule.taskType === 'predefined' 
-                          ? advancedSchedule.predefinedTask 
-                          : advancedSchedule.customTaskTitle;
+                    
+                    {/* Maintenance Schedule Section - Only show for Under Maintenance assets */}
+                    {selectedAsset.status === 'Under Maintenance' && selectedAsset.maintenanceSchedule && (
+                      <Card className="mt-4">
+                        <Card.Header className="bg-warning text-dark">
+                          <h6 className="mb-0">
+                            <i className="fas fa-tools me-2"></i>
+                            Current Maintenance Schedule
+                          </h6>
+                        </Card.Header>
+                        <Card.Body>
+                          <Row>
+                            <Col md={6}>
+                              <div className="mb-3">
+                                <strong>Task Description:</strong>
+                                <p className="mb-1">{selectedAsset.maintenanceSchedule.taskDescription}</p>
+                              </div>
+                              <div className="mb-3">
+                                <strong>Assigned Personnel:</strong>
+                                <p className="mb-1">
+                                  <Badge bg="info" className="me-2">
+                                    {selectedAsset.maintenanceSchedule.assignedPersonnelName}
+                                  </Badge>
+                                </p>
+                              </div>
+                              <div className="mb-3">
+                                <strong>Current Status:</strong>
+                                <p className="mb-1">
+                                  <Badge bg={getStatusBadgeVariant(getMaintenanceStatus(selectedAsset.maintenanceSchedule))}>
+                                    {getMaintenanceStatus(selectedAsset.maintenanceSchedule)?.charAt(0).toUpperCase() + 
+                                     getMaintenanceStatus(selectedAsset.maintenanceSchedule)?.slice(1)}
+                                  </Badge>
+                                </p>
+                              </div>
+                            </Col>
+                            <Col md={6}>
+                              <div className="mb-3">
+                                <strong>Scheduled Date & Time:</strong>
+                                <p className="mb-1">{formatDateTime(selectedAsset.maintenanceSchedule.scheduledDateTime)}</p>
+                              </div>
+                              <div className="mb-3">
+                                <strong>Due Date & Time:</strong>
+                                <p className="mb-1 text-danger">{formatDateTime(selectedAsset.maintenanceSchedule.dueDateTime)}</p>
+                              </div>
+                              <div className="mb-3">
+                                <strong>Started At:</strong>
+                                <p className="mb-1">
+                                  {selectedAsset.maintenanceSchedule.startedAt 
+                                    ? formatDateTime(selectedAsset.maintenanceSchedule.startedAt)
+                                    : 'Not started yet'}
+                                </p>
+                              </div>
+                            </Col>
+                          </Row>
                           
-                        const taskDescription = advancedSchedule.taskType === 'predefined'
-                          ? advancedSchedule.description
-                          : advancedSchedule.customTaskDescription + (advancedSchedule.description ? ' - ' + advancedSchedule.description : '');
+                          {selectedAsset.maintenanceSchedule.comments && (
+                            <div className="mt-3">
+                              <strong>Latest Comments:</strong>
+                              <div className="bg-light p-3 rounded mt-2">
+                                <p className="mb-0">{selectedAsset.maintenanceSchedule.comments}</p>
+                              </div>
+                            </div>
+                          )}
 
-                        const newScheduledTask = {
-                          id: `T${String(tasks.length + 1).padStart(3, '0')}`,
-                          assetId: advancedSchedule.assetId,
-                          assigneeId: advancedSchedule.assigneeId,
-                          title: taskTitle,
-                          description: taskDescription,
-                          priority: 'medium',
-                          dueDate: advancedSchedule.scheduleDate,
-                          status: 'pending'
-                        };
+              
+                        </Card.Body>
+                      </Card>
+                    )}
+                  </Col>
 
-                        setTasks([...tasks, newScheduledTask]);
-                        alert('Advanced schedule created successfully!');
-                        setShowAdvancedScheduleModal(false);
-                        
-                        // Reset form
-                        setAdvancedSchedule({
-                          assetId: '',
-                          assigneeId: '',
-                          taskType: 'predefined',
-                          predefinedTask: '',
-                          customTaskTitle: '',
-                          customTaskDescription: '',
-                          description: '',
-                          scheduleDate: '',
-                          scheduleTime: '',
-                          repeat: 'none'
-                        });
-                      } else {
-                        alert('Please fill in all required fields');
-                      }
-                    }}
-                  >
-                    <Clock size={14} className="me-2" />
-                    Schedule Task
-                  </button>
-                </div>
-              </div>
-            </div>
+                  {/* Right Column - Remarks (Read-only for Admin) */}
+                  <Col lg={4}>
+                    <div className="border-start ps-4">
+                      <h6>Personnel Remarks</h6>
+                     
+                      
+                      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                        {selectedAsset.remarks?.length > 0 ? (
+                          selectedAsset.remarks.map((remark, index) => (
+                            <div key={index} className="mb-3 p-3 bg-light rounded">
+                              <div className="d-flex justify-content-between align-items-start mb-2">
+                                <strong className="text-primary">{remark.user}</strong>
+                                <small className="text-muted">
+                                  {new Date(remark.timestamp).toLocaleString()}
+                                </small>
+                              </div>
+                              <p className="mb-0 small">{remark.content}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center text-muted py-4">
+                            <i className="fas fa-comments fa-2x mb-3 opacity-50"></i>
+                            <p>No remarks from personnel yet.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Col>
+                </Row>
+              </Modal.Body>
+              <Modal.Footer>
+                {!isEditing ? (
+                  <>
+                    <Button variant="primary" onClick={handleStartEdit}>
+                      <i className="fas fa-edit me-2"></i>
+                      Edit Asset
+                    </Button>
+                    <Button variant="secondary" onClick={() => setSelectedAsset(null)}>
+                      Close
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button variant="success" onClick={handleUpdateAsset}>
+                      <i className="fas fa-save me-2"></i>
+                      Save Changes
+                    </Button>
+                    <Button variant="secondary" onClick={handleCancelEdit}>
+                      Cancel
+                    </Button>
+                  </>
+                )}
+              </Modal.Footer>
+            </>
+          )}
+        </Modal>
+      </Container>
+      {/* Task Assignment Modal */}
+{showTaskModal && (
+  <Modal show={showTaskModal} onHide={() => setShowTaskModal(false)} size="lg">
+    <Modal.Header closeButton>
+      <Modal.Title>Assign New Task</Modal.Title>
+    </Modal.Header>
+    <Modal.Body>
+      <Row className="g-3">
+        <Col md={6}>
+          <Form.Group>
+            <Form.Label>Select Asset *</Form.Label>
+            <Form.Select
+              value={newTask.assetId}
+              onChange={(e) => setNewTask({...newTask, assetId: e.target.value})}
+              required
+            >
+              <option value="">Select Asset</option>
+              {assets.filter(asset => asset.status === 'Operational').map(asset => (
+                <option key={asset.id} value={asset.id}>{asset.name} ({asset.id})</option>
+              ))}
+            </Form.Select>
+            <Form.Text className="text-muted">
+              Only operational assets can be assigned tasks
+            </Form.Text>
+          </Form.Group>
+        </Col>
+        <Col md={6}>
+          <Form.Group>
+            <Form.Label>Assign To *</Form.Label>
+            <Form.Select
+              value={newTask.assigneeId}
+              onChange={(e) => setNewTask({...newTask, assigneeId: e.target.value})}
+              required
+            >
+              <option value="">Select Personnel</option>
+              {personnel.map(person => (
+                <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+        </Col>
+        <Col xs={12}>
+          <div className="d-flex gap-3 mb-3">
+            <Form.Check
+              type="radio"
+              id="predefinedTask"
+              name="taskType"
+              label="Predefined Task"
+              value="predefined"
+              checked={newTask.taskType === 'predefined'}
+              onChange={(e) => setNewTask({...newTask, taskType: e.target.value})}
+            />
+            <Form.Check
+              type="radio"
+              id="customTask"
+              name="taskType"
+              label="Custom Task"
+              value="custom"
+              checked={newTask.taskType === 'custom'}
+              onChange={(e) => setNewTask({...newTask, taskType: e.target.value})}
+            />
           </div>
+        </Col>
+        {newTask.taskType === 'predefined' ? (
+          <Col xs={12}>
+            <Form.Group>
+              <Form.Label>Select Task *</Form.Label>
+              <Form.Select
+                value={newTask.title}
+                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                required
+              >
+                <option value="">Choose a task</option>
+                {predefinedTasks.map(task => (
+                  <option key={task} value={task}>{task}</option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
+        ) : (
+          <Col xs={12}>
+            <Form.Group>
+              <Form.Label>Task Title *</Form.Label>
+              <Form.Control
+                type="text"
+                value={newTask.title}
+                onChange={(e) => setNewTask({...newTask, title: e.target.value})}
+                placeholder="Enter custom task title"
+                required
+              />
+            </Form.Group>
+          </Col>
         )}
+        <Col xs={12}>
+          <Form.Group>
+            <Form.Label>Description</Form.Label>
+            <Form.Control
+              as="textarea"
+              rows={3}
+              value={newTask.description}
+              onChange={(e) => setNewTask({...newTask, description: e.target.value})}
+              placeholder="Enter task description"
+            />
+          </Form.Group>
+        </Col>
+        <Col md={4}>
+          <Form.Group>
+            <Form.Label>Priority</Form.Label>
+            <Form.Select
+              value={newTask.priority}
+              onChange={(e) => setNewTask({...newTask, priority: e.target.value})}
+            >
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </Form.Select>
+          </Form.Group>
+        </Col>
+        <Col md={4}>
+          <Form.Group>
+            <Form.Label>Due Date *</Form.Label>
+            <Form.Control
+              type="date"
+              value={newTask.dueDate}
+              onChange={(e) => setNewTask({...newTask, dueDate: e.target.value})}
+              required
+            />
+          </Form.Group>
+        </Col>
+        <Col md={4}>
+          <Form.Group>
+            <Form.Label>Due Time</Form.Label>
+            <Form.Control
+              type="time"
+              value={newTask.dueTime}
+              onChange={(e) => setNewTask({...newTask, dueTime: e.target.value})}
+            />
+          </Form.Group>
+        </Col>
+      </Row>
+    </Modal.Body>
+    <Modal.Footer>
+      <Button variant="secondary" onClick={() => setShowTaskModal(false)}>
+        Cancel
+      </Button>
+      <Button variant="primary" onClick={handleCreateTask}>
+        <i className="fas fa-plus me-2"></i>
+        Assign Task
+      </Button>
+    </Modal.Footer>
+  </Modal>
+)}
 
-      </div>
+
+{/* Next Maintenance Schedule Modal */}
+{showMaintenanceScheduleModal && (
+  <Modal show={showMaintenanceScheduleModal} onHide={() => setShowMaintenanceScheduleModal(false)} size="md">
+    <Modal.Header closeButton>
+      <Modal.Title>Schedule Next Maintenance</Modal.Title>
+    </Modal.Header>
+    <Modal.Body>
+      <Row className="g-3">
+        <Col xs={12}>
+          <Alert variant="info">
+            <strong>Asset:</strong> {assets.find(a => a.id === nextMaintenanceSchedule.assetId)?.name}
+          </Alert>
+        </Col>
+        <Col xs={12}>
+          <Form.Group>
+            <Form.Label>Assign To *</Form.Label>
+            <Form.Select
+              value={nextMaintenanceSchedule.assigneeId}
+              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, assigneeId: e.target.value})}
+              required
+            >
+              <option value="">Select Personnel</option>
+              {personnel.map(person => (
+                <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
+              ))}
+            </Form.Select>
+          </Form.Group>
+        </Col>
+        <Col md={6}>
+          <Form.Group>
+            <Form.Label>Scheduled Date *</Form.Label>
+            <Form.Control
+              type="date"
+              value={nextMaintenanceSchedule.scheduledDate}
+              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, scheduledDate: e.target.value})}
+              required
+            />
+          </Form.Group>
+        </Col>
+        <Col md={6}>
+          <Form.Group>
+            <Form.Label>Scheduled Time</Form.Label>
+            <Form.Control
+              type="time"
+              value={nextMaintenanceSchedule.scheduledTime}
+              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, scheduledTime: e.target.value})}
+            />
+          </Form.Group>
+        </Col>
+        <Col xs={12}>
+          <Form.Group>
+            <Form.Label>Repeat Schedule</Form.Label>
+            <Form.Select
+              value={nextMaintenanceSchedule.repeat}
+              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, repeat: e.target.value})}
+            >
+              <option value="none">No Repeat</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+              <option value="yearly">Yearly</option>
+              <option value="custom">Custom Interval</option>
+            </Form.Select>
+          </Form.Group>
+        </Col>
+        {nextMaintenanceSchedule.repeat === 'custom' && (
+          <Col xs={12}>
+            <Alert variant="warning">
+              <small><strong>Note:</strong> Custom interval settings will be configured after saving this schedule.</small>
+            </Alert>
+          </Col>
+        )}
+        {nextMaintenanceSchedule.repeat !== 'none' && (
+          <Col xs={12}>
+            <Alert variant="success">
+              <small><i className="fas fa-bell me-1"></i> Notifications will be sent to admin and assigned personnel based on the repeat schedule.</small>
+            </Alert>
+          </Col>
+        )}
+      </Row>
+    </Modal.Body>
+    <Modal.Footer>
+      <Button variant="secondary" onClick={() => setShowMaintenanceScheduleModal(false)}>
+        Cancel
+      </Button>
+      <Button variant="primary" onClick={handleScheduleNextMaintenance}>
+        <i className="fas fa-calendar-check me-2"></i>
+        Schedule Maintenance
+      </Button>
+    </Modal.Footer>
+  </Modal>
+)}
+
     </SidebarLayout>
   );
 }

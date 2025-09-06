@@ -7,8 +7,6 @@ import {
   Col,
   Form,
   Button,
-  Tabs,
-  Tab,
   Table,
   Modal,
   Alert,
@@ -20,6 +18,145 @@ export default function Assets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Sample hardcoded data for visualization
+  const sampleAssets = [
+    {
+      id: "AST-001",
+      name: "Main Building HVAC System",
+      category: "HVAC Equipment",
+      location: "Main Building - Ground Floor",
+      status: "Operational",
+      lastMaintenance: "2024-08-15",
+      task: "Regular cleaning and filter replacement",
+      acquisitionDate: "2023-05-15", // Add this line
+      nextMaintenance: "2024-09-15", // Add this line
+      maintenanceHistory: [
+        { date: "2024-08-15", task: "Filter replacement and system cleaning", Assigned: "Juan Dela Cruz"},
+        { date: "2024-07-10", task: "Coolant level check and refill", Assigned: "Juan Dela Cruz" },
+        { date: "2024-06-20", task: "Routine inspection", Assigned: "Juan Dela Cruz" }
+      ],
+      remarks: [
+        {
+          user: "Juan Dela Cruz",
+          timestamp: "2024-08-20T10:30:00Z",
+          content: "System is running smoothly after recent maintenance. Temperature control is optimal."
+        }
+      ]
+    },
+    {
+      id: "AST-002",
+      name: "Security Camera System - Block A",
+      category: "Safety Equipment",
+      location: "Block A - All Floors",
+      status: "Under Maintenance",
+      lastMaintenance: "2024-08-18",
+      acquisitionDate: "2023-05-15", // ADD THIS
+  nextMaintenance: "2024-09-16", // ADD THIS
+      task: "Camera lens cleaning and software update",
+      maintenanceHistory: [
+        { date: "2024-08-18", task: "Camera 3 lens replacement due to scratches", Assigned: "Juan Dela Cruz" },
+        { date: "2024-07-25", task: "Software update and system calibration", Assigned: "Juan Dela Cruz" },
+        { date: "2024-07-01", task: "Monthly inspection and cleaning", Assigned: "Juan Dela Cruz" }
+      ],
+      remarks: [
+        {
+          user: "Maria Santos",
+          timestamp: "2024-08-18T14:15:00Z",
+          content: "Camera 3 on 2nd floor needs lens replacement. Image quality is compromised."
+        },
+        {
+          user: "Pedro Garcia",
+          timestamp: "2024-08-19T09:00:00Z",
+          content: "Replacement lens has been ordered. ETA is next week."
+        }
+      ]
+    },
+    {
+      id: "AST-003",
+      name: "Garden Sprinkler System",
+      category: "Groundskeeping Tools",
+      location: "Front Garden & Courtyard",
+      status: "Operational",
+      lastMaintenance: "2024-08-10",
+      acquisitionDate: "2023-05-15", // ADD THIS
+      nextMaintenance: "2024-09-15", // ADD THIS
+      task: "Nozzle cleaning and water pressure check",
+      maintenanceHistory: [
+        { date: "2024-08-10", task: "Nozzle cleaning and water pressure adjustment", Assigned: "Juan Dela Cruz" },
+        { date: "2024-07-15",  task: "Timer system calibration", Assigned: "Juan Dela Cruz" },
+        { date: "2024-06-30",  task: "Seasonal maintenance check", Assigned: "Juan Dela Cruz" }
+      ],
+      remarks: []
+    },
+    {
+      id: "AST-004",
+      name: "Conference Room Tables (Set A)",
+      category: "Office Equipment",
+      location: "Conference Room A",
+      status: "Operational",
+      lastMaintenance: "2024-08-12",
+      acquisitionDate: "2023-05-15", // ADD THIS
+      nextMaintenance: "2024-09-15", // ADD THIS
+      task: "Surface polishing and hardware check",
+      maintenanceHistory: [
+        { date: "2024-08-12",  task: "Wood polish application and hardware tightening", Assigned: "Juan Dela Cruz" },
+        { date: "2024-07-05", task: "Scratch repair on table surface", Assigned: "Juan Dela Cruz" }
+      ],
+      remarks: [
+        {
+          user: "Ana Reyes",
+          timestamp: "2024-08-13T11:20:00Z",
+          content: "Tables look great after polishing. One table leg still wobbles slightly."
+        }
+      ]
+    },
+    {
+      id: "AST-005",
+      name: "Backup Generator Unit 1",
+      category: "Electrical Equipment",
+      location: "Generator Room",
+      status: "Retired",
+      lastMaintenance: "2024-05-30",
+      acquisitionDate: "2023-05-15", // ADD THIS
+  nextMaintenance: "2024-09-15", // ADD THIS
+      task: "Final inspection before retirement",
+      maintenanceHistory: [
+        { date: "2024-05-30", task: "Final inspection and documentation", Assigned: "Juan Dela Cruz" },
+        { date: "2024-04-20", task: "Engine oil change and battery check", Assigned: "Juan Dela Cruz" },
+        { date: "2024-03-15", task: "Load testing and fuel system check", Assigned: "Juan Dela Cruz" }
+      ],
+      remarks: [
+        {
+          user: "Roberto Cruz",
+          timestamp: "2024-05-30T16:45:00Z",
+          content: "Unit retired due to age and frequent breakdowns. Replacement unit AST-012 now in service."
+        }
+      ]
+    },
+    {
+      id: "AST-006",
+      name: "Floor Cleaning Equipment",
+      category: "Miscellaneous / General Facilities",
+      location: "Janitor's Storage Room",
+      status: "Under Maintenance",
+      lastMaintenance: "2024-08-16",
+      acquisitionDate: "2023-05-15", // ADD THIS
+  nextMaintenance: "2024-09-15", // ADD THIS
+      task: "Motor repair and brush replacement",
+      maintenanceHistory: [
+        { date: "2024-08-16", task: "Motor diagnostic and repair attempt",  Assigned: "Juan Dela Cruz" },
+        { date: "2024-07-20", task: "Routine cleaning and lubrication", Assigned: "Juan Dela Cruz" }
+      ],
+      remarks: [
+        {
+          user: "Lisa Fernandez",
+          timestamp: "2024-08-16T13:30:00Z",
+          content: "Motor making unusual noise. Technician says it might need replacement."
+        }
+      ]
+    }
+  ];
+
   // Mock function to simulate API call - replace with actual API call later
   const fetchAssets = async () => {
     try {
@@ -30,9 +167,9 @@ export default function Assets() {
       // const data = await response.json();
       // setAssets(data);
       
-      // For now, simulate loading and return empty array
+      // For now, simulate loading and return sample data for visualization
       await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-      setAssets([]); // No assets until backend is connected
+      setAssets(sampleAssets); // Using sample data for visualization
       
     } catch (err) {
       setError('Failed to load assets');
@@ -103,14 +240,16 @@ export default function Assets() {
   };
 
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState(""); // Changed from categoryFilter
   const [categoryFilter, setCategoryFilter] = useState("");
   const [selectedAsset, setSelectedAsset] = useState(null);
 
-  // Filtered assets
+  // Filtered assets - updated to include status filter
   const filteredAssets = assets.filter(
     (asset) =>
       (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
         asset.id?.toLowerCase().includes(search.toLowerCase())) &&
+      (statusFilter === "" || asset.status === statusFilter) &&
       (categoryFilter === "" || asset.category === categoryFilter)
   );
 
@@ -151,94 +290,105 @@ export default function Assets() {
       <Container fluid>
         <h3>Asset Management</h3>
 
-        {/* Search & Filter Section */}
+        {/* Sample Data Notice */}
+        <Alert variant="info" className="mb-3">
+          <strong>Note:</strong> Currently showing sample data for visualization purposes. 
+          This will be replaced with real data from the backend API.
+        </Alert>
+
+        {/* Search & Filter Section - Updated with Status dropdown */}
         <Row className="mb-3">
-          <Col md={6}>
+          <Col md={4}>
             <Form.Control
               type="text"
-              placeholder="Search assets by name or ID..."
+              placeholder="Search assets by name, ID, or assignee..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </Col>
-          <Col md={4}>
+          <Col md={3}>
             <Form.Select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="">All Categories</option>
-              <option>Facilities & Building Infra</option>
-              <option>Safety & Security Systems</option>
-              <option>Grounds & External Areas</option>
-              <option>Furniture & Fixtures</option>
-              <option>Maintenance Equipment</option>
-              <option>Utilities Infrastructure</option>
-              <option>Vehicles</option>
+              <option value="">All Status</option>
+              <option value="Operational">Operational</option>
+              <option value="Under Maintenance">Under Maintenance</option>
+              <option value="Retired">Retired</option>
             </Form.Select>
           </Col>
-          <Col md={2}>
-            <Button variant="outline-primary" onClick={fetchAssets}>
-              Refresh
-            </Button>
+          <Col md={3}>
+           <Form.Select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+          >
+            <option value="">All Categories</option>
+            <option value="HVAC Equipment">HVAC Equipment</option>
+            <option value="Electrical Equipment">Electrical Equipment</option>
+            <option value="Plumbing Fixtures">Plumbing Fixtures</option>
+            <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
+            <option value="Office Equipment">Office Equipment</option>
+            <option value="Safety Equipment">Safety Equipment</option>
+            <option value="Groundskeeping Tools">Groundskeeping Tools</option>
+            <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
+          </Form.Select>
           </Col>
         </Row>
 
-        {/* Status Tabs */}
-        <Tabs defaultActiveKey="Operational" className="mb-3">
-          {["Operational", "Under Maintenance", "Retired"].map((status) => (
-            <Tab eventKey={status} title={status} key={status}>
-              <Table bordered hover responsive>
-                <thead>
-                  <tr>
-                    <th>Asset ID</th>
-                    <th>Asset Name</th>
-                    <th>Category</th>
-                    <th>Location</th>
-                    <th>Status</th>
-                    <th>Last Maintenance</th>
-                    <th>Task</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAssets.filter((a) => a.status === status).length > 0 ? (
-                    filteredAssets
-                      .filter((a) => a.status === status)
-                      .map((asset) => (
-                        <tr key={asset.id}>
-                          <td>{asset.id}</td>
-                          <td>{asset.name}</td>
-                          <td>{asset.category}</td>
-                          <td>{asset.location}</td>
-                          <td>{asset.status}</td>
-                          <td>{asset.lastMaintenance}</td>
-                          <td>{asset.task}</td>
-                          <td>
-                            <Button
-                              size="sm"
-                              variant="primary"
-                              onClick={() => setSelectedAsset(asset)}
-                            >
-                              View
-                            </Button>
-                          </td>
-                        </tr>
-                      ))
-                  ) : (
-                    <tr>
-                      <td colSpan="8" className="text-center text-muted py-4">
-                        {assets.length === 0 
-                          ? `No assets available. Assets will appear here once they are added by an administrator.`
-                          : `No ${status.toLowerCase()} assets found.`
-                        }
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            </Tab>
-          ))}
-        </Tabs>
+        {/* Assets Table - Single table showing all filtered results */}
+        <Table bordered hover responsive>
+          <thead>
+            <tr>
+              <th>Asset ID</th>
+              <th>Asset Name</th>
+              <th>Category</th>
+              <th>Location</th>
+              <th>Status</th>
+              <th>Last Maintenance</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredAssets.length > 0 ? (
+              filteredAssets.map((asset) => (
+                <tr key={asset.id}>
+                  <td>{asset.id}</td>
+                  <td>{asset.name}</td>
+                  <td>{asset.category}</td>
+                  <td>{asset.location}</td>
+                  <td>
+                    <span className={`badge ${
+                      asset.status === 'Operational' ? 'bg-success' :
+                      asset.status === 'Under Maintenance' ? 'bg-warning' :
+                      'bg-secondary'
+                    }`}>
+                      {asset.status}
+                    </span>
+                  </td>
+                  <td>{asset.lastMaintenance}</td>
+                  <td>
+                    <Button
+                      size="sm"
+                      variant="primary"
+                      onClick={() => setSelectedAsset(asset)}
+                    >
+                      View
+                    </Button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="7" className="text-center text-muted py-4">
+                  {assets.length === 0 
+                    ? `No assets available. Assets will appear here once they are added by an administrator.`
+                    : `No assets found matching your search criteria.`
+                  }
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </Table>
 
         {/* Show info message when no assets exist */}
         {assets.length === 0 && (
@@ -291,6 +441,18 @@ export default function Assets() {
                       <Form.Control type="text" value={selectedAsset.category} readOnly />
                     </Form.Group>
                   </Col>
+                  <Col md={6} className="mt-3">
+                    <Form.Group>
+                      <Form.Label><strong>Category:</strong></Form.Label>
+                      <Form.Control type="text" value={selectedAsset.category} readOnly />
+                    </Form.Group>
+                  </Col>
+                  <Col md={6} className="mt-3">
+                    <Form.Group>
+                      <Form.Label><strong>Acquisition Date:</strong></Form.Label>
+                      <Form.Control type="text" value={selectedAsset.acquisitionDate} readOnly />
+                    </Form.Group>
+                  </Col>
                 </Row>
 
                 {/* Maintenance History */}
@@ -301,6 +463,7 @@ export default function Assets() {
                       <tr>
                         <th>Date</th>
                         <th>Tasks</th>
+                        <th>Assigned</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -309,11 +472,12 @@ export default function Assets() {
                           <tr key={idx}>
                             <td>{entry.date}</td>
                             <td>{entry.task}</td>
+                            <td>{entry.Assigned}</td>
                           </tr>
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="2" className="text-center text-muted">
+                          <td colSpan="3" className="text-center text-muted">
                             No maintenance history available
                           </td>
                         </tr>
@@ -321,6 +485,40 @@ export default function Assets() {
                     </tbody>
                   </Table>
                 </div>
+
+              {/* Next Maintenance - ADD THIS ENTIRE SECTION */}
+<div className="mb-4">
+  <h6>Next Maintenance</h6>
+  <div className="p-3" style={{ backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
+    <Row>
+      <Col md={6}>
+        <strong>Scheduled Date:</strong>
+        <div className="mt-1">{selectedAsset.nextMaintenance || "Not scheduled"}</div>
+      </Col>
+      <Col md={6}>
+        <strong>Status:</strong>
+        <div className="mt-1">
+          <span className={`badge ${
+            selectedAsset.nextMaintenance && new Date(selectedAsset.nextMaintenance) < new Date()
+              ? 'bg-danger' 
+              : selectedAsset.nextMaintenance && new Date(selectedAsset.nextMaintenance) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+              ? 'bg-warning'
+              : 'bg-success'
+          }`}>
+            {selectedAsset.nextMaintenance 
+              ? new Date(selectedAsset.nextMaintenance) < new Date()
+                ? 'Overdue'
+                : new Date(selectedAsset.nextMaintenance) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+                ? 'Due Soon'
+                : 'Scheduled'
+              : 'Not Scheduled'
+            }
+          </span>
+        </div>
+      </Col>
+    </Row>
+  </div>
+</div>
 
                 {/* Remarks */}
                 <div>

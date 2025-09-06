@@ -12,6 +12,7 @@
     "@testing-library/user-event": "^13.5.0",
     "bootstrap": "^5.3.7",
     "chart.js": "^4.5.0",
+    "chartjs-plugin-datalabels": "^2.2.0",
     "date-fns": "^4.1.0",
     "lucide-react": "^0.539.0",
     "react": "^19.1.1",

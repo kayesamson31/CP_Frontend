@@ -15,15 +15,261 @@ export default function WorkOrder() {
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [adminPriority, setAdminPriority] = useState('');
-  const [showFailureModal, setShowFailureModal] = useState(false);
-  const [failureReason, setFailureReason] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [personnel, setPersonnel] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [extendedDueDate, setExtendedDueDate] = useState('');
+const [showExtendModal, setShowExtendModal] = useState(false);
+const [extensionReason, setExtensionReason] = useState('');
 
   // API Base URL - update this to match your backend
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
+
+  // Hardcoded example data
+  const hardcodedWorkOrders = [
+    // To Review Examples
+    {
+      id: 'WO-2024-001',
+      requester: 'Maria Santos',
+      category: 'Electrical',
+      location: 'Building A - Room 201',
+      status: 'To Review',
+      priority: 'High',
+      suggestedPriority: 'High',
+      requestDate: '2024-01-15T08:00:00Z',
+      dueDate: '2024-01-20T17:00:00Z',
+      description: 'Electrical outlet not working in conference room',
+      detailedDescription: 'The main electrical outlet near the projector in conference room 201 is not working. This is affecting our daily meetings and presentations. Please check the wiring and replace if necessary.',
+      assetEquipment: 'Wall Outlet #A201-03'
+    },
+    {
+      id: 'WO-2024-002',
+      requester: 'John Rodriguez',
+      category: 'Plumbing',
+      location: 'Building B - 2nd Floor Restroom',
+      status: 'To Review',
+      priority: 'Medium',
+      suggestedPriority: 'Medium',
+      requestDate: '2024-01-16T10:30:00Z',
+      dueDate: '2024-01-25T17:00:00Z',
+      description: 'Leaking faucet in men\'s restroom',
+      detailedDescription: 'The faucet in the men\'s restroom on the 2nd floor has been dripping continuously for the past week. It\'s wasting water and the sound is disturbing nearby offices.',
+      assetEquipment: 'Faucet Unit B2-MR-01'
+    },
+
+    // Pending Examples
+    {
+      id: 'WO-2024-003',
+      requester: 'Ana Dela Cruz',
+      category: 'HVAC',
+      location: 'Building C - Server Room',
+      status: 'Pending',
+      priority: 'High',
+      suggestedPriority: 'Medium',
+      adminUpdatedPriority: 'High',
+      requestDate: '2024-01-14T09:00:00Z',
+      dueDate: '2024-01-18T17:00:00Z',
+      description: 'Air conditioning unit making loud noises',
+      detailedDescription: 'The main AC unit in the server room has been making unusual grinding noises and the temperature is not maintaining properly. This could affect our server equipment.',
+      assetEquipment: 'AC Unit C-SR-01',
+      assignedTo: 'Roberto Martinez'
+    },
+    {
+      id: 'WO-2024-004',
+      requester: 'Carlos Reyes',
+      category: 'Carpentry / Structural',
+      location: 'Building A - Main Lobby',
+      status: 'Pending',
+      priority: 'Low',
+      suggestedPriority: 'Low',
+      requestDate: '2024-01-13T14:20:00Z',
+      dueDate: '2024-01-30T17:00:00Z',
+      description: 'Loose handrail on main staircase',
+      detailedDescription: 'The handrail on the main staircase leading to the second floor is becoming loose. It needs to be tightened or reinforced for safety reasons.',
+      assetEquipment: 'Staircase Handrail A-ML-01',
+      assignedTo: 'Miguel Santos'
+    },
+
+    // In Progress Examples
+    {
+      id: 'WO-2024-005',
+      requester: 'Lisa Garcia',
+      category: 'Painting / Finishing',
+      location: 'Building D - Conference Room 301',
+      status: 'In Progress',
+      isOverdue: true,
+  extendedDueDate: '2024-01-28T17:00:00Z',
+  extensionReason: 'Waiting for special primer paint to arrive from supplier',
+      priority: 'Medium',
+      suggestedPriority: 'Medium',
+      requestDate: '2024-01-10T11:00:00Z',
+      dueDate: '2024-01-22T17:00:00Z',
+      description: 'Wall paint peeling in conference room',
+      detailedDescription: 'The paint on the north wall of conference room 301 is peeling and looks unprofessional. Need to scrape, prime, and repaint the entire wall.',
+      assetEquipment: 'Conference Room D301',
+      assignedTo: 'Fernando Cruz'
+    },
+    {
+      id: 'WO-2024-006',
+      requester: 'David Lim',
+      category: 'General Services / Miscellaneous',
+      location: 'Building B - Parking Lot',
+      status: 'In Progress',
+      isOverdue: false,
+  extendedDueDate: '2024-01-25T17:00:00Z',
+  extensionReason: 'Additional security equipment needed for proper installation',
+      priority: 'High',
+      suggestedPriority: 'Low',
+      adminUpdatedPriority: 'High',
+      requestDate: '2024-01-12T16:45:00Z',
+      dueDate: '2024-01-19T17:00:00Z',
+      description: 'Broken security camera in parking lot',
+      detailedDescription: 'Security camera #5 in the main parking lot is not functioning. This creates a security blind spot that needs immediate attention.',
+      assetEquipment: 'Security Camera B-PL-05',
+      assignedTo: 'Ricardo Torres'
+    },
+
+    // Completed Examples
+    {
+      id: 'WO-2024-007',
+      requester: 'Sofia Valdez',
+      category: 'Electrical',
+      location: 'Building A - IT Department',
+      status: 'Completed',
+      priority: 'Medium',
+      suggestedPriority: 'Medium',
+      requestDate: '2024-01-08T09:30:00Z',
+      dueDate: '2024-01-15T17:00:00Z',
+      description: 'Install additional power outlets for new workstations',
+      detailedDescription: 'Need to install 4 additional power outlets in the IT department to accommodate new workstations. Should include both regular power and UPS connections.',
+      assetEquipment: 'IT Department Power Grid A-IT',
+      assignedTo: 'Eduardo Ramos'
+    },
+    {
+      id: 'WO-2024-008',
+      requester: 'Patricia Morales',
+      category: 'Groundskeeping & Landscaping',
+      location: 'Building Exterior - Front Garden',
+      status: 'Completed',
+      priority: 'Low',
+      suggestedPriority: 'Low',
+      requestDate: '2024-01-05T13:15:00Z',
+      dueDate: '2024-01-12T17:00:00Z',
+      description: 'Trim overgrown bushes blocking windows',
+      detailedDescription: 'The bushes along the front of the building have grown too tall and are blocking natural light from entering the ground floor offices. Need professional trimming.',
+      assetEquipment: 'Front Landscape Area',
+      assignedTo: 'Juan Dela Rosa'
+    },
+
+    // Failed Examples
+    {
+      id: 'WO-2024-009',
+      requester: 'Michael Chen',
+      category: 'Masonry / Civil Works',
+      location: 'Building C - Basement',
+      status: 'Failed',
+      priority: 'High',
+      suggestedPriority: 'High',
+      requestDate: '2024-01-03T08:00:00Z',
+      dueDate: '2024-01-10T17:00:00Z',
+      description: 'Water seepage through basement wall',
+      detailedDescription: 'There is water seeping through the east wall of the basement during heavy rains. This could damage stored equipment and create mold issues.',
+      assetEquipment: 'Basement East Wall C-BM',
+      assignedTo: 'Antonio Silva',
+      failureReason: 'Unable to complete due to need for specialized waterproofing materials not currently available. Requires external contractor with proper equipment and permits.'
+    },
+    {
+      id: 'WO-2024-010',
+      requester: 'Jennifer Taylor',
+      category: 'HVAC',
+      location: 'Building D - Executive Floor',
+      status: 'Failed',
+      priority: 'Medium',
+      suggestedPriority: 'Medium',
+      requestDate: '2024-01-06T12:00:00Z',
+      dueDate: '2024-01-20T17:00:00Z',
+      description: 'Replace old thermostat with smart thermostat',
+      detailedDescription: 'The current thermostat system on the executive floor is outdated. Need to install a smart thermostat system for better energy efficiency and control.',
+      assetEquipment: 'Thermostat System D-EF',
+      assignedTo: 'Gabriel Mendoza',
+      failureReason: 'Installation failed due to incompatible wiring system. The building\'s electrical infrastructure needs upgrading before smart thermostat can be installed.'
+    },
+
+    // Rejected Examples
+    {
+      id: 'WO-2024-011',
+      requester: 'Robert Kim',
+      category: 'General Services / Miscellaneous',
+      location: 'Building A - Personal Office',
+      status: 'Rejected',
+      priority: 'Low',
+      suggestedPriority: 'Low',
+      requestDate: '2024-01-07T10:00:00Z',
+      dueDate: '2024-02-01T17:00:00Z',
+      description: 'Install personal mini-fridge in office',
+      detailedDescription: 'Request to install a personal mini-fridge in my office for convenience. Will pay for the appliance myself, just need electrical work.',
+      assetEquipment: 'Office A-205',
+      rejectionReason: 'Personal convenience requests are not covered under facility maintenance. Please use the shared kitchen facilities available on each floor.'
+    },
+    {
+      id: 'WO-2024-012',
+      requester: 'Linda Wang',
+      category: 'Painting / Finishing',
+      location: 'Building B - Reception Area',
+      status: 'Rejected',
+      priority: 'Medium',
+      suggestedPriority: 'Medium',
+      requestDate: '2024-01-09T15:30:00Z',
+      dueDate: '2024-01-25T17:00:00Z',
+      description: 'Change wall color to match personal preference',
+      detailedDescription: 'I would like to change the wall color in the reception area from the current beige to a more vibrant blue to make it more welcoming.',
+      assetEquipment: 'Reception Area B-RA',
+      rejectionReason: 'Color scheme changes must follow corporate branding guidelines and require approval from management and facilities committee before implementation.'
+    },
+
+    // Cancelled Examples
+    {
+      id: 'WO-2024-013',
+      requester: 'Thomas Brown',
+      category: 'Electrical',
+      location: 'Building C - Conference Room 205',
+      status: 'Cancelled',
+      priority: 'Medium',
+      suggestedPriority: 'Medium',
+      requestDate: '2024-01-04T11:20:00Z',
+      dueDate: '2024-01-18T17:00:00Z',
+      description: 'Install additional lighting in conference room',
+      detailedDescription: 'The conference room is too dark for video conferences. Need to install additional LED lighting to improve visibility.',
+      assetEquipment: 'Conference Room C205'
+    },
+    {
+      id: 'WO-2024-014',
+      requester: 'Sarah Johnson',
+      category: 'Plumbing',
+      location: 'Building D - Kitchen Area',
+      status: 'Cancelled',
+      priority: 'Low',
+      suggestedPriority: 'Low',
+      requestDate: '2024-01-11T14:10:00Z',
+      dueDate: '2024-01-28T17:00:00Z',
+      description: 'Install water filter system in kitchen sink',
+      detailedDescription: 'Request to install a water filtration system in the main kitchen area to provide better quality drinking water for staff.',
+      assetEquipment: 'Kitchen Sink D-KA-01'
+    }
+  ];
+
+  // Hardcoded personnel data
+  const hardcodedPersonnel = [
+    { id: 'P001', name: 'Roberto Martinez', department: 'HVAC Specialist' },
+    { id: 'P002', name: 'Miguel Santos', department: 'Carpenter' },
+    { id: 'P003', name: 'Fernando Cruz', department: 'Painter' },
+    { id: 'P004', name: 'Ricardo Torres', department: 'General Maintenance' },
+    { id: 'P005', name: 'Eduardo Ramos', department: 'Electrician' },
+    { id: 'P006', name: 'Juan Dela Rosa', department: 'Groundskeeper' },
+    { id: 'P007', name: 'Antonio Silva', department: 'Mason' },
+    { id: 'P008', name: 'Gabriel Mendoza', department: 'HVAC Technician' }
+  ];
 
   // Fetch work orders from backend
   const fetchWorkOrders = async () => {
@@ -44,11 +290,15 @@ export default function WorkOrder() {
       }
 
       const data = await response.json();
-      setWorkOrders(data.workOrders || data || []);
+      const apiWorkOrders = data.workOrders || data || [];
+      
+      // Combine API data with hardcoded examples
+      setWorkOrders([...hardcodedWorkOrders, ...apiWorkOrders]);
     } catch (err) {
       console.error('Error fetching work orders:', err);
-      setError('Failed to load work orders. Please try again.');
-      setWorkOrders([]); // Fallback to empty array
+      setError('API not available. Showing example data.');
+      // Use only hardcoded data when API fails
+      setWorkOrders(hardcodedWorkOrders);
     } finally {
       setLoading(false);
     }
@@ -67,12 +317,17 @@ export default function WorkOrder() {
 
       if (response.ok) {
         const data = await response.json();
-        setPersonnel(data.personnel || data || []);
+        const apiPersonnel = data.personnel || data || [];
+        // Combine API data with hardcoded examples
+        setPersonnel([...hardcodedPersonnel, ...apiPersonnel]);
+      } else {
+        // Use hardcoded data when API fails
+        setPersonnel(hardcodedPersonnel);
       }
     } catch (err) {
       console.error('Error fetching personnel:', err);
-      // Fallback to empty array - component will still work
-      setPersonnel([]);
+      // Fallback to hardcoded data
+      setPersonnel(hardcodedPersonnel);
     }
   };
 
@@ -90,11 +345,14 @@ export default function WorkOrder() {
       if (response.ok) {
         const data = await response.json();
         setCategories(data.categories || data || []);
+      } else {
+        // Fallback to default categories
+        setCategories(['Electrical', 'Plumbing', 'HVAC', 'Carpentry / Structural', 'Masonry / Civil Works', 'Groundskeeping & Landscaping', 'General Services / Miscellaneous', 'Painting / Finishing']);
       }
     } catch (err) {
       console.error('Error fetching categories:', err);
       // Fallback to default categories
-      setCategories(['Electrical', 'Plumbing', 'HVAC', 'Janitorial', 'IT Support', 'Security']);
+      setCategories(['Electrical', 'Plumbing', 'HVAC', 'Carpentry / Structural', 'Masonry / Civil Works', 'Groundskeeping & Landscaping', 'General Services / Miscellaneous', 'Painting / Finishing']);
     }
   };
 
@@ -146,6 +404,8 @@ export default function WorkOrder() {
 
     try {
       setLoading(true);
+      
+      // Try API call first
       const response = await fetch(`${API_BASE_URL}/work-orders/${selectedOrder.id}/assign`, {
         method: 'PUT',
         headers: {
@@ -159,11 +419,20 @@ export default function WorkOrder() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to assign personnel');
+      let updatedOrder;
+      
+      if (response.ok) {
+        updatedOrder = await response.json();
+      } else {
+        // Fallback to local state update when API fails
+        updatedOrder = {
+          ...selectedOrder,
+          status: 'Pending',
+          assignedTo: assignedPersonnel,
+          priority: adminPriority || selectedOrder.priority,
+          adminUpdatedPriority: adminPriority || null
+        };
       }
-
-      const updatedOrder = await response.json();
       
       // Update local state
       const updatedOrders = workOrders.map(order => 
@@ -178,7 +447,28 @@ export default function WorkOrder() {
       setSelectedOrder(null);
     } catch (err) {
       console.error('Error assigning personnel:', err);
-      setError('Failed to assign personnel. Please try again.');
+      
+      // Even if API fails, update local state for demo purposes
+      const updatedOrder = {
+        ...selectedOrder,
+        status: 'Pending',
+        assignedTo: assignedPersonnel,
+        priority: adminPriority || selectedOrder.priority,
+        adminUpdatedPriority: adminPriority || null
+      };
+      
+      const updatedOrders = workOrders.map(order => 
+        order.id === selectedOrder.id ? updatedOrder : order
+      );
+      setWorkOrders(updatedOrders);
+      
+      // Reset modal states
+      setShowAssignModal(false);
+      setAssignedPersonnel('');
+      setAdminPriority('');
+      setSelectedOrder(null);
+      
+      setError('API not available, but assignment completed locally for demo.');
     } finally {
       setLoading(false);
     }
@@ -190,6 +480,8 @@ export default function WorkOrder() {
 
     try {
       setLoading(true);
+      
+      // Try API call first
       const response = await fetch(`${API_BASE_URL}/work-orders/${selectedOrder.id}/reject`, {
         method: 'PUT',
         headers: {
@@ -203,11 +495,20 @@ export default function WorkOrder() {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to reject work order');
+      let updatedOrder;
+      
+      if (response.ok) {
+        updatedOrder = await response.json();
+      } else {
+        // Fallback to local state update when API fails
+        updatedOrder = {
+          ...selectedOrder,
+          status: 'Rejected',
+          rejectionReason: rejectReason,
+          priority: adminPriority || selectedOrder.priority,
+          adminUpdatedPriority: adminPriority || null
+        };
       }
-
-      const updatedOrder = await response.json();
       
       // Update local state
       const updatedOrders = workOrders.map(order => 
@@ -222,52 +523,33 @@ export default function WorkOrder() {
       setSelectedOrder(null);
     } catch (err) {
       console.error('Error rejecting work order:', err);
-      setError('Failed to reject work order. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // API call to mark as failed
-  const confirmFailure = async () => {
-    if (!failureReason.trim()) return;
-
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/work-orders/${selectedOrder.id}/fail`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          failureReason: failureReason
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to mark work order as failed');
-      }
-
-      const updatedOrder = await response.json();
       
-      // Update local state
+      // Even if API fails, update local state for demo purposes
+      const updatedOrder = {
+        ...selectedOrder,
+        status: 'Rejected',
+        rejectionReason: rejectReason,
+        priority: adminPriority || selectedOrder.priority,
+        adminUpdatedPriority: adminPriority || null
+      };
+      
       const updatedOrders = workOrders.map(order => 
         order.id === selectedOrder.id ? updatedOrder : order
       );
       setWorkOrders(updatedOrders);
-
+      
       // Reset modal states
-      setShowFailureModal(false);
-      setFailureReason('');
+      setShowRejectModal(false);
+      setRejectReason('');
+      setAdminPriority('');
       setSelectedOrder(null);
-    } catch (err) {
-      console.error('Error marking as failed:', err);
-      setError('Failed to mark work order as failed. Please try again.');
+      
+      setError('API not available, but rejection completed locally for demo.');
     } finally {
       setLoading(false);
     }
   };
+
 
   const getStatusBadge = (status) => {
     const statusColors = {
@@ -320,7 +602,7 @@ export default function WorkOrder() {
 
         {/* Error Alert */}
         {error && (
-          <div className="alert alert-danger alert-dismissible fade show" role="alert">
+          <div className="alert alert-warning alert-dismissible fade show" role="alert">
             {error}
             <button 
               type="button" 
@@ -561,6 +843,43 @@ export default function WorkOrder() {
                     </div>
                   </div>
 
+                {/* Extended Due Date - Only show for In Progress orders with extended dates */}
+{selectedOrder.status === 'In Progress' && selectedOrder.extendedDueDate && (
+  <div className="mb-4">
+    <div className="p-3 rounded-3 shadow-sm" style={{
+      backgroundColor: selectedOrder.isOverdue ? '#fff3cd' : '#d1ecf1', 
+      border: selectedOrder.isOverdue ? '2px solid #ffc107' : '2px solid #0dcaf0'
+    }}>
+      <div className="d-flex align-items-center mb-2">
+        <i className={`bi ${selectedOrder.isOverdue ? 'bi-exclamation-triangle-fill' : 'bi-calendar-plus-fill'} me-2 ${selectedOrder.isOverdue ? 'text-warning' : 'text-info'}`}></i>
+        <h6 className={`fw-bold mb-0 ${selectedOrder.isOverdue ? 'text-warning' : 'text-info'}`}>
+          {selectedOrder.isOverdue ? 'Overdue - Extended Due Date' : 'Due Date Extended'}
+        </h6>
+      </div>
+      <div className="row">
+        <div className="col-6">
+          <small className="text-muted fw-bold">Original Due Date:</small>
+          <p className="mb-0">{formatDate(selectedOrder.dueDate)}</p>
+        </div>
+        <div className="col-6">
+          <small className="text-muted fw-bold">New Due Date:</small>
+          <p className="mb-0">
+            <span className={`fw-bold ${selectedOrder.isOverdue ? 'text-warning' : 'text-info'}`}>
+              {formatDate(selectedOrder.extendedDueDate)}
+            </span>
+          </p>
+        </div>
+      </div>
+      {selectedOrder.extensionReason && (
+        <div className="mt-2">
+          <small className="text-muted fw-bold">Extension Reason:</small>
+          <p className="mb-0 small">{selectedOrder.extensionReason}</p>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
                   {/* Admin Priority Update - Show for Pending, In Progress, Completed, Failed */}
                   {(selectedOrder.status === 'Pending' || selectedOrder.status === 'In Progress' || 
                     selectedOrder.status === 'Completed' || selectedOrder.status === 'Failed') && 
@@ -670,23 +989,7 @@ export default function WorkOrder() {
                       </div>
                     </div>
                   )}
-
-                  {/* Mark as Failed - Show for In Progress status */}
-                  {selectedOrder.status === 'In Progress' && (
-                    <div className="mb-4">
-                      <button 
-                        className="btn btn-outline-danger w-100 fw-bold"
-                        onClick={() => {
-                          setShowModal(false);
-                          setShowFailureModal(true);
-                        }}
-                        disabled={loading}
-                      >
-                        <i className="bi bi-x-circle me-2"></i>
-                        Mark as Failed
-                      </button>
-                    </div>
-                  )}
+         
                 </div>
                 
                 <div className="modal-footer border-0 pt-0 justify-content-end">
@@ -731,6 +1034,7 @@ export default function WorkOrder() {
                       {personnel.map(person => (
                         <option key={person.id || person.name} value={person.name || person.id}>
                           {person.name || person.firstName + ' ' + person.lastName || person.id}
+                          {person.department && ` - ${person.department}`}
                         </option>
                       ))}
                     </select>
@@ -811,55 +1115,87 @@ export default function WorkOrder() {
           </div>
         )}
 
-        {/* Failure Reason Modal */}
-        {showFailureModal && selectedOrder && (
-          <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
-            <div className="modal-dialog">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h5 className="modal-title">Mark as Failed - {selectedOrder.id}</h5>
-                  <button 
-                    type="button" 
-                    className="btn-close"
-                    onClick={() => setShowFailureModal(false)}
-                  ></button>
-                </div>
-                <div className="modal-body">
-                  <div className="mb-3">
-                    <label className="form-label">Reason for Failure</label>
-                    <textarea 
-                      className="form-control"
-                      rows="4"
-                      placeholder="Please provide a detailed reason why this work order failed..."
-                      value={failureReason}
-                      onChange={(e) => setFailureReason(e.target.value)}
-                    ></textarea>
-                  </div>
-                  <div className="alert alert-warning">
-                    <small>This work order will be moved to the Failed tab and the requester will be notified.</small>
-                  </div>
-                </div>
-                <div className="modal-footer">
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary"
-                    onClick={() => setShowFailureModal(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="button" 
-                    className="btn btn-danger"
-                    onClick={confirmFailure}
-                    disabled={!failureReason.trim() || loading}
-                  >
-                    {loading ? 'Processing...' : 'Mark as Failed'}
-                  </button>
-                </div>
-              </div>
-            </div>
+        {/* Extend Due Date Modal */}
+{showExtendModal && selectedOrder && (
+  <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="modal-dialog">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h5 className="modal-title">Extend Due Date - {selectedOrder.id}</h5>
+          <button 
+            type="button" 
+            className="btn-close"
+            onClick={() => {
+              setShowExtendModal(false);
+              setExtendedDueDate('');
+              setExtensionReason('');
+            }}
+          ></button>
+        </div>
+        <div className="modal-body">
+          <div className="mb-3">
+            <label className="form-label">Current Due Date</label>
+            <input 
+              type="text" 
+              className="form-control" 
+              value={formatDate(selectedOrder.dueDate)}
+              disabled
+            />
           </div>
-        )}
+          <div className="mb-3">
+            <label className="form-label">New Due Date</label>
+            <input 
+              type="datetime-local"
+              className="form-control"
+              value={extendedDueDate}
+              onChange={(e) => setExtendedDueDate(e.target.value)}
+            />
+          </div>
+          <div className="mb-3">
+            <label className="form-label">Reason for Extension</label>
+            <textarea 
+              className="form-control"
+              rows="3"
+              placeholder="Please provide a reason for extending the due date..."
+              value={extensionReason}
+              onChange={(e) => setExtensionReason(e.target.value)}
+            ></textarea>
+          </div>
+          <div className="alert alert-info">
+            <small>The personnel will be notified of the extended due date.</small>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button 
+            type="button" 
+            className="btn btn-secondary"
+            onClick={() => {
+              setShowExtendModal(false);
+              setExtendedDueDate('');
+              setExtensionReason('');
+            }}
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-warning"
+            onClick={() => {
+              // Handle extend due date logic here
+              console.log('Extending due date to:', extendedDueDate);
+              setShowExtendModal(false);
+              setExtendedDueDate('');
+              setExtensionReason('');
+            }}
+            disabled={!extendedDueDate || !extensionReason.trim() || loading}
+          >
+            {loading ? 'Extending...' : 'Extend Due Date'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
       </div>
     </SidebarLayout>
   );

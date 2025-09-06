@@ -444,9 +444,12 @@ return (
                   <option value="Electrical">Electrical</option>
                   <option value="Plumbing">Plumbing</option>
                   <option value="HVAC">HVAC</option>
-                  <option value="Carpentry">Carpentry</option>
-                  <option value="IT">IT</option>
-                  <option value="General Maintenance">General Maintenance</option>
+                  <option value="Carpentry">Carpentry/Structural</option>
+                  <option value="Masonry">Masonry / Civil Works</option>
+                  <option value="General Services">General Services / Miscellaneous</option>
+                  <option value="Groundskeeping">Groundskeeping & Landscaping</option>
+                  <option value="Painting">Painting / Finishing</option>
+
                 </Form.Select>
                 <Form.Control.Feedback type="invalid">
                   {formErrors.category}
@@ -474,9 +477,9 @@ return (
                   }}
                 >
                   <option value="">Select Priority</option>
-                  <option value="Low">🟢 Low</option>
-                  <option value="Medium">🟡 Medium</option>
-                  <option value="High">🔴 High</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
                 </Form.Select>
               </Form.Group>
             </Col>

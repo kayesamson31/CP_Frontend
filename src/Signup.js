@@ -10,11 +10,9 @@ function SignUpPage() {
     orgType: '',
     country: '',
     website: '',
+    address: '',
     contactPerson: '',
     contactEmail: '',
-    contactPhone: '',
-    password: '',
-    confirmPassword: '',
   });
 
   const [agreed, setAgreed] = useState(false);
@@ -36,13 +34,10 @@ function SignUpPage() {
     if (!orgInfo.orgName.trim()) newErrors.orgName = 'Organization name is required';
     if (!orgInfo.orgType) newErrors.orgType = 'Organization type is required';
     if (!orgInfo.country.trim()) newErrors.country = 'Country is required';
+    if (!orgInfo.address.trim()) newErrors.address = 'Address is required';
     if (!orgInfo.contactPerson.trim()) newErrors.contactPerson = 'Contact person name is required';
     if (!orgInfo.contactEmail.trim()) newErrors.contactEmail = 'Contact email is required';
     else if (!/\S+@\S+\.\S+/.test(orgInfo.contactEmail)) newErrors.contactEmail = 'Please enter a valid email address';
-    if (!orgInfo.password) newErrors.password = 'Password is required';
-    else if (orgInfo.password.length < 8) newErrors.password = 'Password must be at least 8 characters';
-    if (!orgInfo.confirmPassword) newErrors.confirmPassword = 'Please confirm your password';
-    else if (orgInfo.password !== orgInfo.confirmPassword) newErrors.confirmPassword = 'Passwords do not match';
     if (!agreed) newErrors.agreement = 'Please agree to the Terms and Privacy Policy';
 
     setErrors(newErrors);
@@ -63,8 +58,8 @@ function SignUpPage() {
   const orgDataForWizard = {
     name: orgInfo.orgName,
     email: orgInfo.contactEmail,
-    phone: orgInfo.contactPhone,
-    address: '', // empty since wala sa signup form
+    phone: '', // empty since wala na sa signup form
+    address: orgInfo.address,
     // Keep all signup data for reference
     orgType: orgInfo.orgType,
     country: orgInfo.country,
@@ -360,7 +355,7 @@ function SignUpPage() {
 
                 <div style={inputGroupStyle}>
                   <label style={labelStyle}>
-                    Website URL <span style={{ color: '#9ca3af' }}>(optional)</span>
+                    Official Website <span style={{ color: '#9ca3af' }}>(optional)</span>
                   </label>
                   <input 
                     style={inputStyle}
@@ -371,20 +366,35 @@ function SignUpPage() {
                     placeholder="https://example.com"
                   />
                 </div>
+
+                <div style={{...inputGroupStyle, gridColumn: '1 / -1'}}>
+                  <label style={labelStyle}>
+                    Address <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input 
+                    style={errors.address ? errorInputStyle : inputStyle}
+                    type="text" 
+                    name="address" 
+                    value={orgInfo.address} 
+                    onChange={handleChange}
+                    placeholder="Enter complete address"
+                  />
+                  {errors.address && <span style={errorTextStyle}>{errors.address}</span>}
+                </div>
               </div>
             </div>
 
-            {/* Contact Information Section */}
+            {/* Contact Person Section */}
             <div style={sectionStyle}>
               <div style={sectionTitleStyle}>
                 <span style={sectionIconStyle}>2</span>
-                Contact Information
+                Contact Person
               </div>
               
               <div style={gridStyle}>
                 <div style={inputGroupStyle}>
                   <label style={labelStyle}>
-                    Contact Person Name <span style={{ color: '#ef4444' }}>*</span>
+                    Name <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <input 
                     style={errors.contactPerson ? errorInputStyle : inputStyle}
@@ -399,7 +409,7 @@ function SignUpPage() {
 
                 <div style={inputGroupStyle}>
                   <label style={labelStyle}>
-                    Contact Email <span style={{ color: '#ef4444' }}>*</span>
+                    Email <span style={{ color: '#ef4444' }}>*</span>
                     <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}> (Login email)</span>
                   </label>
                   <input 
@@ -411,60 +421,6 @@ function SignUpPage() {
                     placeholder="admin@organization.com"
                   />
                   {errors.contactEmail && <span style={errorTextStyle}>{errors.contactEmail}</span>}
-                </div>
-
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>
-                    Phone Number <span style={{ color: '#9ca3af' }}>(optional)</span>
-                  </label>
-                  <input 
-                    style={inputStyle}
-                    type="tel" 
-                    name="contactPhone" 
-                    value={orgInfo.contactPhone} 
-                    onChange={handleChange}
-                    placeholder="+1 (555) 123-4567"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Account Credentials Section */}
-            <div style={sectionStyle}>
-              <div style={sectionTitleStyle}>
-                <span style={sectionIconStyle}>3</span>
-                Account Credentials
-              </div>
-              
-              <div style={gridStyle}>
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>
-                    Password <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input 
-                    style={errors.password ? errorInputStyle : inputStyle}
-                    type="password" 
-                    name="password" 
-                    value={orgInfo.password} 
-                    onChange={handleChange}
-                    placeholder="Minimum 8 characters"
-                  />
-                  {errors.password && <span style={errorTextStyle}>{errors.password}</span>}
-                </div>
-
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>
-                    Confirm Password <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input 
-                    style={errors.confirmPassword ? errorInputStyle : inputStyle}
-                    type="password" 
-                    name="confirmPassword" 
-                    value={orgInfo.confirmPassword} 
-                    onChange={handleChange}
-                    placeholder="Re-enter password"
-                  />
-                  {errors.confirmPassword && <span style={errorTextStyle}>{errors.confirmPassword}</span>}
                 </div>
               </div>
             </div>

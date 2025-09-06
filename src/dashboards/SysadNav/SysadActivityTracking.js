@@ -26,8 +26,7 @@ export default function SysadActivityTracking() {
         category: 'User Management',
         timestamp: '2025-08-27 10:30:15',
         status: 'Success',
-        details: 'Uploaded 150 new users from organizations_batch_27.csv',
-        ipAddress: '192.168.1.100'
+        details: 'Uploaded 150 new users from organizations_batch_27.csv'
       },
       {
         id: 2,
@@ -37,8 +36,7 @@ export default function SysadActivityTracking() {
         category: 'User Management',
         timestamp: '2025-08-27 09:15:42',
         status: 'Success',
-        details: 'User deactivated due to role change request',
-        ipAddress: '192.168.1.105'
+        details: 'User deactivated due to role change request'
       },
       {
         id: 3,
@@ -48,8 +46,7 @@ export default function SysadActivityTracking() {
         category: 'Asset Management',
         timestamp: '2025-08-26 16:45:30',
         status: 'Success',
-        details: 'Asset batch upload: electrical_equipment_batch.csv',
-        ipAddress: '192.168.1.100'
+        details: 'Asset batch upload: electrical_equipment_batch.csv'
       },
       {
         id: 4,
@@ -59,8 +56,7 @@ export default function SysadActivityTracking() {
         category: 'System Configuration',
         timestamp: '2025-08-26 14:20:18',
         status: 'Success',
-        details: 'Updated backup schedule and notification settings',
-        ipAddress: '192.168.1.99'
+        details: 'Updated backup schedule and notification settings'
       },
       {
         id: 5,
@@ -70,8 +66,7 @@ export default function SysadActivityTracking() {
         category: 'API Operations',
         timestamp: '2025-08-26 11:30:55',
         status: 'Partial',
-        details: '245 users imported, 5 failed validation',
-        ipAddress: '192.168.1.108'
+        details: '245 users imported, 5 failed validation'
       },
       {
         id: 6,
@@ -81,8 +76,8 @@ export default function SysadActivityTracking() {
         category: 'User Management',
         timestamp: '2025-08-26 10:15:22',
         status: 'Success',
-        details: 'Promoted user from Personnel to Admin Official role',
-        ipAddress: '192.168.1.100'
+        details: 'Promoted user from Personnel to Admin Official role'
+       
       },
       {
         id: 7,
@@ -92,8 +87,8 @@ export default function SysadActivityTracking() {
         category: 'Asset Management',
         timestamp: '2025-08-25 15:45:10',
         status: 'Success',
-        details: 'Scheduled maintenance for 12 electrical assets',
-        ipAddress: '192.168.1.105'
+        details: 'Scheduled maintenance for 12 electrical assets'
+      
       },
       {
         id: 8,
@@ -103,8 +98,8 @@ export default function SysadActivityTracking() {
         category: 'System Maintenance',
         timestamp: '2025-08-25 02:00:00',
         status: 'Success',
-        details: 'Automated daily backup completed successfully',
-        ipAddress: '192.168.1.99'
+        details: 'Automated daily backup completed successfully'
+        
       },
       {
         id: 9,
@@ -114,8 +109,8 @@ export default function SysadActivityTracking() {
         category: 'Security',
         timestamp: '2025-08-24 22:15:33',
         status: 'Failed',
-        details: 'Failed login attempt - incorrect password (3rd attempt)',
-        ipAddress: '192.168.1.200'
+        details: 'Failed login attempt - incorrect password (3rd attempt)'
+       
       },
       {
         id: 10,
@@ -125,20 +120,11 @@ export default function SysadActivityTracking() {
         category: 'Organization Management',
         timestamp: '2025-08-24 14:30:45',
         status: 'Success',
-        details: 'New organization: Barangay San Miguel registered',
-        ipAddress: '192.168.1.100'
+        details: 'New organization: Barangay San Miguel registered'
+    
       }
     ]
   });
-
-  const handleExport = (format) => {
-    setLoading(true);
-    setTimeout(() => {
-      console.log(`Exporting activity logs as ${format}`);
-      alert(`Activity logs exported as ${format} successfully!`);
-      setLoading(false);
-    }, 1500);
-  };
 
   const getFilteredActivities = () => {
     return activityData.activities.filter(activity => {
@@ -193,81 +179,16 @@ export default function SysadActivityTracking() {
           )}
         </div>
 
-        {/* Summary Cards */}
-        <div className="row mb-4">
-          <div className="col-md-3">
-            <div className="card border-primary">
-              <div className="card-body text-center">
-                <div className="text-primary mb-2">
-                  <i className="fas fa-chart-line fa-2x"></i>
-                </div>
-                <h4 className="card-title text-primary">{activityData.totalActions}</h4>
-                <p className="card-text">Total Actions</p>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card border-success">
-              <div className="card-body text-center">
-                <div className="text-success mb-2">
-                  <i className="fas fa-calendar-day fa-2x"></i>
-                </div>
-                <h4 className="card-title text-success">{activityData.todayActions}</h4>
-                <p className="card-text">Today's Actions</p>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card border-info">
-              <div className="card-body text-center">
-                <div className="text-info mb-2">
-                  <i className="fas fa-calendar-week fa-2x"></i>
-                </div>
-                <h4 className="card-title text-info">{activityData.weekActions}</h4>
-                <p className="card-text">This Week</p>
-              </div>
-            </div>
-          </div>
-          <div className="col-md-3">
-            <div className="card border-warning">
-              <div className="card-body text-center">
-                <div className="text-warning mb-2">
-                  <i className="fas fa-calendar-alt fa-2x"></i>
-                </div>
-                <h4 className="card-title text-warning">{activityData.monthActions}</h4>
-                <p className="card-text">This Month</p>
-              </div>
-            </div>
-          </div>
-        </div>
+       
 
         {/* Filters and Export */}
         <div className="card mb-4">
           <div className="card-header">
             <div className="row align-items-center">
-              <div className="col-md-8">
+              <div className="col-md-12">
                 <h6 className="mb-0">Activity Filters</h6>
               </div>
-              <div className="col-md-4 text-end">
-                <div className="btn-group" role="group">
-                  <button 
-                    className="btn btn-outline-success btn-sm"
-                    onClick={() => handleExport('CSV')}
-                    disabled={loading}
-                  >
-                    <i className="fas fa-file-csv me-1"></i>
-                    Export CSV
-                  </button>
-                  <button 
-                    className="btn btn-outline-danger btn-sm"
-                    onClick={() => handleExport('PDF')}
-                    disabled={loading}
-                  >
-                    <i className="fas fa-file-pdf me-1"></i>
-                    Export PDF
-                  </button>
-                </div>
-              </div>
+            
             </div>
           </div>
           <div className="card-body">
@@ -350,7 +271,6 @@ export default function SysadActivityTracking() {
                     <th>Category</th>
                     <th>Status</th>
                     <th>Details</th>
-                    <th>IP Address</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -381,9 +301,7 @@ export default function SysadActivityTracking() {
                       <td>
                         <small className="text-muted">{activity.details}</small>
                       </td>
-                      <td>
-                        <small className="text-muted font-monospace">{activity.ipAddress}</small>
-                      </td>
+
                     </tr>
                   ))}
                 </tbody>
@@ -430,17 +348,6 @@ export default function SysadActivityTracking() {
                 </nav>
               </div>
             )}
-          </div>
-        </div>
-
-        {/* Alert for Security Issues */}
-        <div className="alert alert-warning mt-4">
-          <div className="d-flex align-items-center">
-            <i className="fas fa-exclamation-triangle me-2"></i>
-            <div>
-              <strong>Security Alert:</strong> 1 failed login attempt detected in the last 24 hours.
-              <button className="btn btn-link btn-sm p-0 ms-2">View Details</button>
-            </div>
           </div>
         </div>
       </div>
