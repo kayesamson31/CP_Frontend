@@ -22,7 +22,7 @@ import DashboardSysAdmin from './dashboards/DashboardSysAdmin';
 import SysadReports from './dashboards/SysadNav/SysadReports';
 import SetupWizard from './dashboards/SysadNav/SetupWizard';
 import SysadUserManagement from './dashboards/SysadNav/SysadUserManagement';
-import SysadActivityTracking from './dashboards/SysadNav/SysadActivityTracking';
+import SysadAuditLogs from './dashboards/SysadNav/SysadAuditLogs';
 
 
 //AdminNav
@@ -77,7 +77,7 @@ function App() {
         <Route path="/dashboard-sysadmin/notification" element={<Notification role="sysadmin" />} />
         <Route path="/dashboard-sysadmin/SysadUserManagement" element={<SysadUserManagement/>} />
         <Route path="/dashboard-sysadmin/SysadReports" element={<SysadReports/>} />
-        <Route path="/dashboard-sysadmin/SysadActivityTracking" element={<SysadActivityTracking/>} />
+        <Route path="/dashboard-sysadmin/SysadAuditLogs" element={<SysadAuditLogs/>} />
         <Route path="/dashboard-sysadmin/SetupWizard" element={<SetupWizard/>} />
 
 

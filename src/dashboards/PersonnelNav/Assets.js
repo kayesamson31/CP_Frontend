@@ -335,9 +335,11 @@ export default function Assets() {
           </Col>
         </Row>
 
-        {/* Assets Table - Single table showing all filtered results */}
-        <Table bordered hover responsive>
-          <thead>
+       {/* Assets Table */}
+      <div className="bg-white rounded shadow-sm">
+        <div className="table-responsive">
+          <table className="table table-hover mb-0">
+          <thead className="table-light">
             <tr>
               <th>Asset ID</th>
               <th>Asset Name</th>
@@ -345,7 +347,7 @@ export default function Assets() {
               <th>Location</th>
               <th>Status</th>
               <th>Last Maintenance</th>
-              <th>Action</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -367,14 +369,16 @@ export default function Assets() {
                   </td>
                   <td>{asset.lastMaintenance}</td>
                   <td>
+                  <div className="btn-group btn-group-sm">
                     <Button
                       size="sm"
-                      variant="primary"
+                      variant="outline-primary"
                       onClick={() => setSelectedAsset(asset)}
                     >
                       View
                     </Button>
-                  </td>
+                  </div>
+                </td>
                 </tr>
               ))
             ) : (
@@ -388,7 +392,9 @@ export default function Assets() {
               </tr>
             )}
           </tbody>
-        </Table>
+     </table>
+  </div>
+</div>
 
         {/* Show info message when no assets exist */}
         {assets.length === 0 && (

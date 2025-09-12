@@ -614,52 +614,57 @@ const [extensionReason, setExtensionReason] = useState('');
         )}
 
         {/* Search and Filters */}
-        <div className="row mb-4">
-          <div className="col-md-6">
-            <div className="input-group shadow-sm">
-              <span className="input-group-text bg-primary text-white border-0">
-                <i className="bi bi-search"></i>
-              </span>
-              <input
-                type="text"
-                className="form-control border-0 py-3"
-                placeholder="Search work orders by ID, requester, or description..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{
-                  fontSize: '1rem',
-                  borderRadius: '0 0.5rem 0.5rem 0',
-                  boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)',
-                  height: '38px'
-                }}
-              />
-            </div>
-          </div>
-          <div className="col-md-3">
-            <select 
-              className="form-select"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-          <div className="col-md-3">
-            <select 
-              className="form-select"
-              value={priorityFilter}
-              onChange={(e) => setPriorityFilter(e.target.value)}
-            >
-              <option value="all">All Priorities</option>
-              <option value="High">High Priority</option>
-              <option value="Medium">Medium Priority</option>
-              <option value="Low">Low Priority</option>
-            </select>
-          </div>
-        </div>
+{/* Search and Filters */}
+<div className="row mb-4">
+  <div className="col-md-4">
+    <input
+      type="text"
+      className="form-control"
+      placeholder="Search assets by name, ID, or assignee..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      style={{
+        borderRadius: '8px',
+        border: '1px solid #ddd',
+        padding: '8px 12px'
+      }}
+    />
+  </div>
+  <div className="col-md-4">
+    <select 
+      className="form-select"
+      value={priorityFilter}
+      onChange={(e) => setPriorityFilter(e.target.value)}
+      style={{
+        borderRadius: '8px',
+        border: '1px solid #ddd',
+        padding: '8px 12px'
+      }}
+    >
+      <option value="all">All Status</option>
+      <option value="High">High Priority</option>
+      <option value="Medium">Medium Priority</option>
+      <option value="Low">Low Priority</option>
+    </select>
+  </div>
+  <div className="col-md-4">
+    <select 
+      className="form-select"
+      value={categoryFilter}
+      onChange={(e) => setCategoryFilter(e.target.value)}
+      style={{
+        borderRadius: '8px',
+        border: '1px solid #ddd',
+        padding: '8px 12px'
+      }}
+    >
+      <option value="all">All Categories</option>
+      {categories.map(category => (
+        <option key={category} value={category}>{category}</option>
+      ))}
+    </select>
+  </div>
+</div>
 
         {/* Tabs */}
         <div className="mb-4">
@@ -719,7 +724,7 @@ const [extensionReason, setExtensionReason] = useState('');
         {!loading && (
           <div className="card shadow-sm"> 
             <div className="table-responsive">
-              <table className="table table-striped table-hover mb-0">      
+              <table className="table table-hover mb-0">      
                 <thead className="table-light">
                   <tr>
                     <th>ID</th>
@@ -736,7 +741,7 @@ const [extensionReason, setExtensionReason] = useState('');
                 
                 <tbody>
                   {filteredOrders.map(order => (
-                    <tr key={order.id} style={{backgroundColor: '#B0D0E6'}}>
+                    <tr key={order.id} >
                       <td className="fw-bold text-dark" style={{ fontSize: '1rem', fontFamily: 'monospace' }}>
                         {order.id || '-'}
                       </td>
@@ -750,7 +755,7 @@ const [extensionReason, setExtensionReason] = useState('');
                       {activeTab !== 'To Review' && <td>{order.assignedTo || '-'}</td>}
                       <td>
                         <button className="btn btn-outline-primary btn-sm" onClick={() => handleViewOrder(order)}>
-                          <i className="bi bi-eye me-1"></i> View
+                          View
                         </button>
                       </td>
                     </tr>

@@ -714,15 +714,15 @@ const handleCreateTask = async () => {
     onClick={() => setShowTaskModal(true)}
   >
     <i className="fas fa-plus me-2"></i>
-+ Assign Task
+    Assign Task
   </Button>
 
     <Button 
   variant="outline-success"
   onClick={handleExportReport}
 >
-  <i className="fas fa-download me-2"></i>
-  Export Report
+
+  Export CSV
 </Button>
 
  <Dropdown>
@@ -951,29 +951,31 @@ const handleCreateTask = async () => {
         </Row>
 
         {/* Assets Table */}
-        <Table bordered hover responsive>
+        {/* Assets Table */}
+<div className="bg-white rounded shadow-sm">
+  <div className="table-responsive">
+    <table className="table table-hover mb-0">
           <thead className="table-light">
-            <tr>
-              <th>Asset ID</th>
-              <th>Asset Name</th>
-              <th>Category</th>
-              <th>Location</th>
-              <th>Status</th>
-              <th>Last Maintenance</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
+  <tr>
+            <th>Asset ID</th>
+            <th>Asset Name</th>
+            <th>Category</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th>Last Maintenance</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
           <tbody>
             {filteredAssets.length > 0 ? (
               filteredAssets.map((asset) => {
-              
                 return (
                   <tr key={asset.id}>
                     <td>{asset.id}</td>
-                    <td>{asset.name}</td>
-                    <td>{asset.category}</td>
-                    <td>{asset.location}</td>
-                    <td>
+                  <td>{asset.name}</td>
+                  <td>{asset.category}</td>
+                  <td>{asset.location}</td>
+                                      <td>
                       <span className={`badge ${
                         asset.status === 'Operational' ? 'bg-success' :
                         asset.status === 'Under Maintenance' ? 'bg-warning' :
@@ -987,13 +989,12 @@ const handleCreateTask = async () => {
                     <td>
                       <div className="btn-group btn-group-sm">
                         <Button
-                          size="sm"
-                          variant="primary"
-                          onClick={() => setSelectedAsset(asset)}
-                        >
-                          <i className="fas fa-eye me-1"></i>
-                          View
-                        </Button>
+                        size="sm"
+                        variant="outline-primary"
+                        onClick={() => setSelectedAsset(asset)}
+                      >
+                        View
+                      </Button>
                       </div>
                     </td>
                   </tr>
@@ -1010,7 +1011,9 @@ const handleCreateTask = async () => {
               </tr>
             )}
           </tbody>
-        </Table>
+        </table>
+         </div>
+</div>
 
         {/* Show info message when no assets exist */}
         {assets.length === 0 && (

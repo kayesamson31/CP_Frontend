@@ -1,475 +1,574 @@
-// src/components/SysadReports.js
-
+// System Administrator Reports - Dynamic Data Implementation
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
+// Remove axios import since we're using mock data for now
+// import axios from 'axios'; // Will be used later for real API calls
 
 export default function SysadReports() {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [dateRange, setDateRange] = useState('monthly');
-  const [loading, setLoading] = useState(false);
-
-  // Sample data - replace with actual API calls
-  const [reportData, setReportData] = useState({
-    organizations: 25,
-    users: {
-      total: 1247,
-      admins: 12,
-      personnel: 185,
-      standard: 1050,
-      active: 1180,
-      inactive: 67
-    },
-    assets: {
-      total: 8450,
-      electrical: 2340,
-      plumbing: 1250,
-      furniture: 2890,
-      equipment: 1970,
-      operational: 7820,
-      maintenance: 450,
-      disposal: 180
-    },
-    uploads: {
-      csvUploads: 45,
-      apiUploads: 128,
-      lastUpload: '2025-08-25',
-      totalRecords: 5670
-    },
-    activity: {
-      dailyLogins: 234,
-      weeklyLogins: 1456,
-      monthlyLogins: 5680,
-      recentActions: [
-        { user: 'admin@system.com', action: 'Bulk upload - 150 users', timestamp: '2025-08-27 10:30:00' },
-        { user: 'admin2@system.com', action: 'Deactivated user: john.doe@org.com', timestamp: '2025-08-27 09:15:00' },
-        { user: 'admin@system.com', action: 'CSV upload - 75 assets', timestamp: '2025-08-26 16:45:00' },
-        { user: 'superadmin@system.com', action: 'System settings updated', timestamp: '2025-08-26 14:20:00' }
-      ]
-    }
+  const [dateFrom, setDateFrom] = useState('2024-12-01');
+  const [dateTo, setDateTo] = useState('2024-12-15');
+  const [eventTypeFilter, setEventTypeFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  
+  // State for dynamic data
+  const [systemSummary, setSystemSummary] = useState({
+    successfulLogins: 0,
+    failedLogins: 0,
+    passwordResets: 0,
+    accountLockouts: 0,
+    suspiciousAttempts: 0
   });
+  const [securityEvents, setSecurityEvents] = useState([]);
+  const [error, setError] = useState(null);
 
-  const handleExport = (format, dataType) => {
-    setLoading(true);
-    // Simulate export process
-    setTimeout(() => {
-      console.log(`Exporting ${dataType} as ${format}`);
-      // Here you would implement actual export logic
-      alert(`${dataType} exported as ${format} successfully!`);
-      setLoading(false);
-    }, 1500);
+  // Simulate API call with realistic data
+  const fetchReportsData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Generate dynamic summary based on date range
+      const daysDiff = Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24));
+      const baseMultiplier = Math.max(daysDiff, 1);
+      
+      // Realistic summary data that changes based on date range
+      const mockSummaryData = {
+        successfulLogins: Math.floor(150 * baseMultiplier + Math.random() * 100),
+        failedLogins: Math.floor(12 * baseMultiplier + Math.random() * 20),
+        passwordResets: Math.floor(3 * baseMultiplier + Math.random() * 5),
+        accountLockouts: Math.floor(2 * baseMultiplier + Math.random() * 3),
+        suspiciousAttempts: Math.floor(1 * baseMultiplier + Math.random() * 4)
+      };
+
+      // Generate realistic security events data
+      const eventTypes = ['Failed Login', 'Successful Login', 'Account Lockout', 'Password Reset', 'Suspicious Login'];
+      const users = [
+        'john.doe@company.com',
+        'jane.smith@company.com', 
+        'admin.user@company.com',
+        'test.account@company.com',
+        'service.account@company.com',
+        'mary.johnson@company.com',
+        'bob.wilson@company.com',
+        'sarah.brown@company.com'
+      ];
+      const ipAddresses = [
+        '192.168.1.45', '10.0.0.23', '172.16.0.10', 
+        '203.142.67.89', '192.168.1.100', '10.0.0.45',
+        '172.16.0.25', '192.168.2.10'
+      ];
+      const statuses = ['Active', 'Resolved', 'Completed', 'Under Review'];
+      
+      const mockEventsData = [];
+      const eventsCount = Math.min(50, Math.floor(20 * baseMultiplier));
+      
+      for (let i = 1; i <= eventsCount; i++) {
+        const eventDate = new Date(dateFrom);
+        eventDate.setDate(eventDate.getDate() + Math.floor(Math.random() * daysDiff));
+        
+        const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+        const user = users[Math.floor(Math.random() * users.length)];
+        const ip = ipAddresses[Math.floor(Math.random() * ipAddresses.length)];
+        const status = statuses[Math.floor(Math.random() * statuses.length)];
+        
+        // Generate realistic details based on event type
+        let details = '';
+        switch (eventType) {
+          case 'Failed Login':
+            details = `Multiple failed login attempts detected from ${ip}`;
+            break;
+          case 'Successful Login':
+            details = `User successfully logged in from ${ip}`;
+            break;
+          case 'Account Lockout':
+            details = `Account locked after ${Math.floor(Math.random() * 3) + 3} failed attempts`;
+            break;
+          case 'Password Reset':
+            details = 'Password reset requested and completed successfully';
+            break;
+          case 'Suspicious Login':
+            details = `Login from unusual location (${ip}) detected`;
+            break;
+          default:
+            details = 'Security event logged';
+        }
+        
+        mockEventsData.push({
+          id: i,
+          date: eventDate.toISOString().split('T')[0],
+          time: `${String(Math.floor(Math.random() * 24)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
+          eventType: eventType,
+          user: user,
+          ipAddress: ip,
+          details: details,
+          status: status,
+          created_at: eventDate.toISOString()
+        });
+      }
+      
+      // Sort events by date (newest first)
+      mockEventsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      // Update states with mock data
+      setSystemSummary(mockSummaryData);
+      setSecurityEvents(mockEventsData);
+      
+      // Simulate occasional API errors (5% chance)
+      if (Math.random() < 0.05) {
+        throw new Error('Simulated API error');
+      }
+      
+    } catch (err) {
+      console.error('Error fetching reports data:', err);
+      setError('Failed to load reports data. Please try again.');
+      
+      // Fallback to empty data
+      setSystemSummary({
+        successfulLogins: 0,
+        failedLogins: 0,
+        passwordResets: 0,
+        accountLockouts: 0,
+        suspiciousAttempts: 0
+      });
+      setSecurityEvents([]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const StatCard = ({ title, value, subtitle, icon, color = 'primary' }) => (
-    <div className="col-md-3 mb-3">
-      <div className={`card border-${color} h-100`}>
-        <div className="card-body text-center">
-          <div className={`text-${color} mb-2`}>
-            <i className={`fas fa-${icon} fa-2x`}></i>
-          </div>
-          <h4 className={`card-title text-${color}`}>{value}</h4>
-          <p className="card-text">{title}</p>
-          {subtitle && <small className="text-muted">{subtitle}</small>}
-        </div>
-      </div>
-    </div>
-  );
+  // Alternative: Calculate summary from events data (for future use with real API)
+  const calculateSummaryFromEvents = (events) => {
+    const summary = {
+      successfulLogins: 0,
+      failedLogins: 0,
+      passwordResets: 0,
+      accountLockouts: 0,
+      suspiciousAttempts: 0
+    };
 
-  const ExportButtons = ({ dataType }) => (
-    <div className="mb-3">
-      <div className="btn-group" role="group">
-        <button 
-          className="btn btn-outline-success btn-sm"
-          onClick={() => handleExport('CSV', dataType)}
-          disabled={loading}
-        >
-          <i className="fas fa-file-csv me-1"></i>
-          Export CSV
-        </button>
-        <button 
-          className="btn btn-outline-danger btn-sm"
-          onClick={() => handleExport('PDF', dataType)}
-          disabled={loading}
-        >
-          <i className="fas fa-file-pdf me-1"></i>
-          Export PDF
-        </button>
-        <button 
-          className="btn btn-outline-secondary btn-sm"
-          onClick={() => handleExport('Print', dataType)}
-          disabled={loading}
-        >
-          <i className="fas fa-print me-1"></i>
-          Print
-        </button>
-      </div>
-    </div>
-  );
+    events.forEach(event => {
+      switch (event.eventType.toLowerCase()) {
+        case 'successful login':
+        case 'login success':
+          summary.successfulLogins++;
+          break;
+        case 'failed login':
+        case 'login failed':
+          summary.failedLogins++;
+          break;
+        case 'password reset':
+          summary.passwordResets++;
+          break;
+        case 'account lockout':
+          summary.accountLockouts++;
+          break;
+        case 'suspicious login':
+        case 'suspicious attempt':
+          summary.suspiciousAttempts++;
+          break;
+        default:
+          break;
+      }
+    });
 
-  const renderOverviewTab = () => (
-    <div>
-      <div className="row mb-4">
-        <StatCard 
-          title="Organizations Registered" 
-          value={reportData.organizations} 
-          icon="building" 
-          color="primary"
-        />
-        <StatCard 
-          title="Total Users" 
-          value={reportData.users.total} 
-          subtitle={`${reportData.users.active} active`}
-          icon="users" 
-          color="success"
-        />
-        <StatCard 
-          title="Total Assets" 
-          value={reportData.assets.total} 
-          subtitle={`${reportData.assets.operational} operational`}
-          icon="boxes" 
-          color="info"
-        />
-        <StatCard 
-          title="Upload Records" 
-          value={reportData.uploads.totalRecords} 
-          subtitle={`Last: ${reportData.uploads.lastUpload}`}
-          icon="upload" 
-          color="warning"
-        />
-      </div>
+    return summary;
+  };
 
-      <div className="row">
-        <div className="col-md-6">
-          <div className="card mb-3">
-            <div className="card-header">
-              <h6 className="mb-0">User Distribution</h6>
-            </div>
-            <div className="card-body">
-              <div className="row text-center">
-                <div className="col-4">
-                  <h5 className="text-danger">{reportData.users.admins}</h5>
-                  <small>Admins</small>
-                </div>
-                <div className="col-4">
-                  <h5 className="text-warning">{reportData.users.personnel}</h5>
-                  <small>Personnel</small>
-                </div>
-                <div className="col-4">
-                  <h5 className="text-info">{reportData.users.standard}</h5>
-                  <small>Standard</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-6">
-          <div className="card mb-3">
-            <div className="card-header">
-              <h6 className="mb-0">Recent Activity</h6>
-            </div>
-            <div className="card-body">
-              <div className="list-group list-group-flush">
-                {reportData.activity.recentActions.slice(0, 3).map((action, index) => (
-                  <div key={index} className="list-group-item px-0 py-2">
-                    <div className="d-flex justify-content-between">
-                      <small className="text-muted">{action.user}</small>
-                      <small className="text-muted">{action.timestamp.split(' ')[1]}</small>
-                    </div>
-                    <div className="mt-1">
-                      <small>{action.action}</small>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  // Fetch data on component mount and when date filters change
+  useEffect(() => {
+  fetchReportsData();
+}, [dateFrom, dateTo]);
 
-  const renderUserReports = () => (
-    <div>
-      <ExportButtons dataType="User Reports" />
+ const filteredEvents = securityEvents.filter(event => {
+  const eventDate = new Date(event.date || event.created_at);
+  const fromDate = new Date(dateFrom);
+  const toDate = new Date(dateTo);
+  
+  const dateMatch = eventDate >= fromDate && eventDate <= toDate;
+  const typeMatch = eventTypeFilter === 'all' || 
+    event.eventType.toLowerCase().includes(eventTypeFilter.toLowerCase()) ||
+    event.event_type?.toLowerCase().includes(eventTypeFilter.toLowerCase());
+  
+  // Add search functionality
+  const searchMatch = searchTerm === '' || 
+    (event.user || event.username || event.user_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (event.ipAddress || event.ip_address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (event.details || event.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (event.eventType || event.event_type || '').toLowerCase().includes(searchTerm.toLowerCase());
+  
+  return dateMatch && typeMatch && searchMatch;
+});
+
+  // Export function with real data
+  const exportReport = (format) => {
+    if (filteredEvents.length === 0) {
+      alert('No data to export for the selected criteria.');
+      return;
+    }
+
+    const timestamp = new Date().toISOString().split('T')[0];
+    let content = '';
+    
+    if (format === 'csv') {
+      const headers = ['Date', 'Time', 'Event Type', 'User', 'IP Address', 'Details', 'Status'];
+      const rows = filteredEvents.map(event => [
+        event.date || event.created_at?.split('T')[0],
+        event.time || event.created_at?.split('T')[1]?.split('.')[0],
+        event.eventType || event.event_type,
+        event.user || event.username || event.user_email,
+        event.ipAddress || event.ip_address,
+        event.details || event.description,
+        event.status
+      ]);
       
-      <div className="row mb-4">
-        <div className="col-md-8">
-          <div className="card">
-            <div className="card-header">
-              <h6 className="mb-0">User Statistics</h6>
+      content = [
+        ['System Administrator Security Report'],
+        [`Generated: ${new Date().toLocaleString()}`],
+        [`Period: ${dateFrom} to ${dateTo}`],
+        [''],
+        ['SUMMARY'],
+        [`Successful Logins: ${systemSummary.successfulLogins}`],
+        [`Failed Logins: ${systemSummary.failedLogins}`],
+        [`Password Resets: ${systemSummary.passwordResets}`],
+        [`Account Lockouts: ${systemSummary.accountLockouts}`],
+        [`Suspicious Attempts: ${systemSummary.suspiciousAttempts}`],
+        [''],
+        ['SECURITY EVENTS'],
+        headers,
+        ...rows
+      ].map(row => Array.isArray(row) ? row.join(',') : row).join('\n');
+    }
+    
+    const blob = new Blob([content], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `security_report_${timestamp}.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  };
+
+  // Refresh data manually
+  const refreshData = () => {
+    fetchReportsData();
+  };
+
+  // View details popup
+  const ViewDetailsModal = () => {
+    if (!selectedEvent) return null;
+    
+    return (
+      <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+        <div className="modal-dialog">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title">Security Event Details</h5>
+              <button 
+                type="button" 
+                className="btn-close" 
+                onClick={() => setSelectedEvent(null)}
+              ></button>
             </div>
-            <div className="card-body">
-              <div className="table-responsive">
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>User Type</th>
-                      <th>Count</th>
-                      <th>Percentage</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><span className="badge bg-danger">Admin Officials</span></td>
-                      <td>{reportData.users.admins}</td>
-                      <td>{((reportData.users.admins / reportData.users.total) * 100).toFixed(1)}%</td>
-                      <td><span className="badge bg-success">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><span className="badge bg-warning">Personnel</span></td>
-                      <td>{reportData.users.personnel}</td>
-                      <td>{((reportData.users.personnel / reportData.users.total) * 100).toFixed(1)}%</td>
-                      <td><span className="badge bg-success">Active</span></td>
-                    </tr>
-                    <tr>
-                      <td><span className="badge bg-info">Standard Users</span></td>
-                      <td>{reportData.users.standard}</td>
-                      <td>{((reportData.users.standard / reportData.users.total) * 100).toFixed(1)}%</td>
-                      <td><span className="badge bg-success">Active</span></td>
-                    </tr>
-                  </tbody>
-                </table>
+            <div className="modal-body">
+              <div className="row g-3">
+                <div className="col-12">
+                <strong>Timestamp:</strong> {new Date(selectedEvent.created_at || `${selectedEvent.date} ${selectedEvent.time}`).toLocaleString()}
+              </div>
+                <div className="col-12">
+                  <strong>Event Type:</strong> 
+                  <strong className="ms-2">{selectedEvent.eventType || selectedEvent.event_type}</strong>
+                </div>
+                <div className="col-12">
+                  <strong>User:</strong> {selectedEvent.user || selectedEvent.username || selectedEvent.user_email}
+                </div>
+                <div className="col-12">
+                  <strong>IP Address:</strong> {selectedEvent.ipAddress || selectedEvent.ip_address}
+                </div>
+                <div className="col-12">
+                  <strong>Details:</strong> {selectedEvent.details || selectedEvent.description}
+                </div>
+                <div className="col-12">
+                  <strong>Status:</strong> 
+                  <span className={`ms-2 badge ${
+                    selectedEvent.status === 'Resolved' || selectedEvent.status === 'Completed' ? 'bg-success' :
+                    selectedEvent.status === 'Under Review' ? 'bg-warning' :
+                    'bg-secondary'
+                  }`}>
+                    {selectedEvent.status}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-        <div className="col-md-4">
-          <div className="card">
-            <div className="card-header">
-              <h6 className="mb-0">User Status</h6>
-            </div>
-            <div className="card-body">
-              <div className="row text-center">
-                <div className="col-6">
-                  <h4 className="text-success">{reportData.users.active}</h4>
-                  <small>Active Users</small>
-                </div>
-                <div className="col-6">
-                  <h4 className="text-danger">{reportData.users.inactive}</h4>
-                  <small>Inactive Users</small>
-                </div>
-              </div>
-              <div className="mt-3">
-                <div className="progress">
-                  <div 
-                    className="progress-bar bg-success" 
-                    style={{ width: `${(reportData.users.active / reportData.users.total) * 100}%` }}
-                  ></div>
-                </div>
-                <small className="text-muted">
-                  {((reportData.users.active / reportData.users.total) * 100).toFixed(1)}% Active Rate
-                </small>
-              </div>
+            <div className="modal-footer">
+              <button 
+                type="button" 
+                className="btn btn-secondary"
+                onClick={() => setSelectedEvent(null)}
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
-  const renderAssetReports = () => (
-    <div>
-      <ExportButtons dataType="Asset Reports" />
-      
-      <div className="row mb-4">
-        <div className="col-md-6">
-          <div className="card">
-            <div className="card-header">
-              <h6 className="mb-0">Assets by Category</h6>
-            </div>
-            <div className="card-body">
-              <div className="table-responsive">
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>Category</th>
-                      <th>Count</th>
-                      <th>Percentage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td><i className="fas fa-bolt text-warning me-2"></i>Electrical</td>
-                      <td>{reportData.assets.electrical}</td>
-                      <td>{((reportData.assets.electrical / reportData.assets.total) * 100).toFixed(1)}%</td>
-                    </tr>
-                    <tr>
-                      <td><i className="fas fa-tint text-info me-2"></i>Plumbing</td>
-                      <td>{reportData.assets.plumbing}</td>
-                      <td>{((reportData.assets.plumbing / reportData.assets.total) * 100).toFixed(1)}%</td>
-                    </tr>
-                    <tr>
-                      <td><i className="fas fa-chair text-secondary me-2"></i>Furniture</td>
-                      <td>{reportData.assets.furniture}</td>
-                      <td>{((reportData.assets.furniture / reportData.assets.total) * 100).toFixed(1)}%</td>
-                    </tr>
-                    <tr>
-                      <td><i className="fas fa-cogs text-primary me-2"></i>Equipment</td>
-                      <td>{reportData.assets.equipment}</td>
-                      <td>{((reportData.assets.equipment / reportData.assets.total) * 100).toFixed(1)}%</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+  if (isLoading) {
+    return (
+      <SidebarLayout role="sysadmin">
+        <div className="d-flex justify-content-center align-items-center" style={{height: '400px'}}>
+          <div className="text-center">
+            <div className="spinner-border text-primary" role="status"></div>
+            <div className="mt-2">Loading security reports...</div>
           </div>
         </div>
-        <div className="col-md-6">
-          <div className="card">
-            <div className="card-header">
-              <h6 className="mb-0">Assets by Status</h6>
-            </div>
-            <div className="card-body">
-              <div className="row text-center mb-3">
-                <div className="col-4">
-                  <h5 className="text-success">{reportData.assets.operational}</h5>
-                  <small>Operational</small>
-                </div>
-                <div className="col-4">
-                  <h5 className="text-warning">{reportData.assets.maintenance}</h5>
-                  <small>Maintenance</small>
-                </div>
-                <div className="col-4">
-                  <h5 className="text-danger">{reportData.assets.disposal}</h5>
-                  <small>For Disposal</small>
-                </div>
-              </div>
-              <div className="alert alert-info">
-                <small>
-                  <i className="fas fa-info-circle me-1"></i>
-                  {reportData.assets.maintenance + reportData.assets.disposal} assets need attention
-                </small>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderSystemUsage = () => (
-    <div>
-      <ExportButtons dataType="System Usage Reports" />
-      
-      <div className="row mb-4">
-        <div className="col-md-4">
-          <div className="card">
-            <div className="card-header">
-              <h6 className="mb-0">Login Activity</h6>
-            </div>
-            <div className="card-body">
-              <div className="row text-center">
-                <div className="col-12 mb-2">
-                  <h4 className="text-primary">{reportData.activity.dailyLogins}</h4>
-                  <small>Today</small>
-                </div>
-                <div className="col-6">
-                  <h6 className="text-info">{reportData.activity.weeklyLogins}</h6>
-                  <small>This Week</small>
-                </div>
-                <div className="col-6">
-                  <h6 className="text-success">{reportData.activity.monthlyLogins}</h6>
-                  <small>This Month</small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <div className="col-md-8">
-          <div className="card">
-            <div className="card-header">
-              <h6 className="mb-0">Upload Statistics</h6>
-            </div>
-            <div className="card-body">
-              <div className="row">
-                <div className="col-md-6">
-                  <div className="card bg-light">
-                    <div className="card-body text-center">
-                      <i className="fas fa-file-csv text-success fa-2x mb-2"></i>
-                      <h5>{reportData.uploads.csvUploads}</h5>
-                      <small>CSV Uploads</small>
-                    </div>
-                  </div>
-                </div>
-                <div className="col-md-6">
-                  <div className="card bg-light">
-                    <div className="card-body text-center">
-                      <i className="fas fa-cloud-upload-alt text-primary fa-2x mb-2"></i>
-                      <h5>{reportData.uploads.apiUploads}</h5>
-                      <small>API Uploads</small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-
+      </SidebarLayout>
+    );
+  }
 
   return (
     <SidebarLayout role="sysadmin">
-      <div>
-        <div className="d-flex justify-content-between align-items-center mb-4">
-          <h3><i className="fas fa-chart-bar me-2"></i>System Reports</h3>
-          {loading && (
-            <div className="spinner-border spinner-border-sm text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+      <div className="container-fluid">
+        {/* Header */}
+        <div className="row mb-4">
+          <div className="col-12">
+            <div className="d-flex justify-content-between align-items-center">
+              <div>
+                <h2 className="mb-1">System Administrator Reports</h2>
+                <p className="text-muted mb-0">Security and system activity monitoring</p>
+              </div>
+              <div className="d-flex gap-2 align-items-center">
+                <button 
+                  className="btn btn-outline-success"
+                  onClick={() => exportReport('csv')}
+                  disabled={filteredEvents.length === 0}
+                >
+                  Export CSV
+                </button>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => exportReport('pdf')}
+                  disabled={filteredEvents.length === 0}
+                >
+                  Export PDF
+                </button>
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <ul className="nav nav-tabs mb-4">
-          <li className="nav-item">
-            <button 
-              className={`nav-link ${activeTab === 'overview' ? 'active' : ''}`}
-              onClick={() => setActiveTab('overview')}
-            >
-              <i className="fas fa-tachometer-alt me-1"></i>
-              Overview
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link ${activeTab === 'users' ? 'active' : ''}`}
-              onClick={() => setActiveTab('users')}
-            >
-              <i className="fas fa-users me-1"></i>
-              User Reports
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link ${activeTab === 'assets' ? 'active' : ''}`}
-              onClick={() => setActiveTab('assets')}
-            >
-              <i className="fas fa-boxes me-1"></i>
-              Asset Reports
-            </button>
-          </li>
-          <li className="nav-item">
-            <button 
-              className={`nav-link ${activeTab === 'usage' ? 'active' : ''}`}
-              onClick={() => setActiveTab('usage')}
-            >
-              <i className="fas fa-chart-line me-1"></i>
-              System Usage
-            </button>
-          </li>
+        {/* Error Message */}
+        {error && (
+          <div className="row mb-4">
+            <div className="col-12">
+              <div className="alert alert-danger d-flex align-items-center" role="alert">
+                <i className="fas fa-exclamation-triangle me-2"></i>
+                {error}
+                <button 
+                  className="btn btn-sm btn-outline-danger ms-auto"
+                  onClick={refreshData}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
-        </ul>
-
-        {/* Tab Content */}
-        <div className="tab-content">
-          {activeTab === 'overview' && renderOverviewTab()}
-          {activeTab === 'users' && renderUserReports()}
-          {activeTab === 'assets' && renderAssetReports()}
-          {activeTab === 'usage' && renderSystemUsage()}
+        {/* System Reports Summary */}
+        <div className="row mb-4">
+          <div className="col">
+            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+              <div className="card-body text-center py-3">
+                <div className="d-flex align-items-center justify-content-center mb-2">
+                  <i className="fas fa-check-circle text-success fs-5 me-1"></i>
+                  <h4 className="text-success mb-0">{systemSummary.successfulLogins.toLocaleString()}</h4>
+                </div>
+                <small className="text-muted">Successful Logins</small>
+              </div>
+            </div>
+          </div>
+          <div className="col">
+            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+              <div className="card-body text-center py-3">
+                <div className="d-flex align-items-center justify-content-center mb-2">
+                  <i className="fas fa-exclamation-triangle text-warning fs-5 me-1"></i>
+                  <h4 className="text-warning mb-0">{systemSummary.failedLogins.toLocaleString()}</h4>
+                </div>
+                <small className="text-muted">Failed Logins</small>
+              </div>
+            </div>
+          </div>
+          <div className="col">
+            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+              <div className="card-body text-center py-3">
+                <div className="d-flex align-items-center justify-content-center mb-2">
+                  <i className="fas fa-key text-info fs-5 me-1"></i>
+                  <h4 className="text-info mb-0">{systemSummary.passwordResets.toLocaleString()}</h4>
+                </div>
+                <small className="text-muted">Password Resets</small>
+              </div>
+            </div>
+          </div>
+          <div className="col">
+            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+              <div className="card-body text-center py-3">
+                <div className="d-flex align-items-center justify-content-center mb-2">
+                  <i className="fas fa-lock text-danger fs-5 me-1"></i>
+                  <h4 className="text-danger mb-0">{systemSummary.accountLockouts.toLocaleString()}</h4>
+                </div>
+                <small className="text-muted">Account Lockouts</small>
+              </div>
+            </div>
+          </div>
+          <div className="col">
+            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+              <div className="card-body text-center py-3">
+                <div className="d-flex align-items-center justify-content-center mb-2">
+                  <i className="fas fa-shield-alt text-danger fs-5 me-1"></i>
+                  <h4 className="text-danger mb-0">{systemSummary.suspiciousAttempts.toLocaleString()}</h4>
+                </div>
+                <small className="text-muted">Suspicious Attempts</small>
+              </div>
+            </div>
+          </div>
         </div>
+
+      {/* Search and Filters */}
+<div className="row mb-4">
+  <div className="col-12">
+    <div className="d-flex gap-3 align-items-end">
+      <div className="flex-fill">
+        <input 
+          type="text" 
+          className="form-control form-control-lg"
+          placeholder="Search events by user, IP, or details..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          style={{
+            borderRadius: '8px',
+            border: '1px solid #dee2e6',
+            fontSize: '16px',
+            padding: '12px 16px'
+          }}
+        />
+      </div>
+      <div style={{minWidth: '180px'}}>
+        <select 
+          className="form-select form-select-lg"
+          value={eventTypeFilter}
+          onChange={(e) => setEventTypeFilter(e.target.value)}
+          style={{
+            borderRadius: '8px',
+            border: '1px solid #dee2e6',
+            fontSize: '16px',
+            padding: '12px 16px'
+          }}
+        >
+          <option value="all">All Events</option>
+          <option value="failed">Failed Login</option>
+          <option value="lockout">Account Lockout</option>
+          <option value="reset">Password Reset</option>
+          <option value="suspicious">Suspicious Login</option>
+        </select>
+      </div>
+      <div style={{minWidth: '180px'}}>
+        <select 
+          className="form-select form-select-lg"
+          value={dateFrom}
+          onChange={(e) => setDateFrom(e.target.value)}
+          style={{
+            borderRadius: '8px',
+            border: '1px solid #dee2e6',
+            fontSize: '16px',
+            padding: '12px 16px'
+          }}
+        >
+          <option value="2024-12-01">Last 30 Days</option>
+          <option value="2024-11-01">Last 60 Days</option>
+          <option value="2024-10-01">Last 90 Days</option>
+          <option value="2024-01-01">This Year</option>
+        </select>
+      </div>
+    </div>
+  </div>
+</div>
+        {/* Security Events Table */}
+        <div className="row">
+          <div className="col-12">
+            <div className="card border-2">
+              <div className="card-header bg-white border-0 py-3">
+                <h5 className="mb-0">Security Events Summary</h5>
+              </div>
+              <div className="card-body">
+                <div className="table-responsive">
+                  <table className="table table-hover">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Timestamp</th>
+                        <th>Event Type</th>
+                        <th>User</th>
+                        <th>IP Address</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredEvents.map((event) => (
+                        <tr key={event.id}>
+                         <td>
+                        <small className="text-muted">
+                          {new Date(event.created_at || `${event.date} ${event.time}`).toLocaleString()}
+                        </small>
+                      </td>
+                         <td>
+                          <strong>{event.eventType || event.event_type}</strong>
+                        </td>
+                          <td>{event.user || event.username || event.user_email}</td>
+                          <td>{event.ipAddress || event.ip_address}</td>
+                          <td>
+                            <span className={`badge ${
+                              event.status === 'Resolved' || event.status === 'Completed' ? 'bg-success' :
+                              event.status === 'Under Review' ? 'bg-warning' :
+                              'bg-secondary'
+                            }`}>
+                              {event.status}
+                            </span>
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => setSelectedEvent(event)}
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  
+                  {filteredEvents.length === 0 && !isLoading && (
+                    <div className="text-center py-4">
+                      <div className="text-muted">No security events found for the selected criteria.</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* View Details Modal */}
+        <ViewDetailsModal />
       </div>
     </SidebarLayout>
   );

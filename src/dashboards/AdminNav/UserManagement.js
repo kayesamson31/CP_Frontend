@@ -18,7 +18,7 @@ export default function UserManagement() {
   const [error, setError] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const roles = ['Standard User', 'Personnel', 'Admin Official'];
+  const roles = ['Standard User', 'Personnel'];
 
   // Sample hardcoded data - 4 different examples
   const sampleUsers = [
@@ -38,14 +38,7 @@ export default function UserManagement() {
       status: 'Active',
       dateCreated: '2024-02-20T10:15:00Z'
     },
-    {
-      id: 3,
-      name: 'Roberto Garcia',
-      email: 'roberto.garcia@company.com',
-      role: 'Admin Official',
-      status: 'Inactive',
-      dateCreated: '2024-01-10T14:45:00Z'
-    },
+   
     {
       id: 4,
       name: 'Ana Reyes',
@@ -503,18 +496,24 @@ export default function UserManagement() {
               onClick={downloadAllUsersCSV}
               disabled={loading}
             >
-              📥 Download Users CSV
+              Export CSV
             </button>
             
-            {/* Add New User Dropdown */}
+          {/* Add New User Dropdown */}
             <div className="dropdown">
               <button 
-                className="btn btn-primary dropdown-toggle d-flex align-items-center"
+                className="btn btn-outline-primary dropdown-toggle d-flex align-items-center"
                 type="button"
                 onClick={() => setShowDropdown(!showDropdown)}
                 disabled={loading}
-                style={{ minWidth: '160px' }}
+                style={{ 
+                  minWidth: '160px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: '400'
+                }}
               >
+                <span className="me-2">+</span>
                 Add New User
               </button>
               {showDropdown && (
@@ -541,46 +540,44 @@ export default function UserManagement() {
           </div>
         </div>
 
-        {/* Search and Filters */}
-        <div className="bg-light p-4 mb-4" style={{ borderRadius: '8px' }}>
-          <div className="row">
-            <div className="col-md-6">
-              <input
-                type="text"
-                className="form-control"
-                placeholder="Search by name or email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={loading}
-              />
-            </div>
-            <div className="col-md-3">
-              <select
-                className="form-select"
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                disabled={loading}
-              >
-                <option value="">All Roles</option>
-                {roles.map(role => (
-                  <option key={role} value={role}>{role}</option>
-                ))}
-              </select>
-            </div>
-            <div className="col-md-3">
-              <select
-                className="form-select"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                disabled={loading}
-              >
-                <option value="">All Status</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-              </select>
-            </div>
-          </div>
-        </div>
+      {/* Search and Filters */}
+<div className="d-flex gap-3 mb-4">
+  <div className="flex-grow-1">
+    <input
+      type="text"
+      className="form-control"
+      placeholder="Search assets by name, ID, or assignee..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      disabled={loading}
+    />
+  </div>
+  <div style={{ minWidth: '150px' }}>
+    <select
+      className="form-select"
+      value={statusFilter}
+      onChange={(e) => setStatusFilter(e.target.value)}
+      disabled={loading}
+    >
+      <option value="">All Status</option>
+      <option value="Active">Active</option>
+      <option value="Inactive">Inactive</option>
+    </select>
+  </div>
+  <div style={{ minWidth: '150px' }}>
+    <select
+      className="form-select"
+      value={roleFilter}
+      onChange={(e) => setRoleFilter(e.target.value)}
+      disabled={loading}
+    >
+      <option value="">All Categories</option>
+      {roles.map(role => (
+        <option key={role} value={role}>{role}</option>
+      ))}
+    </select>
+  </div>
+</div>
 
         {/* Users Table */}
         <div className="bg-white rounded shadow-sm">
@@ -592,7 +589,7 @@ export default function UserManagement() {
                   <th>Email</th>
                   <th>Role</th>
                   <th>Status</th>
-                  <th>Date Created</th>
+                  <th>Date Added</th>
                   <th>Actions</th>
                 </tr>
               </thead>

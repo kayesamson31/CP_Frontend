@@ -1,4 +1,5 @@
 //SidebarLayout.js - Updated with new role configurations
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Container, Row, Col, Button, Nav } from 'react-bootstrap';
 import dashboardlogo from '../assets/OpenFMSLogo.png';
@@ -54,7 +55,7 @@ const menuConfig = {
     { label: 'Profile', path: '/dashboard-sysadmin/profile', icon: dashprofile, iconActive: dashprofileWhite },
     { label: 'User Management', path: '/dashboard-sysadmin/SysadUserManagement', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
     { label: 'Report Tabs', path: '/dashboard-sysadmin/SysadReports', icon: <FaFileAlt />, iconActive: <FaFileAlt style={{color: 'white'}} /> },
-    { label: 'Activity Tracking', path: '/dashboard-sysadmin/SysadActivityTracking', icon: <FaHistory />, iconActive: <FaHistory style={{color: 'white'}} /> }
+    { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: <FaHistory />, iconActive: <FaHistory style={{color: 'white'}} /> }
   ]
 };
 
@@ -63,8 +64,33 @@ export default function SidebarLayout({ children, role = 'standard' }) {
   const location = useLocation();
   const activeTab = location.pathname;
 
-  const menus = menuConfig[role] || menuConfig.standard;
+  // ADD THIS NEW LINE
+  const [notificationCount, setNotificationCount] = useState(0);
 
+  const menus = menuConfig[role] || menuConfig.standard;
+// ADD THIS WHOLE BLOCK
+useEffect(() => {
+  const updateNotificationCount = () => {
+    const count = localStorage.getItem(`unreadCount_${role}`) || '0';
+    setNotificationCount(parseInt(count));
+  };
+  
+  updateNotificationCount();
+  
+  const handleStorageChange = () => {
+    updateNotificationCount();
+  };
+  
+  window.addEventListener('storage', handleStorageChange);
+  const interval = setInterval(updateNotificationCount, 1000);
+  
+  return () => {
+    window.removeEventListener('storage', handleStorageChange);
+    clearInterval(interval);
+  };
+}, [role]);
+
+  
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('userRole'); // Also remove role if stored
@@ -127,13 +153,33 @@ export default function SidebarLayout({ children, role = 'standard' }) {
      alignItems: 'center',
      gap: '8px',
      padding: '10px',
-     fontWeight: '500'
+     fontWeight: '500',
+position: 'relative'  // ADD THIS COMMA AND LINE
            }}
-           >
-   {renderIcon(tab, isActive)}
-   {tab.label}
-
-   </Nav.Link>
+  >
+  {renderIcon(tab, isActive)}
+  {tab.label}
+  
+  {(tab.label === 'Notification' || tab.label === 'Notifications') && notificationCount > 0 && (
+    <span
+      style={{
+        backgroundColor: '#DC3545',
+        color: 'white',
+        borderRadius: '50%',
+        width: '20px',
+        height: '20px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        marginLeft: 'auto'
+      }}
+    >
+      {notificationCount > 99 ? '99+' : notificationCount}
+    </span>
+  )}
+</Nav.Link>
    );
     })}
    </Nav>
