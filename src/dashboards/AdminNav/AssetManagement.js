@@ -68,6 +68,17 @@ const [nextMaintenanceSchedule, setNextMaintenanceSchedule] = useState({
   repeat: 'none'
 });
 
+const [showIncidentDetailsModal, setShowIncidentDetailsModal] = useState(false);
+const [selectedIncident, setSelectedIncident] = useState(null);
+const [showAssignTaskModal, setShowAssignTaskModal] = useState(false);
+const [incidentTaskForm, setIncidentTaskForm] = useState({
+  incidentId: '',
+  assigneeId: '',
+  dueDate: '',
+  dueTime: '',
+  description: ''
+});
+
 // Modal states for task assignment
 const [showTaskModal, setShowTaskModal] = useState(false);
 const [newTask, setNewTask] = useState({
@@ -127,13 +138,17 @@ const [newTask, setNewTask] = useState({
         { date: "2024-07-10", task: "Coolant level check and refill", assigned: "Juan Dela Cruz", status: "completed" },
         { date: "2024-06-20", task: "Routine inspection", assigned: "Juan Dela Cruz", status: "completed" }
       ],
-      remarks: [
-        {
-          user: "Juan Dela Cruz",
-          timestamp: "2024-08-20T10:30:00Z",
-          content: "System is running smoothly after recent maintenance. Temperature control is optimal."
-        }
-      ]
+     incidentReports: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Open"
+  }
+]
     },
     {
       id: "AST-002",
@@ -163,18 +178,17 @@ const [newTask, setNewTask] = useState({
         { date: "2024-07-25", task: "Software update and system calibration", assigned: "Juan Dela Cruz", status: "completed" },
         { date: "2024-07-01", task: "Monthly inspection and cleaning", assigned: "Juan Dela Cruz", status: "completed" }
       ],
-      remarks: [
-        {
-          user: "Maria Santos",
-          timestamp: "2024-08-18T14:15:00Z",
-          content: "Camera 3 on 2nd floor needs lens replacement. Image quality is compromised."
-        },
-        {
-          user: "Pedro Garcia",
-          timestamp: "2024-08-19T09:00:00Z",
-          content: "Replacement lens has been ordered. ETA is next week."
-        }
-      ]
+      incidentReports: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Open"
+  }
+]
     },
     {
       id: "AST-003",
@@ -191,7 +205,7 @@ const [newTask, setNewTask] = useState({
         { date: "2024-07-15", task: "Timer system calibration", assigned: "Juan Dela Cruz", status: "completed" },
         { date: "2024-06-30", task: "Seasonal maintenance check", assigned: "Juan Dela Cruz", status: "completed" }
       ],
-      remarks: []
+      incidentReports: []
     },
     {
       id: "AST-004",
@@ -207,13 +221,17 @@ const [newTask, setNewTask] = useState({
         { date: "2024-08-12", task: "Wood polish application and hardware tightening", assigned: "Juan Dela Cruz", status: "completed" },
         { date: "2024-07-05", task: "Scratch repair on table surface", assigned: "Juan Dela Cruz", status: "completed" }
       ],
-      remarks: [
-        {
-          user: "Ana Reyes",
-          timestamp: "2024-08-13T11:20:00Z",
-          content: "Tables look great after polishing. One table leg still wobbles slightly."
-        }
-      ]
+    incidentReports: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Open"
+  }
+]
     },
     {
       id: "AST-005",
@@ -230,13 +248,17 @@ const [newTask, setNewTask] = useState({
         { date: "2024-04-20", task: "Engine oil change and battery check", assigned: "Juan Dela Cruz", status: "completed" },
         { date: "2024-03-15", task: "Load testing and fuel system check", assigned: "Juan Dela Cruz", status: "completed" }
       ],
-      remarks: [
-        {
-          user: "Roberto Cruz",
-          timestamp: "2024-05-30T16:45:00Z",
-          content: "Unit retired due to age and frequent breakdowns. Replacement unit AST-012 now in service."
-        }
-      ]
+      incidentReports: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Open"
+  }
+]
     },
     {
       id: "AST-006",
@@ -265,16 +287,118 @@ const [newTask, setNewTask] = useState({
         { date: "2024-08-16", task: "Motor diagnostic and repair attempt", assigned: "Juan Dela Cruz", status: "failed" },
         { date: "2024-07-20", task: "Routine cleaning and lubrication", assigned: "Juan Dela Cruz", status: "completed" }
       ],
-      remarks: [
-        {
-          user: "Lisa Fernandez",
-          timestamp: "2024-08-16T13:30:00Z",
-          content: "Motor making unusual noise. Technician says it might need replacement."
-        }
-      ]
+      incidentReports: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Open"
+  }
+]
     }
   ];
+const handleViewIncidentDetails = (incident) => {
+  setSelectedIncident(incident);
+  setShowIncidentDetailsModal(true);
+};
 
+const handleAssignIncidentTask = () => {
+  setIncidentTaskForm({
+    ...incidentTaskForm,
+    incidentId: selectedIncident.id
+  });
+  setShowIncidentDetailsModal(false);
+  setShowAssignTaskModal(true);
+};
+
+const handleDismissIncident = async () => {
+  if (selectedIncident && selectedAsset) {
+    try {
+      const updatedAssets = assets.map(asset => {
+        if (asset.id === selectedAsset.id) {
+          return {
+            ...asset,
+            incidentReports: asset.incidentReports.map(incident =>
+              incident.id === selectedIncident.id
+                ? { ...incident, status: 'Dismissed' }
+                : incident
+            )
+          };
+        }
+        return asset;
+      });
+      
+      setAssets(updatedAssets);
+      const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
+      setSelectedAsset(updatedSelectedAsset);
+      
+      setShowIncidentDetailsModal(false);
+      alert('Incident dismissed successfully!');
+    } catch (err) {
+      console.error('Error dismissing incident:', err);
+      alert('Failed to dismiss incident.');
+    }
+  }
+};
+
+const handleSubmitIncidentTask = async () => {
+  if (incidentTaskForm.assigneeId && incidentTaskForm.dueDate) {
+    try {
+      const assignedPersonnel = personnel.find(p => p.id === incidentTaskForm.assigneeId);
+      
+      // Create task based on incident
+      const task = {
+        id: `TSK-${String(tasks.length + 1).padStart(3, '0')}`,
+        assetId: selectedAsset.id,
+        title: `${selectedIncident.type} - ${selectedIncident.severity} Priority`,
+        description: incidentTaskForm.description || selectedIncident.description,
+        assigneeId: incidentTaskForm.assigneeId,
+        priority: selectedIncident.severity === 'High' ? 'high' : selectedIncident.severity === 'Medium' ? 'medium' : 'low',
+        dueDate: incidentTaskForm.dueDate,
+        dueTime: incidentTaskForm.dueTime || '09:00',
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        createdFrom: 'incident',
+        relatedIncidentId: selectedIncident.id
+      };
+      
+      setTasks(prevTasks => [...prevTasks, task]);
+      
+      // Update asset status and incident
+      const updatedAssets = assets.map(asset => {
+        if (asset.id === selectedAsset.id) {
+          return {
+            ...asset,
+            status: "Under Maintenance",
+            incidentReports: asset.incidentReports.map(incident =>
+              incident.id === selectedIncident.id
+                ? { ...incident, status: 'Assigned to Task', assignedTaskId: task.id }
+                : incident
+            )
+          };
+        }
+        return asset;
+      });
+      
+      setAssets(updatedAssets);
+      const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
+      setSelectedAsset(updatedSelectedAsset);
+      
+      setShowAssignTaskModal(false);
+      setIncidentTaskForm({ incidentId: '', assigneeId: '', dueDate: '', dueTime: '', description: '' });
+      alert(`Maintenance task assigned to ${assignedPersonnel.name}!`);
+      
+    } catch (err) {
+      console.error('Error assigning task:', err);
+      alert('Failed to assign task.');
+    }
+  } else {
+    alert('Please fill in required fields.');
+  }
+};
   // Mock function to simulate API call - replace with actual API call later
   const fetchAssets = async () => {
     try {
@@ -415,7 +539,7 @@ const handleAddAsset = async () => {
         id: `AST-${String(assets.length + 1).padStart(3, '0')}`,
         lastMaintenance: null,
         maintenanceHistory: [],
-        remarks: []
+        incidentReports: []
       };
       
       setAssets(prevAssets => [...prevAssets, asset]);
@@ -491,7 +615,7 @@ const handleBulkUpload = async () => {
             task: values[headers.indexOf('task')] || values[6] || '',
             lastMaintenance: null,
             maintenanceHistory: [],
-            remarks: []
+            incidentReports: []
           };
           newAssets.push(asset);
         }
@@ -1353,34 +1477,69 @@ const handleCreateTask = async () => {
                     )}
                   </Col>
 
-                  {/* Right Column - Remarks (Read-only for Admin) */}
-                  <Col lg={4}>
-                    <div className="border-start ps-4">
-                      <h6>Personnel Remarks</h6>
-                     
-                      
-                      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                        {selectedAsset.remarks?.length > 0 ? (
-                          selectedAsset.remarks.map((remark, index) => (
-                            <div key={index} className="mb-3 p-3 bg-light rounded">
-                              <div className="d-flex justify-content-between align-items-start mb-2">
-                                <strong className="text-primary">{remark.user}</strong>
-                                <small className="text-muted">
-                                  {new Date(remark.timestamp).toLocaleString()}
-                                </small>
-                              </div>
-                              <p className="mb-0 small">{remark.content}</p>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="text-center text-muted py-4">
-                            <i className="fas fa-comments fa-2x mb-3 opacity-50"></i>
-                            <p>No remarks from personnel yet.</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </Col>
+                 {/* Right Column - Incident Reports Panel */}
+<Col lg={4}>
+  <div className="border-start ps-4">
+    <h6>Incident Reports</h6>
+    
+    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+      {selectedAsset.incidentReports?.length > 0 ? (
+        selectedAsset.incidentReports.map((incident, index) => (
+          <div key={index} className="mb-3 p-3 border rounded">
+            <div className="d-flex justify-content-between align-items-start mb-2">
+              <div>
+                <strong className="text-danger">{incident.reportedBy}</strong>
+                <div>
+                  <small className="text-muted">
+                    {new Date(incident.reportedAt).toLocaleDateString()}
+                  </small>
+                </div>
+              </div>
+              <div className="text-end">
+                <Badge bg={incident.status === 'Open' ? 'danger' : incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
+                  {incident.status}
+                </Badge>
+              </div>
+            </div>
+            
+            <div className="mb-2">
+              <span className="fw-bold">{incident.type}</span>
+              <span className={`badge ms-2 ${
+                incident.severity === 'High' ? 'bg-danger' :
+                incident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
+              }`}>
+                {incident.severity}
+              </span>
+            </div>
+            
+            <p className="small mb-3 text-muted">
+              {incident.description.length > 80 
+                ? `${incident.description.substring(0, 80)}...` 
+                : incident.description
+              }
+            </p>
+            
+            <Button 
+              size="sm" 
+              variant="outline-primary"
+              onClick={() => handleViewIncidentDetails(incident)}
+              className="w-100"
+            >
+              View Details
+            </Button>
+          </div>
+        ))
+      ) : (
+        <div className="text-center text-muted py-4">
+          <i className="fas fa-exclamation-triangle fa-2x mb-3 opacity-50"></i>
+          <p>No incident reports submitted yet.</p>
+        </div>
+      )}
+    </div>
+  </div>
+</Col>
+
+
                 </Row>
               </Modal.Body>
               <Modal.Footer>
@@ -1655,6 +1814,170 @@ const handleCreateTask = async () => {
     </Modal.Footer>
   </Modal>
 )}
+
+{/* Incident Details Modal */}
+<Modal show={showIncidentDetailsModal} onHide={() => setShowIncidentDetailsModal(false)} size="lg">
+  <Modal.Header closeButton>
+    <Modal.Title>Incident Report Details</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    {selectedIncident && (
+      <>
+        <Row className="mb-3">
+          <Col md={6}>
+            <strong>Incident ID:</strong>
+            <p>{selectedIncident.id}</p>
+          </Col>
+          <Col md={6}>
+            <strong>Status:</strong>
+            <Badge bg={selectedIncident.status === 'Open' ? 'danger' : selectedIncident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
+              {selectedIncident.status}
+            </Badge>
+          </Col>
+        </Row>
+        
+        <Row className="mb-3">
+          <Col md={6}>
+            <strong>Reported By:</strong>
+            <p>{selectedIncident.reportedBy}</p>
+          </Col>
+          <Col md={6}>
+            <strong>Date Reported:</strong>
+            <p>{new Date(selectedIncident.reportedAt).toLocaleString()}</p>
+          </Col>
+        </Row>
+        
+        <Row className="mb-3">
+          <Col md={6}>
+            <strong>Incident Type:</strong>
+            <p>{selectedIncident.type}</p>
+          </Col>
+          <Col md={6}>
+            <strong>Severity:</strong>
+            <span className={`badge ${
+              selectedIncident.severity === 'High' ? 'bg-danger' :
+              selectedIncident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
+            }`}>
+              {selectedIncident.severity}
+            </span>
+          </Col>
+        </Row>
+        
+        <div className="mb-3">
+          <strong>Description:</strong>
+          <div className="border rounded p-3 bg-light mt-2">
+            {selectedIncident.description}
+          </div>
+        </div>
+        
+        {selectedIncident.assignedTaskId && (
+          <Alert variant="info">
+            <strong>Task Assigned:</strong> This incident has been assigned to maintenance task #{selectedIncident.assignedTaskId}
+          </Alert>
+        )}
+      </>
+    )}
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowIncidentDetailsModal(false)}>
+      Close
+    </Button>
+    {selectedIncident?.status === 'Open' && (
+      <>
+        <Button variant="warning" onClick={handleAssignIncidentTask}>
+          <i className="fas fa-tasks me-2"></i>
+          Assign as Maintenance Task
+        </Button>
+        <Button variant="outline-danger" onClick={handleDismissIncident}>
+          <i className="fas fa-times me-2"></i>
+          Dismiss Incident
+        </Button>
+      </>
+    )}
+  </Modal.Footer>
+</Modal>
+
+{/* Assign Incident Task Modal */}
+<Modal show={showAssignTaskModal} onHide={() => setShowAssignTaskModal(false)} size="lg">
+  <Modal.Header closeButton>
+    <Modal.Title>Assign Maintenance Task from Incident</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    {selectedIncident && (
+      <>
+        <Alert variant="info">
+          <strong>Creating task for incident:</strong> {selectedIncident.type} - {selectedIncident.severity} Priority
+        </Alert>
+        
+        <Row className="g-3">
+          <Col xs={12}>
+            <Form.Group>
+              <Form.Label>Assign To *</Form.Label>
+              <Form.Select
+                value={incidentTaskForm.assigneeId}
+                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, assigneeId: e.target.value})}
+                required
+              >
+                <option value="">Select Personnel</option>
+                {personnel.map(person => (
+                  <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
+                ))}
+              </Form.Select>
+            </Form.Group>
+          </Col>
+          
+          <Col md={6}>
+            <Form.Group>
+              <Form.Label>Due Date *</Form.Label>
+              <Form.Control
+                type="date"
+                value={incidentTaskForm.dueDate}
+                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, dueDate: e.target.value})}
+                required
+              />
+            </Form.Group>
+          </Col>
+          
+          <Col md={6}>
+            <Form.Group>
+              <Form.Label>Due Time</Form.Label>
+              <Form.Control
+                type="time"
+                value={incidentTaskForm.dueTime}
+                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, dueTime: e.target.value})}
+              />
+            </Form.Group>
+          </Col>
+          
+          <Col xs={12}>
+            <Form.Group>
+              <Form.Label>Additional Instructions</Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={3}
+                value={incidentTaskForm.description}
+                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, description: e.target.value})}
+                placeholder="Add any additional instructions for the maintenance task..."
+              />
+              <Form.Text className="text-muted">
+                Default: {selectedIncident.description}
+              </Form.Text>
+            </Form.Group>
+          </Col>
+        </Row>
+      </>
+    )}
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowAssignTaskModal(false)}>
+      Cancel
+    </Button>
+    <Button variant="primary" onClick={handleSubmitIncidentTask}>
+      <i className="fas fa-tasks me-2"></i>
+      Assign Task
+    </Button>
+  </Modal.Footer>
+</Modal>
 
     </SidebarLayout>
   );

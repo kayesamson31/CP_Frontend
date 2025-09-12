@@ -59,6 +59,32 @@ const getActivityColor = (type) => {
   }
 };
 
+// Template download function
+const downloadTemplate = (type) => {
+  const templates = {
+    heads: `Name,Email,Status,Role
+John Admin,john.admin@company.com,active,Admin official
+Jane Head,jane.head@company.com,active,system admin`,
+    personnel: `Name,Email,Status,Role
+Mike Staff,mike.staff@company.com,active,Personnel
+Sarah Worker,sarah.worker@company.com,active,Personnel`,
+    standardUsers: `Name,Email,Status,Role
+Tom User,tom.user@company.com,active,Standard user
+Lisa Member,lisa.member@company.com,active,Standard user`,
+    assets: `Asset Name,Category,Status,Location
+Laptop Dell XPS,Computer,Operational,Office Floor 1
+Printer HP LaserJet,Office Equipment,Operational,Reception`
+  };
+
+  const blob = new Blob([templates[type]], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${type}_template.csv`;
+  a.click();
+  window.URL.revokeObjectURL(url);
+};
+
 // Helper function to format timestamp to relative time
 const getRelativeTime = (timestamp) => {
   const now = new Date();
@@ -944,26 +970,42 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
             </select>
           </div>
           
-          {selectedUserType && !previewData && (
-            <div className="mb-3">
-              <label htmlFor="userCsvFile" className="form-label fw-semibold">Upload CSV File:</label>
-              <input 
-                type="file" 
-                id="userCsvFile"
-                className="form-control" 
-                accept=".csv"
-                onChange={(e) => {
-                  if (e.target.files[0]) {
-                    handleFilePreview(e.target.files[0], selectedUserType);
-                  }
-                }}
-              />
-              <div className="form-text">
-                <i className="bi bi-info-circle me-1"></i>
-                Please ensure your CSV file has proper headers and data format.
-              </div>
-            </div>
-          )}
+{selectedUserType && !previewData && (
+  <>
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          downloadTemplate(selectedUserType);
+        }}
+        className="btn btn-outline-primary btn-sm mb-3"
+      >
+        <i className="bi bi-download me-2"></i>
+        Download Template
+      </button>
+    </div>
+    
+    <div className="mb-3">
+      <label htmlFor="userCsvFile" className="form-label fw-semibold">Upload CSV File:</label>
+      <input 
+        type="file" 
+        id="userCsvFile"
+        className="form-control" 
+        accept=".csv"
+        onChange={(e) => {
+          if (e.target.files[0]) {
+            handleFilePreview(e.target.files[0], selectedUserType);
+          }
+        }}
+      />
+      <div className="form-text">
+        <i className="bi bi-info-circle me-1"></i>
+        Please ensure your CSV file has proper headers and data format.
+      </div>
+    </div>
+  </>
+)}
 
           {/* Preview Section */}
           {previewData && (
@@ -1037,26 +1079,42 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
           ></button>
         </div>
         <div className="modal-body">
-          {!assetPreviewData && (
-            <div className="mb-3">
-              <label htmlFor="assetCsvFile" className="form-label fw-semibold">Upload Assets CSV File:</label>
-              <input 
-                type="file" 
-                id="assetCsvFile"
-                className="form-control" 
-                accept=".csv"
-                onChange={(e) => {
-                  if (e.target.files[0]) {
-                    handleAssetFilePreview(e.target.files[0]);
-                  }
-                }}
-              />
-              <div className="form-text">
-                <i className="bi bi-info-circle me-1"></i>
-                Please ensure your CSV file has proper headers and data format for assets.
-              </div>
-            </div>
-          )}
+         {!assetPreviewData && (
+  <>
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          downloadTemplate('assets');
+        }}
+        className="btn btn-outline-primary btn-sm mb-3"
+      >
+        <i className="bi bi-download me-2"></i>
+        Download Template
+      </button>
+    </div>
+    
+    <div className="mb-3">
+      <label htmlFor="assetCsvFile" className="form-label fw-semibold">Upload Assets CSV File:</label>
+      <input 
+        type="file" 
+        id="assetCsvFile"
+        className="form-control" 
+        accept=".csv"
+        onChange={(e) => {
+          if (e.target.files[0]) {
+            handleAssetFilePreview(e.target.files[0]);
+          }
+        }}
+      />
+      <div className="form-text">
+        <i className="bi bi-info-circle me-1"></i>
+        Please ensure your CSV file has proper headers and data format for assets.
+      </div>
+    </div>
+  </>
+)}
 
           {/* Preview Section */}
           {assetPreviewData && (
@@ -1385,7 +1443,7 @@ onMouseLeave={(e) => {
   {recentActivities.length > 5 && (
     <button 
       className="btn btn-link text-primary fw-semibold text-decoration-none p-0"
-      onClick={() => navigate('/dashboard-sysadmin/SysadActivityTracking')}
+      onClick={() => navigate('/dashboard-sysadmin/SysadAuditLogs')}
     >
       View All Activities
     </button>

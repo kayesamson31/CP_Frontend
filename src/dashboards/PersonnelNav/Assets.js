@@ -35,13 +35,17 @@ export default function Assets() {
         { date: "2024-07-10", task: "Coolant level check and refill", Assigned: "Juan Dela Cruz" },
         { date: "2024-06-20", task: "Routine inspection", Assigned: "Juan Dela Cruz" }
       ],
-      remarks: [
-        {
-          user: "Juan Dela Cruz",
-          timestamp: "2024-08-20T10:30:00Z",
-          content: "System is running smoothly after recent maintenance. Temperature control is optimal."
-        }
-      ]
+     incidentHistory: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "Minor temperature fluctuation detected during peak hours",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Resolved"
+  }
+]
     },
     {
       id: "AST-002",
@@ -58,18 +62,17 @@ export default function Assets() {
         { date: "2024-07-25", task: "Software update and system calibration", Assigned: "Juan Dela Cruz" },
         { date: "2024-07-01", task: "Monthly inspection and cleaning", Assigned: "Juan Dela Cruz" }
       ],
-      remarks: [
-        {
-          user: "Maria Santos",
-          timestamp: "2024-08-18T14:15:00Z",
-          content: "Camera 3 on 2nd floor needs lens replacement. Image quality is compromised."
-        },
-        {
-          user: "Pedro Garcia",
-          timestamp: "2024-08-19T09:00:00Z",
-          content: "Replacement lens has been ordered. ETA is next week."
-        }
-      ]
+    incidentHistory: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "Minor temperature fluctuation detected during peak hours",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Resolved"
+  }
+]
     },
     {
       id: "AST-003",
@@ -125,13 +128,17 @@ export default function Assets() {
         { date: "2024-04-20", task: "Engine oil change and battery check", Assigned: "Juan Dela Cruz" },
         { date: "2024-03-15", task: "Load testing and fuel system check", Assigned: "Juan Dela Cruz" }
       ],
-      remarks: [
-        {
-          user: "Roberto Cruz",
-          timestamp: "2024-05-30T16:45:00Z",
-          content: "Unit retired due to age and frequent breakdowns. Replacement unit AST-012 now in service."
-        }
-      ]
+     incidentHistory: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "Minor temperature fluctuation detected during peak hours",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Resolved"
+  }
+]
     },
     {
       id: "AST-006",
@@ -147,13 +154,17 @@ export default function Assets() {
         { date: "2024-08-16", task: "Motor diagnostic and repair attempt",  Assigned: "Juan Dela Cruz" },
         { date: "2024-07-20", task: "Routine cleaning and lubrication", Assigned: "Juan Dela Cruz" }
       ],
-      remarks: [
-        {
-          user: "Lisa Fernandez",
-          timestamp: "2024-08-16T13:30:00Z",
-          content: "Motor making unusual noise. Technician says it might need replacement."
-        }
-      ]
+     incidentHistory: [
+  {
+    id: "INC-001",
+    type: "Equipment Malfunction",
+    description: "Minor temperature fluctuation detected during peak hours",
+    severity: "Low",
+    reportedBy: "Juan Dela Cruz",
+    reportedAt: "2024-08-20T10:30:00Z",
+    status: "Resolved"
+  }
+]
     }
   ];
 
@@ -184,7 +195,12 @@ export default function Assets() {
     fetchAssets();
   }, []);
 
-  const [remark, setRemark] = useState("");
+  const [showIncidentModal, setShowIncidentModal] = useState(false);
+const [incidentForm, setIncidentForm] = useState({
+  type: "",
+  description: "",
+  severity: "Low"
+});
   
   // Get current user info (keep existing logic)
   const currentUser = {
@@ -193,51 +209,46 @@ export default function Assets() {
     role: localStorage.getItem("userRole"),
   };
 
-  const handleSubmitRemark = async () => {
-    if (remark.trim() === "") return;
+const handleSubmitIncident = async () => {
+  if (!incidentForm.description.trim()) return;
 
-    try {
-      const newRemark = {
-        content: remark.trim(),
-        user: currentUser.name,
-        timestamp: new Date().toISOString(),
-      };
+  try {
+    const newIncident = {
+      id: `INC-${Date.now()}`,
+      type: incidentForm.type,
+      description: incidentForm.description.trim(),
+      severity: incidentForm.severity,
+      reportedBy: currentUser.name,
+      reportedAt: new Date().toISOString(),
+      status: "Open"
+    };
 
-      // TODO: Replace with actual API call
-      // await fetch(`/api/assets/${selectedAsset.id}/remarks`, {
-      //   method: 'POST',
-      //   headers: { 'Content-Type': 'application/json' },
-      //   body: JSON.stringify(newRemark)
-      // });
+    const updatedAssets = assets.map((asset) => {
+      if (asset.id === selectedAsset.id) {
+        return {
+          ...asset,
+          incidentHistory: [...(asset.incidentHistory || []), newIncident],
+        };
+      }
+      return asset;
+    });
 
-      // For now, update local state (this logic will work with backend too)
-      const updatedAssets = assets.map((asset) => {
-        if (asset.id === selectedAsset.id) {
-          return {
-            ...asset,
-            remarks: [...(asset.remarks || []), newRemark],
-          };
-        }
-        return asset;
-      });
+    setAssets(updatedAssets);
+    const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
+    setSelectedAsset(updatedSelectedAsset);
+    
+    setIncidentForm({ type: "", description: "", severity: "Low" });
+    setShowIncidentModal(false);
+  } catch (err) {
+    console.error('Error adding incident:', err);
+  }
+};
 
-      setAssets(updatedAssets);
-      
-      // Update the modal view
-      const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
-      setSelectedAsset(updatedSelectedAsset);
-      
-      setRemark("");
-    } catch (err) {
-      console.error('Error adding remark:', err);
-      // TODO: Show error message to user
-    }
-  };
+const handleCancelIncident = () => {
+  setIncidentForm({ type: "", description: "", severity: "Low" });
+  setShowIncidentModal(false);
+};
 
-  const handleCancelRemark = () => {
-    setRemark("");
-    setSelectedAsset(null);
-  };
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(""); // Changed from categoryFilter
@@ -526,48 +537,141 @@ export default function Assets() {
   </div>
 </div>
 
-                {/* Remarks */}
-                <div>
-                  <h6>Remarks</h6>
-                  {selectedAsset.remarks?.length > 0 ? (
-                    selectedAsset.remarks.map((remark, index) => (
-                      <div key={index} style={{ borderTop: '1px solid #ccc', paddingTop: '1rem', marginTop: '1rem' }}>
-                        <div style={{ fontWeight: '600', color: '#1B4B8F' }}>
-                          👤 {remark.user}
-                        </div>
-                        <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                          📅 {new Date(remark.timestamp).toLocaleString()}
-                        </div>
-                        <div style={{ backgroundColor: '#f9f9f9', padding: '0.75rem', borderRadius: '8px', marginTop: '0.5rem' }}>
-                          {remark.content}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-muted">No remarks yet.</p>
-                  )}
-
-                  {/* Add Remark */}
-                  <Form.Group className="mt-4">
-                    <Form.Label>Leave a remark about this asset:</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={3}
-                      placeholder="Enter your remark..."
-                      value={remark}
-                      onChange={(e) => setRemark(e.target.value)}
-                    />
-                  </Form.Group>
-
-                  <div className="d-flex justify-content-between mt-3">
-                    <Button variant="secondary" onClick={handleCancelRemark}>Cancel</Button>
-                    <Button variant="primary" onClick={handleSubmitRemark}>Submit Remark</Button>
-                  </div>
-                </div>
+               {/* Incident History */}
+<div>
+  <div className="d-flex justify-content-between align-items-center mb-3">
+    <h6>Incident History</h6>
+    <Button 
+      size="sm" 
+      variant="outline-danger"
+      onClick={() => setShowIncidentModal(true)}
+    >
+      Report Incident
+    </Button>
+  </div>
+  
+  {selectedAsset.incidentHistory?.length > 0 ? (
+    selectedAsset.incidentHistory.map((incident, index) => (
+      <div key={index} className="border rounded p-3 mb-3">
+        <div className="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <strong>{incident.type}</strong>
+            <span className={`badge ms-2 ${
+              incident.severity === 'High' ? 'bg-danger' :
+              incident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
+            }`}>
+              {incident.severity}
+            </span>
+          </div>
+          <small className="text-muted">{incident.id}</small>
+        </div>
+        <p className="mb-2">{incident.description}</p>
+        <div className="d-flex justify-content-between">
+          <small className="text-muted">
+            Reported by: {incident.reportedBy}
+          </small>
+          <small className="text-muted">
+            {new Date(incident.reportedAt).toLocaleString()}
+          </small>
+        </div>
+      </div>
+    ))
+  ) : (
+    <p className="text-muted">No incidents reported yet.</p>
+  )}
+</div>
               </Modal.Body>
             </>
           )}
         </Modal>
+{/* Incident Report Modal */}
+<Modal
+  show={showIncidentModal}
+  onHide={() => setShowIncidentModal(false)}
+  centered
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Report Incident</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    {selectedAsset && (
+      <>
+        <Row className="mb-3">
+          <Col md={6}>
+            <Form.Group>
+              <Form.Label>Asset ID</Form.Label>
+              <Form.Control type="text" value={selectedAsset.id} readOnly />
+            </Form.Group>
+          </Col>
+          <Col md={6}>
+            <Form.Group>
+              <Form.Label>Asset Name</Form.Label>
+              <Form.Control type="text" value={selectedAsset.name} readOnly />
+            </Form.Group>
+          </Col>
+        </Row>
+        
+        <Form.Group className="mb-3">
+          <Form.Label>Category</Form.Label>
+          <Form.Control type="text" value={selectedAsset.category} readOnly />
+        </Form.Group>
+
+        <Form.Group className="mb-3">
+          <Form.Label>Incident Type *</Form.Label>
+          <Form.Select
+            value={incidentForm.type}
+            onChange={(e) => setIncidentForm({...incidentForm, type: e.target.value})}
+            required
+          >
+            <option value="">Select incident type...</option>
+            <option value="Equipment Malfunction">Equipment Malfunction</option>
+            <option value="Safety Hazard">Safety Hazard</option>
+            <option value="Damage">Damage</option>
+            <option value="Performance Issue">Performance Issue</option>
+            <option value="Other">Other</option>
+          </Form.Select>
+        </Form.Group>
+
+        <Form.Group className="mb-3">
+          <Form.Label>Severity *</Form.Label>
+          <Form.Select
+            value={incidentForm.severity}
+            onChange={(e) => setIncidentForm({...incidentForm, severity: e.target.value})}
+          >
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+          </Form.Select>
+        </Form.Group>
+
+        <Form.Group className="mb-3">
+          <Form.Label>Description *</Form.Label>
+          <Form.Control
+            as="textarea"
+            rows={4}
+            placeholder="Describe the incident in detail..."
+            value={incidentForm.description}
+            onChange={(e) => setIncidentForm({...incidentForm, description: e.target.value})}
+            required
+          />
+        </Form.Group>
+      </>
+    )}
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={handleCancelIncident}>
+      Cancel
+    </Button>
+    <Button 
+      variant="danger" 
+      onClick={handleSubmitIncident}
+      disabled={!incidentForm.type || !incidentForm.description.trim()}
+    >
+      Report Incident
+    </Button>
+  </Modal.Footer>
+</Modal>
+
       </Container>
     </SidebarLayout>
   );
