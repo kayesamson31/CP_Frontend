@@ -3,62 +3,46 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Container, Row, Col, Button, Nav } from 'react-bootstrap';
 import dashboardlogo from '../assets/OpenFMSLogo.png';
-// Icons
-//import dashvehicle from '../assets/icons/DashCar.png';
-//import dashfacility from '../assets/icons/Dashfacility.png';
-import dashDash from '../assets/icons/DashDash.png';
-import dashnotif from '../assets/icons/DashNotif.png';
-import dashprofile from '../assets/icons/DashProfile.png';
-//import dashvehicleWhite from '../assets/icons/DashCarWhite.png';
-//import dashfacilityWhite from '../assets/icons/DashFacilityWhite.png';
-import dashDashWhite from '../assets/icons/DashDashWhite.png';
-import dashnotifWhite from '../assets/icons/DashNotifWhite.png';
-import dashprofileWhite from '../assets/icons/DashProfileWhite.png';
-import { FaClipboardList, FaUsers, FaFileAlt,FaHistory } from "react-icons/fa";
-
+import 'bootstrap-icons/font/bootstrap-icons.css';
 // Updated menu configuration per role
 const menuConfig = {
   // Standard User navigation
   standard: [
-    { label: 'Dashboard', path: '/dashboard-user', icon: dashDash, iconActive: dashDashWhite },
-    { label: 'Profile', path: '/profile', icon: dashprofile, iconActive: dashprofileWhite },
-    { label: 'Notification', path: '/notification', icon: dashnotif, iconActive: dashnotifWhite },
-    //{label: 'VehicleRequest', path: '/dashboard-user/VehicleRequest', icon: dashvehicle, iconActive: dashvehicleWhite},
-    //{label: 'FacilityRequest', path: '/dashboard-user/FacilityRequest', icon: dashfacility, iconActive: dashfacilityWhite },
+    { label: 'Dashboard', path: '/dashboard-user', icon: 'bi bi-speedometer2' },
+    { label: 'Profile', path: '/profile', icon: 'bi bi-person' },
+    { label: 'Notification', path: '/notification', icon: 'bi bi-bell' },
   ],
 
   // Personnel navigation
   personnel: [
-    { label: 'Dashboard', path: '/dashboard-personnel', icon: dashDash, iconActive: dashDashWhite },
-    { label: 'Profile', path: '/dashboard-personnel/profile', icon: dashprofile, iconActive: dashprofileWhite },
-    { label: 'Notification', path: '/dashboard-personnel/notification', icon: dashnotif, iconActive: dashnotifWhite },
-    { label: 'Assets', path: '/dashboard-personnel/Assets', icon: dashprofile, iconActive: dashprofileWhite }
+    { label: 'Dashboard', path: '/dashboard-personnel', icon: 'bi bi-speedometer2' },
+    { label: 'Profile', path: '/dashboard-personnel/profile', icon: 'bi bi-person' },
+    { label: 'Notification', path: '/dashboard-personnel/notification', icon: 'bi bi-bell' },
+    { label: 'Assets', path: '/dashboard-personnel/Assets', icon: 'bi bi-box-seam' }
   ],
 
   // Admin Official navigation
   admin: [
-    { label: 'Dashboard', path: '/dashboard-admin', icon: dashDash, iconActive: dashDashWhite },
-    { label: 'Profile', path: '/dashboard-admin/profile', icon: dashprofile, iconActive: dashprofileWhite },
-    { label: 'Notification', path: '/dashboard-admin/notification', icon: dashnotif, iconActive: dashnotifWhite },
-    { label: 'Work Order', path: '/dashboard-admin/WorkOrder', icon: <FaClipboardList />, iconActive: <FaClipboardList style={{color: 'white'}} /> },
-    { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
-   // { label: 'Reservation', path: '/dashboard-admin/Reservation', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
-    { label: 'Asset Management', path: '/dashboard-admin/AssetManagement', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
-    { label: 'Activity Tracking', path: '/dashboard-admin/ActivityTracking', icon: <FaHistory />, iconActive: <FaHistory style={{color: 'white'}} /> },
-    { label: 'Reports', path: '/dashboard-admin/reports', icon: <FaFileAlt />, iconActive: <FaFileAlt style={{color: 'white'}} /> }
+    { label: 'Dashboard', path: '/dashboard-admin', icon: 'bi bi-speedometer2' },
+    { label: 'Profile', path: '/dashboard-admin/profile', icon: 'bi bi-person' },
+    { label: 'Notification', path: '/dashboard-admin/notification', icon: 'bi bi-bell' },
+    { label: 'Work Order', path: '/dashboard-admin/WorkOrder', icon: 'bi bi-clipboard-check' },
+    { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: 'bi bi-people' },
+    { label: 'Asset Management', path: '/dashboard-admin/AssetManagement', icon: 'bi bi-box-seam' },
+    { label: 'Activity Tracking', path: '/dashboard-admin/ActivityTracking', icon: 'bi bi-clock-history' },
+    { label: 'Reports', path: '/dashboard-admin/reports', icon: 'bi bi-file-earmark-text' }
   ],
 
   // System Administrator navigation
   sysadmin: [
-    { label: 'Dashboard', path: '/dashboard-sysadmin', icon: dashDash, iconActive: dashDashWhite },
-    { label: 'Notifications', path: '/dashboard-sysadmin/notification', icon: dashnotif, iconActive: dashnotifWhite },
-    { label: 'Profile', path: '/dashboard-sysadmin/profile', icon: dashprofile, iconActive: dashprofileWhite },
-    { label: 'User Management', path: '/dashboard-sysadmin/SysadUserManagement', icon: <FaUsers />, iconActive: <FaUsers style={{color: 'white'}} /> },
-    { label: 'Report Tabs', path: '/dashboard-sysadmin/SysadReports', icon: <FaFileAlt />, iconActive: <FaFileAlt style={{color: 'white'}} /> },
-    { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: <FaHistory />, iconActive: <FaHistory style={{color: 'white'}} /> }
+    { label: 'Dashboard', path: '/dashboard-sysadmin', icon: 'bi bi-speedometer2' },
+    { label: 'Notifications', path: '/dashboard-sysadmin/notification', icon: 'bi bi-bell' },
+    { label: 'Profile', path: '/dashboard-sysadmin/profile', icon: 'bi bi-person' },
+    { label: 'User Management', path: '/dashboard-sysadmin/SysadUserManagement', icon: 'bi bi-people' },
+    { label: 'Report Tabs', path: '/dashboard-sysadmin/SysadReports', icon: 'bi bi-file-earmark-text' },
+    { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: 'bi bi-clock-history' }
   ]
 };
-
 export default function SidebarLayout({ children, role = 'standard' }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -98,20 +82,16 @@ useEffect(() => {
   };
 
   const renderIcon = (tab, isActive) => {
-    // Handle React Icons (components)
-    if (typeof tab.icon === 'object' && tab.icon.type) {
-    return isActive ? tab.iconActive : tab.icon;
-    }
-    
-    // Handle image icons
-    return (
-    <img
-     src={isActive ? tab.iconActive : tab.icon}
-     alt={`${tab.label} icon`}
-     style={{ width: '20px', height: '20px', objectFit: 'contain' }}
+  return (
+    <i 
+      className={tab.icon} 
+      style={{ 
+        fontSize: '18px',
+        color: isActive ? 'white' : '#284C9A'
+      }}
     />
-    );
-  };
+  );
+};
 
   return (
    <Container fluid style={{ backgroundColor: '#FFF', minHeight: '100vh', padding: 0 }}>

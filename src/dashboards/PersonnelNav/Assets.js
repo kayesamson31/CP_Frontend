@@ -224,7 +224,7 @@ const handleSubmitIncident = async () => {
     };
 
     const updatedAssets = assets.map((asset) => {
-      if (asset.id === selectedAsset.id) {
+      if (asset.id === incidentAsset.id) {
         return {
           ...asset,
           incidentHistory: [...(asset.incidentHistory || []), newIncident],
@@ -234,11 +234,12 @@ const handleSubmitIncident = async () => {
     });
 
     setAssets(updatedAssets);
-    const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
+    const updatedSelectedAsset = updatedAssets.find(a => a.id === incidentAsset.id);
     setSelectedAsset(updatedSelectedAsset);
     
     setIncidentForm({ type: "", description: "", severity: "Low" });
     setShowIncidentModal(false);
+    setIncidentAsset(null);  // Clear the stored asset data
   } catch (err) {
     console.error('Error adding incident:', err);
   }
@@ -247,6 +248,7 @@ const handleSubmitIncident = async () => {
 const handleCancelIncident = () => {
   setIncidentForm({ type: "", description: "", severity: "Low" });
   setShowIncidentModal(false);
+  setIncidentAsset(null);  // Clear the stored asset data
 };
 
 
@@ -254,7 +256,7 @@ const handleCancelIncident = () => {
   const [statusFilter, setStatusFilter] = useState(""); // Changed from categoryFilter
   const [categoryFilter, setCategoryFilter] = useState("");
   const [selectedAsset, setSelectedAsset] = useState(null);
-
+  const [incidentAsset, setIncidentAsset] = useState(null);
   // Filtered assets - updated to include status filter
   const filteredAssets = assets.filter(
     (asset) =>
@@ -437,7 +439,7 @@ const handleCancelIncident = () => {
                   <Col md={6}>
                     <Form.Group>
                       <Form.Label><strong>ID:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.id} readOnly />
+                      <Form.Control type="text" value={selectedAsset.id}readOnly />
                     </Form.Group>
                   </Col>
                   <Col md={6}>
@@ -544,7 +546,13 @@ const handleCancelIncident = () => {
     <Button 
       size="sm" 
       variant="outline-danger"
-      onClick={() => setShowIncidentModal(true)}
+      onClick={() => {
+        setIncidentAsset(selectedAsset);  // Store the asset data
+        setSelectedAsset(null);           // Close asset details modal
+        setTimeout(() => {
+          setShowIncidentModal(true);     // Open incident modal
+        }, 100);
+      }}
     >
       Report Incident
     </Button>
@@ -594,26 +602,26 @@ const handleCancelIncident = () => {
     <Modal.Title>Report Incident</Modal.Title>
   </Modal.Header>
   <Modal.Body>
-    {selectedAsset && (
+    {incidentAsset && (
       <>
         <Row className="mb-3">
           <Col md={6}>
             <Form.Group>
               <Form.Label>Asset ID</Form.Label>
-              <Form.Control type="text" value={selectedAsset.id} readOnly />
+              <Form.Control type="text" value={incidentAsset.id} readOnly />
             </Form.Group>
           </Col>
           <Col md={6}>
             <Form.Group>
               <Form.Label>Asset Name</Form.Label>
-              <Form.Control type="text" value={selectedAsset.name} readOnly />
+              <Form.Control type="text" value={incidentAsset.name} readOnly />
             </Form.Group>
           </Col>
         </Row>
         
         <Form.Group className="mb-3">
           <Form.Label>Category</Form.Label>
-          <Form.Control type="text" value={selectedAsset.category} readOnly />
+          <Form.Control type="text" value={incidentAsset.category} readOnly />
         </Form.Group>
 
         <Form.Group className="mb-3">

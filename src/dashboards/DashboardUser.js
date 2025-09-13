@@ -1,17 +1,11 @@
 import SidebarLayout from '../Layouts/SidebarLayout';
 import { useState } from 'react';
 import { Container, Row, Col, Button, Form, Badge, Card, InputGroup, FormControl, Modal } from 'react-bootstrap';
-import toreview from '../assets/icons/ToReview.png';
-import pending from '../assets/icons/Pending.png';
-import inprogress from '../assets/icons/InProgress.png';
-import completed from '../assets/icons/Completed.png';
-import rejected from '../assets/icons/Rejected.png';
-import failed from '../assets/icons/Failed.png';
-import cancelled from '../assets/icons/Cancelled.png';
+
 
 export default function DashboardUser() {
   const [selectedStatus, setSelectedStatus] = useState('All');
-  const [selectedPriority, ] = useState('All');
+  const [selectedPriority, setSelectedPriority] = useState('All');
   const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
   const getStatusCounts = () => {
   const defaultStatuses = ['To Review', 'Pending', 'In Progress', 'Completed', 'Rejected', 'Failed', 'Cancelled'];
@@ -24,19 +18,20 @@ return defaultStatuses.map(status => ({
   }));
   };
 
+const [searchTerm, setSearchTerm] = useState(''); 
 
 const getStatusIcon = (status) => {
   switch (status) {
-   case 'To Review': return toreview;
-   case 'Pending': return pending;
-   case 'In Progress': return inprogress;
-   case 'Completed': return completed;
-   case 'Rejected': return rejected;
-   case 'Failed': return failed;
-   case 'Cancelled': return cancelled;
-  default: return '';
-    }
-    };
+    case 'To Review': return 'bi bi-eye';
+    case 'Pending': return 'bi bi-clock';
+    case 'In Progress': return 'bi bi-gear';
+    case 'Completed': return 'bi bi-check-circle';
+    case 'Rejected': return 'bi bi-x-circle';
+    case 'Failed': return 'bi bi-exclamation-triangle';
+    case 'Cancelled': return 'bi bi-dash-circle';
+    default: return 'bi bi-question-circle';
+  }
+};
 
 const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
 const [showDetailsModal, setShowDetailsModal] = useState(false);
@@ -66,11 +61,16 @@ const priorities = [
   ];
 
 const [historyData, setHistoryData] = useState([]); // start empty
+
 const filteredHistory = historyData.filter(item => {
 const statusMatch = selectedStatus === 'All' || item.status === selectedStatus;
 const priorityMatch = selectedPriority === 'All' || item.priority === selectedPriority;
-  return statusMatch && priorityMatch;
-    });
+const searchMatch = searchTerm === '' || 
+  item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  item.location.toLowerCase().includes(searchTerm.toLowerCase());
+  return statusMatch && priorityMatch && searchMatch;
+});
 
 const handleAddWorkOrder = () => {
 const errors = {};
@@ -181,68 +181,158 @@ return (
 {/* Status Cards */}
 
  <Row className="w-100">
- <Row className="mb-4">
-{getStatusCounts().map((status) => (
-<Col md={3} sm={6} xs={12} key={status.label} className="mb-3">
-<Card
-  style={{
-    backgroundColor: status.color,
-    cursor: 'pointer',
-    color: '#04172AFF',
-    minHeight: '90px',
-    boxShadow: '0 3px 8px #ECEBF0',
-    borderRadius: '12px',
-    border: selectedStatus === status.label
-    ? '3px solid #337FCA' // active card border
-    : '2px solid #ECEBF0', // default border (light gray)
-    transition: 'transform 0.2s ease-in-out',
-           }}
-    onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.03)'}
-    onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-    onClick={() => { setSelectedStatus(status.label); }}
-    >
-
-    <Card.Body className="d-flex align-items-center justify-content-between p-3">
-    <div style={{ transform: 'translateX(20px)' }}>
-   <h6 style={{ margin: 0, fontSize: '20px' }}>{status.label}</h6>
-   <small>{status.count > 0 ? `${status.count} items` : 'No requests'}</small>
-   </div>
-
-  <div style={{ paddingRight: '40px' }}>
-  <img src={status.icon} alt={status.label} style={{ width: '35px', height: '35px' }} />
+{/* Status Tabs */}
+<div className="mb-4" style={{ 
+  display: 'flex', 
+  backgroundColor: '#f8f9fa', 
+  borderRadius: '50px', 
+  padding: '8px',
+  gap: '4px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+}}>
+  {/* Add "All" tab first */}
+  <div
+    style={{
+  flex: 1,
+  padding: '12px 16px',
+  textAlign: 'center',
+  cursor: 'pointer',
+  borderRadius: '25px',
+  transition: 'all 0.3s ease',
+  backgroundColor: selectedStatus === 'All' ? '#284CFF' : '#ffffff',
+  color: selectedStatus === 'All' ? 'white' : '#495057',
+  fontSize: '14px',
+  fontWeight: selectedStatus === 'All' ? '700' : '500',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '8px',
+  border: selectedStatus === 'All' ? '2px solid #284CFF' : '0.2px solid #ECEBF0',
+  boxShadow: selectedStatus === 'All' ? '0 4px 12px rgba(40, 76, 255, 0.2)' : '0 2px 4px rgba(0,0,0,0.05)'
+}}
+    onClick={() => setSelectedStatus('All')}
+  >
+    <span>All</span>
+    <span style={{
+      backgroundColor: selectedStatus === 'All' ? 'rgba(255,255,255,0.2)' : '#EFEAE9FF',
+      color: selectedStatus === 'All' ? 'white' : '#666',
+      padding: '2px 8px',
+      borderRadius: '12px',
+      fontSize: '12px',
+      fontWeight: '600'
+    }}>
+      {historyData.length}
+    </span>
   </div>
-  </Card.Body>
-  </Card>
-  </Col>
-  ))}
- </Row>
-               
-{/* Priority Level Text Aligned to Right */}
 
-  <div className="d-flex justify-content-end mb-2">
-    <span
+  {getStatusCounts().map((status) => (
+    <div
+      key={status.label}
+     style={{
+  flex: 1,
+  padding: '12px 16px',
+  textAlign: 'center',
+  cursor: 'pointer',
+  borderRadius: '25px',
+  transition: 'all 0.3s ease',
+  backgroundColor: selectedStatus === status.label ? '#284CFF' : '#ffffff',
+  color: selectedStatus === status.label ? 'white' : '#495057',
+  fontSize: '14px',
+  fontWeight: selectedStatus === status.label ? '700' : '500',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: '8px',
+  border: selectedStatus === status.label ? '2px solid #284CFF' : '0.2px solid #ECEBF0',
+  boxShadow: selectedStatus === status.label ? '0 4px 12px rgba(40, 76, 255, 0.2)' : '0 2px 4px rgba(0,0,0,0.05)'
+}}
+      onClick={() => setSelectedStatus(status.label)}
+    >
+    <i 
+  className={status.icon}
+  style={{ 
+  fontSize: '16px',
+  color: selectedStatus === status.label ? 'white' : '#495057'
+}}
+/>
+      <span>{status.label}</span>
+      <span style={{
+        backgroundColor: selectedStatus === status.label ? 'rgba(255,255,255,0.2)' : '#e9ecef',
+        color: selectedStatus === status.label ? 'white' : '#666',
+        padding: '2px 8px',
+        borderRadius: '12px',
+        fontSize: '12px',
+        fontWeight: '600'
+      }}>
+        {status.count}
+      </span>
+    </div>
+  ))}
+</div>
+               
+{/* Search and Filter Section */}
+<div className="d-flex align-items-center mb-3" style={{ gap: '15px', width: '100%' }}>
+  
+  <div style={{ flex: '0 1 400px' }}>
+    <Form.Control
+      type="text"
+      placeholder="Search assets by name, ID, or assignee..."
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
       style={{
+        borderRadius: '8px',
+        border: '1px solid #E6DEE0FF',
+        padding: '12px 16px',
+        fontSize: '14px',
+        backgroundColor: '#ffffff'
+      }}
+    />
+  </div>
+  
+  {/* Priority Filter - compact */}
+<Form.Select 
+  value={selectedPriority}
+  onChange={(e) => setSelectedPriority(e.target.value)}
+  style={{ 
+    width: '160px',
+    borderRadius: '8px',
+    border: '1px solid #dee2e6',
+    fontSize: '14px',
+    backgroundColor: '#ffffff',
+    padding: '12px 16px'
+  }}
+>
+    <option value="All">All Priority</option>
+    <option value="Low">Low</option>
+    <option value="Medium">Medium</option>
+    <option value="High">High</option>
+  </Form.Select>
+
+  {/* Priority Level Link - compact */}
+  <div style={{ width: '120px' }}>
+  <span
+    style={{
       color: '#284CFF',
       textDecoration: 'underline',
       cursor: 'pointer',
-      fontWeight: '600'
-                                  }}
-                          onClick={() => setShowPriorityModal(true)}
-                          >
-                            Priority Level
-                          </span>
-                          </div>
+      fontWeight: '600',
+      whiteSpace: 'nowrap',
+      fontSize: '14px'
+    }}
+    onClick={() => setShowPriorityModal(true)}
+  >
+    Priority Level
+  </span>
+</div>
 
-                                                   {/* History Section */}
-                        <Card className="shadow-sm">
-                          <Card.Body>
-                            <div className="d-flex justify-content-between align-items-center mb-3">
-                            <h5 style={{color: '#284386' }}>History</h5>
-                          <InputGroup style={{ width: '250px' }}>
-                            <FormControl placeholder="Search..." />
-                            <Button variant="outline-secondary">Go</Button>
-                          </InputGroup>
-                            </div>
+</div>
+
+{/* History Section */}
+<Card className="shadow-sm">
+  <Card.Body>
+    <div className="mb-3">
+      <h5 style={{color: '#284386' }}>History</h5>
+    </div>
                     
                 <table className="table table-hover align-middle mb-0 ">
                   <thead style={{ backgroundColor: '#284C9A', color: 'white' }}>

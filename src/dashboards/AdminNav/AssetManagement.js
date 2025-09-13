@@ -32,6 +32,8 @@ const [personnel] = useState([
   { id: "PER-006", name: "Lisa Fernandez", department: "Facilities", email: "lisa.fernandez@company.com" }
 ]);
 
+const [previousAsset, setPreviousAsset] = useState(null);
+
 const [predefinedTasks] = useState([
   'Check-up / Inspection',
   'Cleaning',
@@ -301,7 +303,9 @@ const [newTask, setNewTask] = useState({
     }
   ];
 const handleViewIncidentDetails = (incident) => {
+  setPreviousAsset(selectedAsset); // Store the current asset
   setSelectedIncident(incident);
+  setSelectedAsset(null); // Close the Asset Details modal
   setShowIncidentDetailsModal(true);
 };
 
@@ -312,6 +316,7 @@ const handleAssignIncidentTask = () => {
   });
   setShowIncidentDetailsModal(false);
   setShowAssignTaskModal(true);
+  // Don't reset previousAsset here so user can return to asset details later
 };
 
 const handleDismissIncident = async () => {
@@ -399,6 +404,7 @@ const handleSubmitIncidentTask = async () => {
     alert('Please fill in required fields.');
   }
 };
+
   // Mock function to simulate API call - replace with actual API call later
   const fetchAssets = async () => {
     try {
@@ -1878,23 +1884,34 @@ const handleCreateTask = async () => {
       </>
     )}
   </Modal.Body>
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowIncidentDetailsModal(false)}>
-      Close
-    </Button>
-    {selectedIncident?.status === 'Open' && (
-      <>
-        <Button variant="warning" onClick={handleAssignIncidentTask}>
-          <i className="fas fa-tasks me-2"></i>
-          Assign as Maintenance Task
-        </Button>
-        <Button variant="outline-danger" onClick={handleDismissIncident}>
-          <i className="fas fa-times me-2"></i>
-          Dismiss Incident
-        </Button>
-      </>
-    )}
-  </Modal.Footer>
+<Modal.Footer>
+  <Button variant="outline-secondary" onClick={() => {
+    setShowIncidentDetailsModal(false);
+    setSelectedAsset(previousAsset); // Reopen the Asset Details modal
+    setPreviousAsset(null);
+  }}>
+    <i className="fas fa-arrow-left me-2"></i>
+    Back to Asset Details
+  </Button>
+  <Button variant="secondary" onClick={() => {
+    setShowIncidentDetailsModal(false);
+    setPreviousAsset(null);
+  }}>
+    Close
+  </Button>
+  {selectedIncident?.status === 'Open' && (
+    <>
+      <Button variant="warning" onClick={handleAssignIncidentTask}>
+        <i className="fas fa-tasks me-2"></i>
+        Assign as Maintenance Task
+      </Button>
+      <Button variant="outline-danger" onClick={handleDismissIncident}>
+        <i className="fas fa-times me-2"></i>
+        Dismiss Incident
+      </Button>
+    </>
+  )}
+</Modal.Footer>
 </Modal>
 
 {/* Assign Incident Task Modal */}
@@ -1969,9 +1986,12 @@ const handleCreateTask = async () => {
     )}
   </Modal.Body>
   <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowAssignTaskModal(false)}>
-      Cancel
-    </Button>
+<Button variant="secondary" onClick={() => {
+  setShowAssignTaskModal(false);
+  setPreviousAsset(null);
+}}>
+  Cancel
+</Button>
     <Button variant="primary" onClick={handleSubmitIncidentTask}>
       <i className="fas fa-tasks me-2"></i>
       Assign Task
