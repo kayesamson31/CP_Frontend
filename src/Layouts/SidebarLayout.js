@@ -87,7 +87,7 @@ useEffect(() => {
       className={tab.icon} 
       style={{ 
         fontSize: '18px',
-        color: isActive ? 'white' : '#284C9A'
+        color: isActive ? 'white' : '#000000FF'
       }}
     />
   );

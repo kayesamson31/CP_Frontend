@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Button, Card, Badge, ListGroup } from 'react-bootstrap';
+import { Container, Row, Col, Button, Card, ListGroup } from 'react-bootstrap';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -85,7 +85,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 6,
           title: "New Work Order Request Received",
           message: "A new work order request #WO-2024-006 has been submitted by Jane Smith for printer maintenance.",
-          status: "New Request",
+          status: "To Review",
           workOrderId: "WO-2024-006",
           timestamp: new Date(baseTimestamp - 30 * 60 * 1000).toISOString(),
           isRead: false,
@@ -113,7 +113,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 8,
           title: "Task In Progress with Extended Due Date",
           message: "Personnel has extended the due date for work order #WO-2024-008. New expected completion: Tomorrow.",
-          status: "In Progress - Extended",
+          status: "In Progress",
           workOrderId: "WO-2024-008",
           timestamp: new Date(baseTimestamp - 4 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -126,7 +126,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 9,
           title: "Asset Maintenance Remarks",
           message: "Personnel provided remarks for asset maintenance #AM-2024-001: 'Equipment requires part replacement'",
-          status: "Remarks Added",
+          status: "Completed",
           workOrderId: "AM-2024-001",
           timestamp: new Date(baseTimestamp - 6 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -139,7 +139,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 10,
           title: "Overdue Task Alert",
           message: "Work order #WO-2024-009 assigned to Personnel is now overdue by 2 days.",
-          status: "Overdue",
+          status: "Failed",
           workOrderId: "WO-2024-009",
           timestamp: new Date(baseTimestamp - 8 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -155,7 +155,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 11,
           title: "New Work Order Assignment",
           message: "You have been assigned a new work order #WO-2024-011 for electrical repair in Conference Room A.",
-          status: "Assigned",
+          status: "Pending",
           workOrderId: "WO-2024-011",
           timestamp: new Date(baseTimestamp - 1 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -168,7 +168,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 12,
           title: "Asset Maintenance Assignment",
           message: "You have been assigned asset maintenance #AM-2024-002 for HVAC system inspection in Building B.",
-          status: "Assigned",
+          status: "Pending",
           workOrderId: "AM-2024-002",
           timestamp: new Date(baseTimestamp - 3 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -181,7 +181,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 13,
           title: "High Priority Assignment",
           message: "URGENT: You have been assigned a high-priority work order #WO-2024-013 for emergency plumbing repair.",
-          status: "Assigned - Urgent",
+          status: "Pending",
           workOrderId: "WO-2024-013",
           timestamp: new Date(baseTimestamp - 15 * 60 * 1000).toISOString(),
           isRead: false,
@@ -197,7 +197,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 14,
           title: "Database Connection Error",
           message: "Critical system error detected: Database connection timeout in Work Order module at 14:30.",
-          status: "Critical Error",
+          status: "Failed",
           workOrderId: "SYS-2024-001",
           timestamp: new Date(baseTimestamp - 30 * 60 * 1000).toISOString(),
           isRead: false,
@@ -211,7 +211,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 15,
           title: "API Service Down",
           message: "System alert: Notification service API is experiencing downtime. User notifications may be delayed.",
-          status: "Service Down",
+          status: "Failed",
           workOrderId: "SYS-2024-002",
           timestamp: new Date(baseTimestamp - 2 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -225,7 +225,7 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
           id: 16,
           title: "System Performance Warning",
           message: "Warning: Server CPU usage has exceeded 85% for the past 15 minutes. Consider scaling resources.",
-          status: "Performance Warning",
+          status: "To Review",
           workOrderId: "SYS-2024-003",
           timestamp: new Date(baseTimestamp - 4 * 60 * 60 * 1000).toISOString(),
           isRead: false,
@@ -241,64 +241,19 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
     return notificationTemplates[role] || [];
   };
 
-  // Get badge color based on status and role
-  const getBadgeColor = (status, priority, category) => {
-    if (priority === 'critical') return '#DC3545';
-    if (priority === 'high') return '#FD7E14';
-    
-    const colorMap = {
-      'Pending': '#FFC107',
-      'Approved': '#28A745',
-      'Rejected': '#DC3545',
-      'In Progress': '#007BFF',
-      'In Progress - Extended': '#17A2B8',
-      'Completed': '#28A745',
-      'Failed': '#DC3545',
-      'New Request': '#6F42C1',
-      'Assigned': '#007BFF',
-      'Assigned - Urgent': '#DC3545',
-      'Overdue': '#DC3545',
-      'Remarks Added': '#17A2B8',
-      'Critical Error': '#DC3545',
-      'Service Down': '#FD7E14',
-      'Performance Warning': '#FFC107'
+  // Get text color class based on status
+  const getStatusTextClass = (status) => {
+    const statusColorMap = {
+      'To Review': 'text-warning',
+      'Pending': 'text-info', 
+      'In Progress': 'text-primary',
+      'Completed': 'text-success',
+      'Failed': 'text-danger',
+      'Rejected': 'text-secondary',
+      'Cancelled': 'text-dark'
     };
     
-    return colorMap[status] || '#6C757D';
-  };
-
-  // Get icon based on category and status
-  const getNotificationIcon = (category, status, isRead) => {
-    if (isRead) return '📖';
-    
-    const iconMap = {
-      work_order: {
-        'Pending': '⏳',
-        'Approved': '✅',
-        'Rejected': '❌',
-        'In Progress': '🔧',
-        'In Progress - Extended': '🔧⏱️',
-        'Completed': '✅',
-        'Failed': '❌',
-        'New Request': '📋',
-        'Assigned': '📋',
-        'Assigned - Urgent': '🚨',
-        'Overdue': '⚠️'
-      },
-      asset_maintenance: {
-        'Assigned': '🔧',
-        'Remarks Added': '📝',
-        default: '🛠️'
-      },
-      system_error: {
-        'Critical Error': '🔴',
-        'Service Down': '⚠️',
-        'Performance Warning': '🟡',
-        default: '⚙️'
-      }
-    };
-    
-    return iconMap[category]?.[status] || iconMap[category]?.default || '📄';
+    return statusColorMap[status] || 'text-muted';
   };
 
   // Add this new useEffect after the existing one
@@ -398,8 +353,7 @@ useEffect(() => {
               <Card.Body className="p-0">
                 {notifications.length === 0 ? (
                   <div className="text-center py-5">
-                    <div style={{ fontSize: '3rem', marginBottom: '20px' }}>🔔</div>
-                    <h5 style={{ color: '#6C757D' }}>No notifications yet</h5>
+                    <h5 style={{ color: '#6C757D', marginBottom: '10px' }}>No notifications yet</h5>
                     <p className="text-muted">You'll see notifications here when there are updates relevant to your role.</p>
                   </div>
                 ) : (
@@ -411,82 +365,65 @@ useEffect(() => {
                         onClick={() => handleNotificationClick(notification)}
                         style={{
                           backgroundColor: notification.isRead ? 'transparent' : '#F8F9FA',
-                          borderLeft: notification.isRead ? 'none' : `4px solid ${getBadgeColor(notification.status, notification.priority, notification.category)}`,
+                          borderLeft: notification.isRead ? 'none' : `3px solid #007BFF`,
                           cursor: 'pointer',
-                          padding: '20px',
+                          padding: '12px 20px',
                           width: '100%',
                           boxSizing: 'border-box'
                         }}
                         className="border-0 border-bottom"
                       >
-                        <div className="d-flex align-items-start">
-                          <div
-                            style={{
-                              width: '40px',
-                              height: '40px',
-                              backgroundColor: notification.isRead ? '#E9ECEF' : getBadgeColor(notification.status, notification.priority, notification.category),
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              marginRight: '15px',
-                              fontSize: '1.2rem'
-                            }}
-                          >
-                            {getNotificationIcon(notification.category, notification.status, notification.isRead)}
-                          </div>
-
+                        <div className="d-flex align-items-center justify-content-between">
                           <div className="flex-grow-1">
                             <div className="d-flex justify-content-between align-items-start mb-1">
                               <h6 className="mb-1"
                                 style={{ 
                                   fontWeight: notification.isRead ? '500' : '600',
-                                  color: notification.isRead ? '#6C757D' : '#000'
+                                  color: notification.isRead ? '#6C757D' : '#000',
+                                  fontSize: '0.95rem'
                                 }}>
                                 {notification.title}
                               </h6>
-                              <small className="text-muted">
+                              <small className="text-muted" style={{ fontSize: '0.8rem' }}>
                                 {formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true })}
                               </small>
                             </div>
 
                             <p className="mb-2" 
                               style={{ 
-                                color: notification.isRead ? '#6C757D' : '#000',
-                                fontSize: '0.9rem',
-                                lineHeight: '1.4'
+                                color: notification.isRead ? '#6C757D' : '#495057',
+                                fontSize: '0.85rem',
+                                lineHeight: '1.4',
+                                marginBottom: '8px'
                               }}>
                               {notification.message}
                             </p>
 
-                            <div className="d-flex align-items-center gap-2">
-                              <Badge 
-                                style={{ 
-                                  backgroundColor: getBadgeColor(notification.status, notification.priority, notification.category),
-                                  fontSize: '0.75rem'
-                                }}>
+                            <div className="d-flex align-items-center gap-3">
+                              <span 
+                                className={`fw-bold ${getStatusTextClass(notification.status)}`}
+                                style={{ fontSize: '0.8rem' }}>
                                 {notification.status}
-                              </Badge>
-                              <small className="text-muted">#{notification.workOrderId}</small>
+                              </span>
+                              <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                                #{notification.workOrderId}
+                              </small>
                               {notification.priority === 'high' || notification.priority === 'critical' ? (
-                                <Badge bg="danger" style={{ fontSize: '0.7rem' }}>
+                                <span className="text-danger fw-bold" style={{ fontSize: '0.75rem' }}>
                                   {notification.priority.toUpperCase()}
-                                </Badge>
+                                </span>
                               ) : null}
-                              {notification.notifiedBy && (
-                                <small className="text-muted">by {notification.notifiedBy}</small>
-                              )}
                             </div>
                           </div>
 
                           {!notification.isRead && (
                             <div
                               style={{
-                                width: '8px',
-                                height: '8px',
-                                backgroundColor: getBadgeColor(notification.status, notification.priority, notification.category),
+                                width: '6px',
+                                height: '6px',
+                                backgroundColor: '#007BFF',
                                 borderRadius: '50%',
-                                marginLeft: '10px'
+                                marginLeft: '15px'
                               }}
                             />
                           )}
