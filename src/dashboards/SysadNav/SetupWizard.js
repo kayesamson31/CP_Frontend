@@ -1,48 +1,181 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Upload, Download, Users, Building2, Database, CheckCircle, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../supabaseClient';
+
+// 1️⃣ Helper: parse CSV into JSON
+const parseCSV = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const rows = text.split("\n").map(r => r.trim()).filter(r => r.length > 0);
+      const headers = rows[0].split(",").map(h => h.trim());
+      const data = rows.slice(1).map(row => {
+        const values = row.split(",").map(v => v.trim());
+        return headers.reduce((obj, h, i) => {
+          obj[h] = values[i] || "";
+          return obj;
+        }, {});
+      });
+      resolve(data);
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsText(file);
+  });
+};
+
+// 2️⃣ Helper: insert users into Supabase
+const importUsers = async (file, roleMap, orgData) => {
+  try {
+    const rows = await parseCSV(file);
+
+    const inserts = rows.map(r => ({
+      username: r.Email.split("@")[0],
+      full_name: r.Name,
+      email: r.Email,
+      role_id: roleMap[r.Role] || 4, // fallback to Standard user
+      user_status: r.Status.toLowerCase() === "active" ? "active" : "inactive",
+      password_hash: null,
+      auth_uid: null, 
+      organization_id: orgData.organization_id
+    }));
+
+    const { error } = await supabase.from("users").insert(inserts);
+    if (error) throw error;
+
+    console.log(`✅ Imported ${inserts.length} users`);
+  } catch (err) {
+    console.error("User import failed:", err.message);
+    alert("❌ User import failed: " + err.message);
+  }
+};
+
+// 3️⃣ Helper: insert assets into Supabase (FIXED VERSION)
+const importAssets = async (file, orgData) => {
+  try {
+    const rows = await parseCSV(file);
+
+    // Step 1: Get unique categories from CSV
+    const uniqueCategories = [...new Set(rows.map(r => r.Category))];
+    
+    // Step 2: Insert categories (ignore duplicates)
+    const categoryInserts = uniqueCategories.map(cat => ({
+      category_name: cat
+    }));
+
+    const { error: categoryError } = await supabase
+      .from("asset_categories")
+      .upsert(categoryInserts, { 
+        onConflict: 'category_name',
+        ignoreDuplicates: true 
+      });
+    
+    if (categoryError) {
+      console.error("Category insert error:", categoryError);
+    }
+
+    // Step 3: Get all categories with their IDs
+    const { data: categories, error: fetchError } = await supabase
+      .from("asset_categories")
+      .select("category_id, category_name");
+    
+    if (fetchError) throw fetchError;
+
+    // Step 4: Create category name to ID mapping
+    const categoryMap = {};
+    categories.forEach(cat => {
+      categoryMap[cat.category_name] = cat.category_id;
+    });
+
+    // Step 5: Insert assets with correct category_id
+    const assetInserts = rows.map(r => ({
+      asset_code: r["Asset Name"],
+      asset_category_id: categoryMap[r.Category], // Use category_id instead of category_name
+      asset_status: r.Status.toLowerCase(), // Use asset_status instead of status
+      location: r.Location,
+    }));
+
+    const { error: assetError } = await supabase
+      .from("assets")
+      .upsert(assetInserts, { 
+        onConflict: 'asset_code',
+        ignoreDuplicates: true 
+      });
+    
+    if (assetError) throw assetError;
+
+    console.log(`✅ Imported ${assetInserts.length} assets`);
+  } catch (err) {
+    console.error("Asset import failed:", err.message);
+    alert("❌ Asset import failed: " + err.message);
+  }
+};
+
+const getRoleMap = async () => {
+  try {
+    const { data: roles, error } = await supabase
+      .from("roles")
+      .select("role_id, role_name");
+    
+    if (error) throw error;
+    
+    // Create mapping from role names to IDs
+    const roleMap = {};
+    roles.forEach(role => {
+      // Map various role name variations to role_id
+      if (role.role_name.toLowerCase().includes('system') || role.role_name.toLowerCase().includes('admin')) {
+        roleMap['system admin'] = role.role_id;
+        roleMap['System admin'] = role.role_id;
+        roleMap['Admin official'] = role.role_id;
+        roleMap['admin official'] = role.role_id;
+      } else if (role.role_name.toLowerCase().includes('personnel')) {
+        roleMap['Personnel'] = role.role_id;
+        roleMap['personnel'] = role.role_id;
+      } else if (role.role_name.toLowerCase().includes('standard') || role.role_name.toLowerCase().includes('user')) {
+        roleMap['Standard user'] = role.role_id;
+        roleMap['standard user'] = role.role_id;
+      }
+    });
+    
+    return roleMap;
+  } catch (err) {
+    console.error("Error fetching roles:", err);
+    // Fallback role mapping based on typical role IDs
+    return {
+      'system admin': 1,
+      'System admin': 1, 
+      'Admin official': 2,
+      'admin official': 2,
+      'Personnel': 3,
+      'personnel': 3,
+      'Standard user': 4,
+      'standard user': 4
+    };
+  }
+};
 
 export default function SetupWizard() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   
   // Get org data from signup if available
-  const getInitialOrgData = () => {
-    try {
-      const savedOrgData = localStorage.getItem('orgDataFromSignup');
-      if (savedOrgData) {
-        const parsed = JSON.parse(savedOrgData);
-        return {
-          name: parsed.name || '',
-          email: parsed.email || '',
-          phone: parsed.phone || '',
-          address: parsed.address || '',
-          orgType: parsed.orgType || '',
-          country: parsed.country || '',
-          website: parsed.website || '',
-          contactPerson: parsed.contactPerson || '',
-          contactEmail: parsed.contactEmail || '',
-          password: '',
-          confirmPassword: ''
-        };
-      }
-    } catch (error) {
-      console.log('No saved org data found');
-    }
-    return {
-      name: '',
-      email: '',
-      phone: '',
-      address: '',
-      orgType: '',
-      country: '',
-      website: '',
-      contactPerson: '',
-      contactEmail: '',
-      password: '',
-      confirmPassword: ''
-    };
+ const getInitialOrgData = () => {
+  // Will be populated by useEffect from user metadata
+  return {
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    orgType: '',
+    country: '',
+    website: '',
+    contactPerson: '',
+    contactEmail: '',
+    password: '',
+    confirmPassword: ''
   };
+};
 
   const [orgData, setOrgData] = useState(getInitialOrgData());
   const [userImportMethod, setUserImportMethod] = useState(''); // Add this missing state
@@ -60,6 +193,67 @@ export default function SetupWizard() {
     assets: false
   });
   const totalSteps = 4;
+
+useEffect(() => {
+  const loadUserData = async () => {
+    console.log('=== LOADING USER DATA ===');
+    const { data, error } = await supabase.auth.getUser();
+    
+    if (error) {
+      console.error('Error getting user:', error);
+      navigate('/login');
+      return;
+    }
+
+    if (!data.user) {
+      console.log('No authenticated user found');
+      navigate('/signup');
+      return;
+    }
+
+    const user = data.user;
+    console.log('User found:', user.email);
+
+    // Check if email is confirmed
+    if (!user.email_confirmed_at) {
+      alert('Please confirm your email first before proceeding with setup.');
+      return;
+    }
+
+    // Get org data from user metadata
+    const orgData = user.user_metadata?.org_data;
+    const fullName = user.user_metadata?.full_name;
+    
+    if (orgData) {
+      console.log('Loading org data from metadata:', orgData);
+      
+      setOrgData(prev => ({
+        ...prev,
+        name: orgData.orgName || '',
+        orgType: orgData.orgType || '',
+        country: orgData.country || '',
+        website: orgData.website || '',
+        address: orgData.address || '',
+        contactPerson: orgData.contactPerson || fullName || '',
+        contactEmail: user.email || '',
+        phone: orgData.phone || ''
+      }));
+    } else {
+      console.log('No org data in metadata, using basic user info');
+      
+      // Fallback: set basic user info
+      setOrgData(prev => ({
+        ...prev,
+        contactEmail: user.email || '',
+        contactPerson: fullName || user.email.split('@')[0] || ''
+      }));
+    }
+    
+    console.log('=========================');
+  };
+
+  loadUserData();
+}, [navigate]);
 
   const handleNext = () => {
     if (currentStep < totalSteps) {
@@ -133,15 +327,15 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
   };
 
   const isSetupComplete = () => {
-    const usersComplete = !skippedSteps.heads && uploadedFiles.heads &&
-                         !skippedSteps.personnel && uploadedFiles.personnel &&
-                         !skippedSteps.standardUsers && uploadedFiles.standardUsers;
-    
-    const assetsComplete = !skippedSteps.assets && uploadedFiles.assets;
-    
-    return usersComplete && assetsComplete && orgData.name && orgData.email;
-  };
-
+  const usersComplete = !skippedSteps.heads && uploadedFiles.heads &&
+                       !skippedSteps.personnel && uploadedFiles.personnel &&
+                       !skippedSteps.standardUsers && uploadedFiles.standardUsers;
+  
+  const assetsComplete = !skippedSteps.assets && uploadedFiles.assets;
+  
+  // CHANGE THIS LINE: orgData.email -> orgData.contactEmail
+  return usersComplete && assetsComplete && orgData.name && orgData.contactEmail;
+};
   const getUserImportMethodDisplay = () => {
     if (skippedSteps.heads && skippedSteps.personnel && skippedSteps.standardUsers) {
       return 'Skipped';
@@ -414,7 +608,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
                 backgroundColor: '#f8f9fa'
               }}
               placeholder="admin@organization.com"
-              value={orgData.email || ''}
+              value={orgData.contactEmail || ''} 
               readOnly
             />
           </div>
@@ -685,6 +879,8 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
   );
 
   const renderStep4 = () => (
+
+    
     <div className="container" style={{ maxWidth: '800px' }}>
       <div className="text-center mb-5">
         <div 
@@ -757,7 +953,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
             { label: 'Website:', value: orgData.website || 'Not specified' },
             { label: 'Address:', value: orgData.address || 'Not specified' },
             { label: 'Phone:', value: orgData.phone || 'Not specified' },
-            { label: 'Admin Email:', value: orgData.email || 'Not specified' }
+            { label: 'Admin Email:', value: orgData.contactEmail || 'Not specified' }
           ].map((item, index) => (
             <div key={index} className="d-flex justify-content-between align-items-center py-3 border-bottom" style={{ borderColor: styles.lightColor }}>
               <span className="fw-medium text-muted">{item.label}</span>
@@ -879,76 +1075,98 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
                 </button>
               ) : (
                 <button
-                  onClick={() => {
-                    // Read uploaded CSV files and store their content
-                    const processFileContent = (file, callback) => {
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (e) => callback(e.target.result);
-                        reader.readAsText(file);
-                      } else {
-                        callback(null);
-                      }
-                    };
+onClick={async () => {
+  try {
+    // Get current user (instead of creating new one)
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Please log in again');
+    }
 
-                    // Process all user files
-                    processFileContent(uploadedFiles.heads, (headsContent) => {
-                      processFileContent(uploadedFiles.personnel, (personnelContent) => {
-                        processFileContent(uploadedFiles.standardUsers, (standardUsersContent) => {
-                          // Process assets file
-                          processFileContent(uploadedFiles.assets, (assetsContent) => {
-                            // Save setup wizard data for dashboard
-                            const setupData = {
-                              completed: isSetupComplete(),
-                              skippedSteps: skippedSteps,
-                              userImportMethod: userImportMethod,
-                              assetImportMethod: assetImportMethod,
-                              uploadedFiles: {
-                                heads: uploadedFiles.heads ? {
-                                  name: uploadedFiles.heads.name,
-                                  content: headsContent,
-                                  count: headsContent ? headsContent.split('\n').filter(line => line.trim() !== '').length - 1 : 0
-                                } : null,
-                                personnel: uploadedFiles.personnel ? {
-                                  name: uploadedFiles.personnel.name,
-                                  content: personnelContent,
-                                  count: personnelContent ? personnelContent.split('\n').filter(line => line.trim() !== '').length - 1 : 0
-                                } : null,
-                                standardUsers: uploadedFiles.standardUsers ? {
-                                  name: uploadedFiles.standardUsers.name,
-                                  content: standardUsersContent,
-                                  count: standardUsersContent ? standardUsersContent.split('\n').filter(line => line.trim() !== '').length - 1 : 0
-                                } : null,
-                                assets: uploadedFiles.assets ? {
-                                  name: uploadedFiles.assets.name,
-                                  content: assetsContent,
-                                  count: assetsContent ? assetsContent.split('\n').filter(line => line.trim() !== '').length - 1 : 0
-                                } : null
-                              },
-                              orgData: orgData,
-                              completedDate: new Date().toISOString()
-                            };
-                            
-                            localStorage.setItem('setupWizardData', JSON.stringify(setupData));
-                            
-                            if (isSetupComplete()) {
-                              alert('Setup completed successfully! Redirecting to dashboard...');
-                              localStorage.removeItem('orgDataFromSignup');
-                              setTimeout(() => {
-                                navigate('/dashboard-sysadmin');
-                              }, 1500);
-                            } else {
-                              alert('Setup incomplete but you can continue. Redirecting to dashboard...');
-                              localStorage.removeItem('orgDataFromSignup');
-                              setTimeout(() => {
-                                navigate('/dashboard-sysadmin');
-                              }, 1500);
-                            }
-                          });
-                        });
-                      });
-                    });
-                  }}
+    // 1️⃣ Update user password (if provided)
+    if (orgData.password && orgData.password === orgData.confirmPassword) {
+      const { error: passwordError } = await supabase.auth.updateUser({
+        password: orgData.password
+      });
+      if (passwordError) throw passwordError;
+    }
+
+    // 2️⃣ Create organization
+    const { data: orgResult, error: orgError } = await supabase
+      .from("organizations")
+      .insert([{
+        org_name: orgData.name,
+        org_type_id: 1,
+        country_id: 1,
+        website: orgData.website || null,
+        address: orgData.address,
+        contact_person: orgData.contactPerson,
+        contact_email: orgData.contactEmail,
+      }])
+      .select()
+      .single();
+      
+    if (orgError) throw orgError;
+
+    // 3️⃣ Create user profile  
+    const { error: userInsertError } = await supabase
+      .from("users")
+      .insert([{
+        username: orgData.contactEmail.split("@")[0],
+        full_name: orgData.contactPerson,
+        email: orgData.contactEmail,
+        role_id: 1, // System admin role
+        user_status: "active",
+        password_hash: null,
+        auth_uid: user.id, // Use existing user ID
+        organization_id: orgResult.organization_id
+      }]);
+      
+    if (userInsertError) throw userInsertError;
+
+    // 4️⃣ Get role mapping for user imports
+    const roleMap = await getRoleMap();
+
+    // 5️⃣ Import Users from CSV files (if provided)
+    if (uploadedFiles.heads) {
+      await importUsers(uploadedFiles.heads, roleMap, orgResult);
+    }
+    if (uploadedFiles.personnel) {
+      await importUsers(uploadedFiles.personnel, roleMap, orgResult);
+    }
+    if (uploadedFiles.standardUsers) {
+      await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
+    }
+
+    // 6️⃣ Import Assets from CSV (if provided)
+    if (uploadedFiles.assets) {
+      await importAssets(uploadedFiles.assets, orgResult);
+    }
+
+    // 7️⃣ Save setup progress
+    const setupData = {
+      completed: isSetupComplete(),
+      skippedSteps,
+      userImportMethod,
+      assetImportMethod,
+      uploadedFiles,
+      orgData,
+      completedDate: new Date().toISOString()
+    };
+    localStorage.setItem("setupWizardData", JSON.stringify(setupData));
+    localStorage.removeItem("orgDataFromSignup");
+
+    // 8️⃣ Redirect
+    alert("✅ Setup completed! Please login to access your dashboard.");
+    navigate("/login");
+
+  } catch (err) {
+    console.error("Setup failed:", err.message);
+    alert("❌ Setup failed: " + err.message);
+  }
+}}
+
+
                   className="btn d-flex align-items-center px-4 py-2 text-white"
                   style={{
                     backgroundColor: isSetupComplete() ? '#28a745' : styles.accentColor,

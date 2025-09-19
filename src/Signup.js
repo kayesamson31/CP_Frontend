@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from './Layout';
+import { supabase } from './supabaseClient';
 
 function SignUpPage() {
   const navigate = useNavigate();
@@ -17,6 +18,8 @@ function SignUpPage() {
 
   const [agreed, setAgreed] = useState(false);
   const [errors, setErrors] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -44,63 +47,64 @@ function SignUpPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  
+  // 1️⃣ VALIDATE FIRST
+  if (!validateForm()) return;
+  
+  setLoading(true);
+  setServerError('');
+  setErrors({}); // Clear previous errors
+
+  try {
+    // 2️⃣ Create Supabase Auth user WITHOUT PASSWORD (email confirmation flow)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: orgInfo.contactEmail,
+      password: 'temporary-password-123', // Required by Supabase, but won't be used
+      options: { 
+        emailRedirectTo: `${window.location.origin}/setup-wizard`,
+        data: {
+          full_name: orgInfo.contactPerson,
+          organization_name: orgInfo.orgName,
+          // Store org info temporarily sa user metadata
+          org_data: {
+            orgName: orgInfo.orgName,
+            orgType: orgInfo.orgType,
+            country: orgInfo.country,
+            website: orgInfo.website,
+            address: orgInfo.address,
+            contactPerson: orgInfo.contactPerson,
+          }
+        }
+      }
+    });
+
+    if (authError) {
+      console.log("Auth error details:", authError);
+      
+      if (authError.status === 400 && authError.message.includes("already registered")) {
+        setErrors({ contactEmail: "This email is already registered. Please log in instead." });
+      } else {
+        setServerError("Signup failed: " + authError.message);
+      }
+      setLoading(false);
       return;
     }
 
-   try {
-  console.log('Organization Registration:', orgInfo);
-  
-  // Save organization data for setup wizard
-  const orgDataForWizard = {
-    name: orgInfo.orgName,
-    email: orgInfo.contactEmail,
-    phone: '', // empty since wala na sa signup form
-    address: orgInfo.address,
-    // Keep all signup data for reference
-    orgType: orgInfo.orgType,
-    country: orgInfo.country,
-    website: orgInfo.website,
-    contactPerson: orgInfo.contactPerson
-  };
-  
-  const userData = {
-    name: orgInfo.contactPerson,
-    email: orgInfo.contactEmail,
-    role: 'sysadmin',
-    roleDisplay: 'System Administrator',
-    isNewRegistration: true
-  };
-  
-  // Store both user and org data
-  localStorage.setItem('user', JSON.stringify(userData));
-  localStorage.setItem('orgDataFromSignup', JSON.stringify(orgDataForWizard));
-  
-  alert('Registration successful! Set up your organization...');
-  
-  setTimeout(() => {
-    navigate('/dashboard-sysadmin/SetupWizard', {
-      state: { 
-        isNewRegistration: true,
-        role: 'System Administrator',
-        userInfo: {
-          name: orgInfo.contactPerson,
-          email: orgInfo.contactEmail,
-          role: 'System Administrator'
-        },
-        orgData: orgDataForWizard
-      }
-    });
-  }, 1000);
-  
-} catch (error) {
-      console.error('Registration error:', error);
-      alert('Registration failed. Please try again.');
-    }
-  };
+    console.log("Signup success:", authData);
+
+    // 3️⃣ User is automatically confirmed, redirect to setup wizard
+    console.log("User created successfully:", authData.user);
+    navigate("/setup-wizard");
+    
+  } catch (err) {
+    console.error("Registration error:", err.message);
+    setServerError(err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const organizationTypes = [
     'School / Educational Institution',
@@ -290,6 +294,21 @@ function SignUpPage() {
             </p>
           </div>
 
+    {/* ðŸš¨ Server error alert here */}
+    {serverError && (
+      <div style={{ 
+        background: '#fee2e2', 
+        color: '#b91c1c', 
+        padding: '0.75rem', 
+        borderRadius: '8px', 
+        marginBottom: '1rem',
+        fontSize: '0.8rem',
+        fontWeight: '500'
+      }}>
+        {serverError}
+      </div>
+    )}
+
           <form onSubmit={handleSubmit}>
             {/* Organization Details Section */}
             <div style={sectionStyle}>
@@ -443,20 +462,30 @@ function SignUpPage() {
             </div>
 
             {/* Submit Button */}
-            <button 
-              type="submit" 
-              style={buttonStyle}
-              onMouseOver={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 8px 20px rgba(40, 67, 134, 0.3)';
-              }}
-              onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }}
-            >
-              Create Organization Account
-            </button>
+           <button
+  type="submit"
+  style={{
+    ...buttonStyle,
+    opacity: loading ? 0.6 : 1,
+    cursor: loading ? "not-allowed" : "pointer"
+  }}
+  disabled={loading}
+  onMouseOver={(e) => {
+    if (!loading) {
+      e.target.style.transform = "translateY(-2px)";
+      e.target.style.boxShadow = "0 8px 20px rgba(40, 67, 134, 0.3)";
+    }
+  }}
+  onMouseOut={(e) => {
+    if (!loading) {
+      e.target.style.transform = "translateY(0)";
+      e.target.style.boxShadow = "none";
+    }
+  }}
+>
+  {loading ? "Creating Account..." : "Create Organization Account"}
+</button>
+
 
             <p style={footerTextStyle}>
               After registration, you'll be redirected to your System Admin Dashboard

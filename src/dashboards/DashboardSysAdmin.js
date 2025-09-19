@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SidebarLayout from '../Layouts/SidebarLayout';
+import { supabase } from '../supabaseClient'; 
+
 
 export default function DashboardSyAdmin() {
   const navigate = useNavigate();
@@ -19,6 +21,8 @@ export default function DashboardSyAdmin() {
 
 const [assetPreviewData, setAssetPreviewData] = useState(null);
 const [selectedAssetFile, setSelectedAssetFile] = useState(null);
+
+
 
   // Function to add new activity
 const addActivity = (type, title, user = organizationData.contactPerson) => {
@@ -98,6 +102,8 @@ const getRelativeTime = (timestamp) => {
   
   return activityTime.toLocaleDateString();
 };
+
+  
   // Function to get dynamic organization data
 // Replace your getOrganizationData function with this fixed version:
 
@@ -214,6 +220,7 @@ const getOrganizationData = () => {
       }
     }
 
+    
     // Fallback logic remains the same...
     // ... rest of function
   } catch (error) {
@@ -272,6 +279,105 @@ const getOrganizationData = () => {
     return sampleAssets;
   };
 
+  const calculateSystemHealth = (totalUsers, totalAssets) => {
+    if (totalUsers === 0 && totalAssets === 0) return 25;
+    if (totalUsers > 0 && totalAssets > 0) return 95;
+    if (totalUsers > 0 || totalAssets > 0) return 75;
+    return 50;
+  };
+
+  const fetchDatabaseStats = async () => {
+    try {
+      // Get current user and organization
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get user's organization_id
+      const { data: userData, error: userDataError } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('auth_uid', user.id)
+        .single();
+
+      if (userDataError || !userData) {
+        throw new Error('User data not found');
+      }
+
+      const orgId = userData.organization_id;
+
+      // Fetch all statistics in parallel
+      const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
+        // Personnel count (role_id 3)
+        supabase
+          .from('users')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', orgId)
+          .eq('role_id', 3)
+          .eq('user_status', 'active'),
+
+        // Standard Users count (role_id 4)
+        supabase
+          .from('users')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', orgId)
+          .eq('role_id', 4)
+          .eq('user_status', 'active'),
+
+        // Heads count (role_id 2)
+        supabase
+          .from('users')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', orgId)
+          .eq('role_id', 2)
+          .eq('user_status', 'active'),
+
+        // System Admins count (role_id 1)
+        supabase
+          .from('users')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', orgId)
+          .eq('role_id', 1)
+          .eq('user_status', 'active'),
+
+        // Assets count
+        supabase
+          .from('assets')
+          .select('*', { count: 'exact' })
+          .eq('organization_id', orgId)
+      ]);
+
+      // Handle any errors
+      const errors = [personnelResult.error, standardUsersResult.error, headsResult.error, systemAdminsResult.error, assetsResult.error].filter(Boolean);
+      if (errors.length > 0) {
+        console.error('Database query errors:', errors);
+      }
+
+      return {
+        personnel: personnelResult.count || 0,
+        standardUsers: standardUsersResult.count || 0,
+        heads: headsResult.count || 0,
+        systemAdmins: systemAdminsResult.count || 0,
+        totalAssets: assetsResult.count || 0,
+        systemHealthPercentage: calculateSystemHealth(
+          (personnelResult.count || 0) + (standardUsersResult.count || 0) + (headsResult.count || 0),
+          assetsResult.count || 0
+        )
+      };
+
+    } catch (error) {
+      console.error('Error fetching database stats:', error);
+      return {
+        personnel: 0,
+        standardUsers: 0,
+        heads: 0,
+        systemAdmins: 1,
+        totalAssets: 0,
+        systemHealthPercentage: 25
+      };
+    }
+  };
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
@@ -674,84 +780,60 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
     reader.readAsText(file);
   };
 
-  // Load dashboard data and update organization info
-  useEffect(() => {
-    // Refresh organization data on mount
-    refreshOrganizationData();
-    
-    const setupWizardData = localStorage.getItem('setupWizardData');
-    
-    if (setupWizardData) {
-      const wizardData = JSON.parse(setupWizardData);
-      const isComplete = wizardData.completed;
-      
-      setSetupCompleted(isComplete);
-      
-     if (isComplete) {
-  const { userCount, assetCount } = parseUploadedData(wizardData);
-  
-  setDashboardData({
-    totalUsers: userCount,
-    totalAssets: assetCount,
-    setupStatus: {
-      organizationInfo: true,
-      usersUpload: userCount > 0,
-      assetsUpload: assetCount > 0
-    },
-    setupProgress: 100,
-    systemHealth: userCount > 0 || assetCount > 0 ? 'Good' : 'Warning',
-    wizardData: wizardData
-  });
+useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        // Get organization info from localStorage (for basic info)
+        const baseOrgData = getOrganizationData();
+        
+        // Fetch real statistics from database
+        const dbStats = await fetchDatabaseStats();
+        
+        // Merge localStorage org info with database statistics
+        const mergedOrgData = {
+          ...baseOrgData,
+          ...dbStats // This will override the stats with real database data
+        };
+        
+        setOrganizationData(mergedOrgData);
+        
+        // Update dashboard data
+        const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.heads;
+        setDashboardData(prev => ({
+          ...prev,
+          totalUsers: totalUsers,
+          totalAssets: dbStats.totalAssets,
+          systemHealth: dbStats.systemHealthPercentage > 80 ? 'Good' : 
+                       dbStats.systemHealthPercentage > 50 ? 'Warning' : 'Critical'
+        }));
 
-  // Generate sample data for lists
-  setUsersList(generateSampleUsers(userCount));
-  setAssetsList(generateSampleAssets(assetCount));
-} else {
-  const { userCount, assetCount } = parseUploadedData(wizardData);
-     
-  // Check for actual uploaded data (not skipped)
-  const hasHeads = wizardData.uploadedFiles?.heads && !wizardData.skippedSteps?.heads;
-  const hasPersonnel = wizardData.uploadedFiles?.personnel && !wizardData.skippedSteps?.personnel;  
-  const hasStandardUsers = wizardData.uploadedFiles?.standardUsers && !wizardData.skippedSteps?.standardUsers;
-  const hasAnyUsers = hasHeads || hasPersonnel || hasStandardUsers;
+        // Check if setup is complete based on real data
+        const hasUsers = totalUsers > 0;
+        const hasAssets = dbStats.totalAssets > 0;
+        const setupComplete = hasUsers && hasAssets;
+        
+        setSetupCompleted(setupComplete);
 
-  const hasAssets = wizardData.uploadedFiles?.assets && !wizardData.skippedSteps?.assets;
+        // Load existing activities
+        const savedActivities = localStorage.getItem('recentActivities');
+        if (savedActivities) {
+          const activities = JSON.parse(savedActivities);
+          const updatedActivities = activities.map(activity => ({
+            ...activity,
+            timestamp: activity.timestamp || new Date().toISOString()
+          }));
+          setRecentActivities(updatedActivities);
+        }
 
-  const setupStatus = {
-    organizationInfo: wizardData.orgData?.name && wizardData.orgData?.email,
-    usersUpload: hasAnyUsers,
-    assetsUpload: hasAssets
-  };
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        // Fallback to localStorage data
+        refreshOrganizationData();
+      }
+    };
 
-  const completedSteps = Object.values(setupStatus).filter(Boolean).length;
-  
-  setDashboardData(prev => ({
-    ...prev,
-    totalUsers: userCount,
-    totalAssets: assetCount,
-    setupProgress: (completedSteps / 3) * 100,
-    setupStatus: setupStatus,
-    systemHealth: completedSteps > 0 ? 'Warning' : 'Critical',
-    wizardData: wizardData,
-    skippedSteps: wizardData.skippedSteps
-  }));
-
-  // Generate sample data for lists if data exists
-  if (userCount > 0) setUsersList(generateSampleUsers(userCount));
-  if (assetCount > 0) setAssetsList(generateSampleAssets(assetCount));
-}
-
-    } else {
-      setDashboardData(prev => ({
-        ...prev,
-        totalUsers: 0,
-        totalAssets: 0,
-        setupProgress: 0,
-        systemHealth: 'Critical'
-      }));
-    }
+    loadDashboardData();
   }, []);
-
   
 
 // Save activities whenever they change
@@ -896,7 +978,6 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 ];
 
   return (
-    <SidebarLayout role="sysadmin">
       <div className="container-fluid">
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-4">
@@ -1464,6 +1545,5 @@ onMouseLeave={(e) => {
           </div>
         </div>
       </div>
-    </SidebarLayout>
   );
 }

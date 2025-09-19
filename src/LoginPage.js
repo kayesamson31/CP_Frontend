@@ -2,27 +2,64 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import Layout from './Layout';
 import OpenFMSLogo from './assets/OpenFMSLogo.png';
+import { supabase } from './supabaseClient'; 
 
 function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('standard'); 
   const navigate = useNavigate();
 
-  const handleLogin = (e) => {
-    e.preventDefault();
+const handleLogin = async (e) => {
+  e.preventDefault();
 
-    // Save sa localStorage yung email at name
-    localStorage.setItem('userEmail', email);
-    
-    // For now, dummy name (later backend na magsesend ng real name)
-    localStorage.setItem('userName', email.split('@')[0]);     localStorage.setItem('userRole', role); // <--- eto idagdag mo
-        // redirect based on role
-        if (role === 'standard') navigate('/dashboard-user');
-        else if (role === 'personnel') navigate('/dashboard-personnel');
-        else if (role === 'admin') navigate('/dashboard-admin');
-        else if (role === 'sysadmin') navigate('/dashboard-sysadmin');
-      };
+  // Step 1: Supabase Auth login
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+// Step 2: Get user role from your "users" table
+const { data: userData, error: userError } = await supabase
+  .from("users")
+  .select("full_name, role_id")
+  .eq("email", email)
+  .single();
+
+if (userError || !userData) {
+  alert("User not found or role missing.");
+  return;
+}
+
+// Step 3: Save in localStorage
+localStorage.setItem("userEmail", email);
+localStorage.setItem("userName", userData.full_name);
+
+// Convert role_id → string role for consistency
+let userRole = "";
+switch (userData.role_id) {
+  case 1: userRole = "sysadmin"; break;
+  case 2: userRole = "admin"; break;
+  case 3: userRole = "personnel"; break;
+  case 4: userRole = "standard"; break;
+  default: userRole = "standard";
+}
+localStorage.setItem("userRole", userRole);
+
+// Step 4: Redirect based on role
+switch (userRole) {
+  case "sysadmin": navigate("/dashboard-sysadmin"); break;
+  case "admin": navigate("/dashboard-admin"); break;
+  case "personnel": navigate("/dashboard-personnel"); break;
+  case "standard": navigate("/dashboard-user"); break;
+  default: navigate("/dashboard-user");
+}
+};
+
 
     const handleGoogleSignIn = () => {
       alert('Google Sign-In Clicked (Mock only)');
@@ -93,24 +130,7 @@ function LoginPage() {
             }}
           />
 
-          <label style={{ fontWeight: '500', color: '#1B4B8F' }}>Select Role</label>
-          <select
-            value={role}
-            onChange={(e) => setRole(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '0.75rem',
-              margin: '0.5rem 0 1.5rem',
-              borderRadius: '10px',
-              border: '1px solid #ccc',
-              outline: 'none',
-            }}
-          >
-            <option value="standard">Standard User</option>
-            <option value="personnel">Personnel</option>
-            <option value="admin">Admin Official</option>
-            <option value="sysadmin">System Administration</option>
-          </select>
+          
 
           <button
             type="submit"
