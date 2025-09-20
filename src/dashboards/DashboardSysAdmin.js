@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import SidebarLayout from '../Layouts/SidebarLayout';
 import { supabase } from '../supabaseClient'; 
+import Papa from 'papaparse'
 
 
 export default function DashboardSyAdmin() {
@@ -63,6 +64,26 @@ const getActivityColor = (type) => {
   }
 };
 
+const safeNumber = (value) => {
+  if (value === null || value === undefined || isNaN(value)) {
+    return 0;
+  }
+  return Number(value);
+};
+
+const getRoleIdFromRole = (roleString) => {
+  const roleMap = {
+    'Admin official': 2,
+    'system admin': 1,
+    'System admin': 1,
+    'Personnel': 3,
+    'Standard user': 4,
+    'Standard User': 4
+  };
+  return roleMap[roleString] || 4; // Default to Standard user
+};
+
+
 // Template download function
 const downloadTemplate = (type) => {
   const templates = {
@@ -109,94 +130,10 @@ const getRelativeTime = (timestamp) => {
 
 const getOrganizationData = () => {
   try {
-    // First check if there's setup wizard data (most complete)
     const setupWizardData = localStorage.getItem('setupWizardData');
     if (setupWizardData) {
       const wizardData = JSON.parse(setupWizardData);
       if (wizardData.orgData) {
-        // Calculate ACCUMULATED counts from ALL uploaded data
-        let totalUsers = 0;
-        let totalAssets = 0;
-        let headsCount = 0;
-        let personnelCount = 0;
-        let standardUsersCount = 0;
-
-        // Check if users were skipped
-        const usersSkipped = wizardData.skippedSteps?.users === true;
-        const assetsSkipped = wizardData.skippedSteps?.assets === true;
-
-        if (wizardData.uploadedFiles && !usersSkipped) {
-          // ACCUMULATE all uploads for each user type
-          if (wizardData.uploadedFiles.heads) {
-            // Sum all heads uploads if there are multiple
-            if (Array.isArray(wizardData.uploadedFiles.heads)) {
-              headsCount = wizardData.uploadedFiles.heads.reduce((sum, upload) => sum + (upload.count || 0), 0);
-            } else {
-              headsCount = wizardData.uploadedFiles.heads.count || 0;
-            }
-          }
-          
-          if (wizardData.uploadedFiles.personnel) {
-            // Sum all personnel uploads if there are multiple
-            if (Array.isArray(wizardData.uploadedFiles.personnel)) {
-              personnelCount = wizardData.uploadedFiles.personnel.reduce((sum, upload) => sum + (upload.count || 0), 0);
-            } else {
-              personnelCount = wizardData.uploadedFiles.personnel.count || 0;
-            }
-          }
-          
-          if (wizardData.uploadedFiles.standardUsers) {
-            // Sum all standard users uploads if there are multiple
-            if (Array.isArray(wizardData.uploadedFiles.standardUsers)) {
-              standardUsersCount = wizardData.uploadedFiles.standardUsers.reduce((sum, upload) => sum + (upload.count || 0), 0);
-            } else {
-              standardUsersCount = wizardData.uploadedFiles.standardUsers.count || 0;
-            }
-          }
-          
-          totalUsers = headsCount + personnelCount + standardUsersCount;
-        }
-
-        if (wizardData.uploadedFiles && !assetsSkipped) {
-          // ACCUMULATE all asset uploads
-          if (wizardData.uploadedFiles.assets) {
-            if (Array.isArray(wizardData.uploadedFiles.assets)) {
-              totalAssets = wizardData.uploadedFiles.assets.reduce((sum, upload) => sum + (upload.count || 0), 0);
-            } else {
-              totalAssets = wizardData.uploadedFiles.assets.count || 0;
-            }
-          }
-        }
-
-        // Rest of the function remains the same...
-        let displayPersonnel, displayStandardUsers, displayHeads, displayAssets, displaySystemHealth;
-
-        if (wizardData.completed === true) {
-          displayPersonnel = personnelCount;
-          displayStandardUsers = standardUsersCount;
-          displayHeads = headsCount;
-          displayAssets = totalAssets;
-          displaySystemHealth = totalUsers > 0 || totalAssets > 0 ? 95 : 75;
-        } else {
-          if (usersSkipped) {
-            displayPersonnel = 0;
-            displayStandardUsers = 0;
-            displayHeads = 0;
-          } else {
-            displayPersonnel = personnelCount;
-            displayStandardUsers = standardUsersCount;
-            displayHeads = headsCount;
-          }
-
-          if (assetsSkipped) {
-            displayAssets = 0;
-          } else {
-            displayAssets = totalAssets;
-          }
-
-          displaySystemHealth = (totalUsers > 0 || totalAssets > 0) ? 75 : 25;
-        }
-
         return {
           name: wizardData.orgData.name || "OpenFMS",
           type: wizardData.orgData.orgType || "Government Agency",
@@ -205,33 +142,48 @@ const getOrganizationData = () => {
           country: wizardData.orgData.country || "Not specified",
           website: wizardData.orgData.website || "https://openfms.io",
           contactPerson: wizardData.orgData.contactPerson || "System Administrator",
-          contactEmail: wizardData.orgData.email || wizardData.orgData.contactEmail || "admin@openfms.io",
-          
-          personnel: displayPersonnel,
-          standardUsers: displayStandardUsers,
-          heads: displayHeads,
-          systemAdmins: Math.max(1, Math.floor(displayHeads * 0.1) + 1),
-          totalAssets: displayAssets,
-          systemHealthPercentage: displaySystemHealth,
-          
-          isUsersDataSkipped: usersSkipped && (headsCount === 0 && personnelCount === 0 && standardUsersCount === 0),
-          isAssetsDataSkipped: assetsSkipped && totalAssets === 0
+          contactEmail: wizardData.orgData.email || "admin@openfms.io",
+          // Remove statistics - these will come from database
         };
       }
     }
-
     
-    // Fallback logic remains the same...
-    // ... rest of function
+    // Default fallback
+    return {
+      name: "OpenFMS",
+      type: "Government Agency",
+      address: "Not specified",
+      phone: "Not specified", 
+      country: "Not specified",
+      website: "https://openfms.io",
+      contactPerson: "System Administrator",
+      contactEmail: "admin@openfms.io"
+    };
   } catch (error) {
     console.error('Error loading organization data:', error);
-    // ... error fallback
+    return {}; // Fallback
   }
 };
 
   // Make organizationData dynamic state
-  const [organizationData, setOrganizationData] = useState(getOrganizationData());
-  
+const [organizationData, setOrganizationData] = useState({
+  name: "OpenFMS",
+  type: "Government Agency", 
+  address: "Loading...",
+  phone: "Loading...",
+  country: "Loading...",
+  website: "https://openfms.io",
+  contactPerson: "System Administrator",
+  contactEmail: "admin@openfms.io",
+  personnel: 0,
+  standardUsers: 0,
+  heads: 0,
+  systemAdmins: 1,
+  totalAssets: 0,
+  systemHealthPercentage: 25,
+  isUsersDataSkipped: false,
+  isAssetsDataSkipped: false
+});  
   const [dashboardData, setDashboardData] = useState({
     totalUsers: 0,
     totalAssets: 0,
@@ -286,88 +238,12 @@ const getOrganizationData = () => {
     return 50;
   };
 
-  const fetchDatabaseStats = async () => {
-    try {
-      // Get current user and organization
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) {
-        throw new Error('User not authenticated');
-      }
-
-      // Get user's organization_id
-      const { data: userData, error: userDataError } = await supabase
-        .from('users')
-        .select('organization_id')
-        .eq('auth_uid', user.id)
-        .single();
-
-      if (userDataError || !userData) {
-        throw new Error('User data not found');
-      }
-
-      const orgId = userData.organization_id;
-
-      // Fetch all statistics in parallel
-      const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
-        // Personnel count (role_id 3)
-        supabase
-          .from('users')
-          .select('*', { count: 'exact' })
-          .eq('organization_id', orgId)
-          .eq('role_id', 3)
-          .eq('user_status', 'active'),
-
-        // Standard Users count (role_id 4)
-        supabase
-          .from('users')
-          .select('*', { count: 'exact' })
-          .eq('organization_id', orgId)
-          .eq('role_id', 4)
-          .eq('user_status', 'active'),
-
-        // Heads count (role_id 2)
-        supabase
-          .from('users')
-          .select('*', { count: 'exact' })
-          .eq('organization_id', orgId)
-          .eq('role_id', 2)
-          .eq('user_status', 'active'),
-
-        // System Admins count (role_id 1)
-        supabase
-          .from('users')
-          .select('*', { count: 'exact' })
-          .eq('organization_id', orgId)
-          .eq('role_id', 1)
-          .eq('user_status', 'active'),
-
-        // Assets count
-        supabase
-          .from('assets')
-          .select('*', { count: 'exact' })
-          .eq('organization_id', orgId)
-      ]);
-
-      // Handle any errors
-      const errors = [personnelResult.error, standardUsersResult.error, headsResult.error, systemAdminsResult.error, assetsResult.error].filter(Boolean);
-      if (errors.length > 0) {
-        console.error('Database query errors:', errors);
-      }
-
-      return {
-        personnel: personnelResult.count || 0,
-        standardUsers: standardUsersResult.count || 0,
-        heads: headsResult.count || 0,
-        systemAdmins: systemAdminsResult.count || 0,
-        totalAssets: assetsResult.count || 0,
-        systemHealthPercentage: calculateSystemHealth(
-          (personnelResult.count || 0) + (standardUsersResult.count || 0) + (headsResult.count || 0),
-          assetsResult.count || 0
-        )
-      };
-
-    } catch (error) {
-      console.error('Error fetching database stats:', error);
+const fetchDatabaseStats = async () => {
+  try {
+    // Get current user and organization
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      console.log('User not authenticated, using default values');
       return {
         personnel: 0,
         standardUsers: 0,
@@ -377,7 +253,122 @@ const getOrganizationData = () => {
         systemHealthPercentage: 25
       };
     }
-  };
+
+    // Get user's organization_id
+    const { data: userData, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (userDataError || !userData) {
+      console.log('User data not found, using default values');
+      return {
+        personnel: 0,
+        standardUsers: 0,
+        heads: 0,
+        systemAdmins: 1,
+        totalAssets: 0,
+        systemHealthPercentage: 25
+      };
+    }
+
+    const orgId = userData.organization_id;
+    console.log('Organization ID:', orgId); // Debug log
+
+    const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
+      // Personnel count (role_id 3) - exclude inactive_test
+      supabase
+        .from('users')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', orgId)
+        .eq('role_id', 3)
+        .neq('user_status', 'inactive_test')
+        .eq('user_status', 'active'),
+
+      // Standard Users count (role_id 4) - exclude inactive_test
+      supabase
+        .from('users')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', orgId)
+        .eq('role_id', 4)
+        .neq('user_status', 'inactive_test')
+        .eq('user_status', 'active'),
+
+      // Heads count (role_id 1 AND 2) - exclude inactive_test
+      supabase
+        .from('users')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', orgId)
+        .in('role_id', [1, 2])
+        .neq('user_status', 'inactive_test')
+        .eq('user_status', 'active'),
+
+      // System Admins count (role_id 1 only) - exclude inactive_test
+      supabase
+        .from('users')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', orgId)
+        .eq('role_id', 1)
+        .neq('user_status', 'inactive_test')
+        .eq('user_status', 'active'),
+
+      // Assets count - exclude inactive_test
+      supabase
+        .from('assets')
+        .select('*', { count: 'exact' })
+        .eq('organization_id', orgId)
+        .neq('asset_status', 'inactive_test')
+    ]);
+
+    // Debug logs to see what we're getting
+    console.log('Personnel Result:', personnelResult);
+    console.log('Standard Users Result:', standardUsersResult);
+    console.log('Heads Result:', headsResult);
+    console.log('System Admins Result:', systemAdminsResult);
+    console.log('Assets Result:', assetsResult);
+
+    // Handle any errors
+    const errors = [
+      personnelResult.error, 
+      standardUsersResult.error, 
+      headsResult.error, 
+      systemAdminsResult.error, 
+      assetsResult.error
+    ].filter(Boolean);
+    
+    if (errors.length > 0) {
+      console.error('Database query errors:', errors);
+    }
+
+    // Return results with safety checks
+    const stats = {
+      personnel: personnelResult.count || 0,
+      standardUsers: standardUsersResult.count || 0,
+      heads: headsResult.count || 0,
+      systemAdmins: systemAdminsResult.count || 0,
+      totalAssets: assetsResult.count || 0,
+      systemHealthPercentage: calculateSystemHealth(
+        (personnelResult.count || 0) + (standardUsersResult.count || 0) + (headsResult.count || 0),
+        assetsResult.count || 0
+      )
+    };
+
+    console.log('Final Stats:', stats); // Debug log
+    return stats;
+
+  } catch (error) {
+    console.error('Error fetching database stats:', error);
+    return {
+      personnel: 0,
+      standardUsers: 0,
+      heads: 0,
+      systemAdmins: 1,
+      totalAssets: 0,
+      systemHealthPercentage: 25
+    };
+  }
+};
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
@@ -464,8 +455,61 @@ const handleFilePreview = (file, userType) => {
   reader.readAsText(file);
 };
 
-// MODIFIED: Function to actually process the upload
-const handleBulkUserUpload = () => {
+const updateSetupProgress = () => {
+  try {
+    const setupWizardData = localStorage.getItem('setupWizardData');
+    if (!setupWizardData) return;
+    
+    const wizardData = JSON.parse(setupWizardData);
+    
+    // Check organization info
+    const hasOrganizationInfo = wizardData.orgData?.name && wizardData.orgData?.contactEmail;
+    
+    // Check if at least one user type has been uploaded (not skipped)
+    const hasHeads = wizardData.uploadedFiles?.heads && !wizardData.skippedSteps?.heads;
+    const hasPersonnel = wizardData.uploadedFiles?.personnel && !wizardData.skippedSteps?.personnel;
+    const hasStandardUsers = wizardData.uploadedFiles?.standardUsers && !wizardData.skippedSteps?.standardUsers;
+    const hasAnyUsers = hasHeads || hasPersonnel || hasStandardUsers;
+    
+    // Check if assets have been uploaded (not skipped)
+    const hasAssets = wizardData.uploadedFiles?.assets && !wizardData.skippedSteps?.assets;
+    
+    const setupStatus = {
+      organizationInfo: hasOrganizationInfo,
+      usersUpload: hasAnyUsers,
+      assetsUpload: hasAssets
+    };
+    
+    const completedSteps = Object.values(setupStatus).filter(Boolean).length;
+    const newProgress = (completedSteps / 3) * 100;
+    
+    // Update dashboard data state
+    setDashboardData(prev => ({
+      ...prev,
+      setupStatus: setupStatus,
+      setupProgress: newProgress,
+      systemHealth: newProgress > 66 ? 'Good' : newProgress > 33 ? 'Warning' : 'Critical'
+    }));
+    
+    // Check if setup is now complete
+    if (completedSteps === 3) {
+      setSetupCompleted(true);
+    }
+    
+    console.log('Setup progress updated:', {
+      setupStatus,
+      progress: newProgress,
+      completed: completedSteps === 3
+    });
+    
+  } catch (error) {
+    console.error('Error updating setup progress:', error);
+  }
+};
+
+
+// Replace your handleBulkUserUpload function with this corrected version
+const handleBulkUserUpload = async () => {
   if (!previewData || !selectedFile) {
     alert('No file selected for upload!');
     return;
@@ -474,109 +518,129 @@ const handleBulkUserUpload = () => {
   setUploadingUsers(true);
   
   try {
-    const { csvContent, rowCount, userType } = previewData;
-    
-    // Get or create setup wizard data
+    // Get current user's organization ID
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: userData, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (userDataError || !userData) {
+      throw new Error('User data not found');
+    }
+
+    const orgId = userData.organization_id;
+
+    // Parse CSV content
+    const { csvContent, userType } = previewData;
+    const parseResult = Papa.parse(csvContent, { 
+      header: true, 
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim() // Clean headers
+    });
+
+    if (parseResult.errors.length > 0) {
+      console.error('CSV Parse Errors:', parseResult.errors);
+    }
+
+    const csvRows = parseResult.data.filter(row => 
+      row.Name && row.Name.trim() !== '' && 
+      row.Email && row.Email.trim() !== ''
+    );
+
+    // FIXED: Prepare data for database insertion without created_at/updated_at
+    const usersToInsert = csvRows.map(row => ({
+      full_name: row.Name.trim(),  // Use full_name instead of name
+      email: row.Email.trim().toLowerCase(),
+      user_status: (row.Status || 'active').toLowerCase(),
+      role_id: getRoleIdFromRole(row.Role),
+      organization_id: orgId,
+      username: `${row.Email.trim().toLowerCase().split('@')[0]}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` // Generate unique username
+      // Removed created_at and updated_at - let database handle these
+    }));
+
+    console.log('Users to insert:', usersToInsert); // Debug log
+
+    // Insert to database - simple insert without upsert
+    const { data: insertResult, error: insertError } = await supabase
+      .from('users')
+      .insert(usersToInsert)
+      .select('*');
+
+    if (insertError) {
+      console.error('Database Insert Error:', insertError);
+      throw new Error(`Failed to save users to database: ${insertError.message}`);
+    }
+
+    const insertedCount = insertResult ? insertResult.length : usersToInsert.length;
+
+    // Update localStorage for activity tracking only
     let setupWizardData = localStorage.getItem('setupWizardData');
-    let wizardData;
+    let wizardData = setupWizardData ? JSON.parse(setupWizardData) : {
+      orgData: { name: organizationData.name, email: organizationData.contactEmail },
+      uploadedFiles: {},
+      skippedSteps: {},
+      completed: false
+    };
+
+    // Track upload activity (don't store actual data)
+    if (!wizardData.uploadedFiles) wizardData.uploadedFiles = {};
     
-    if (setupWizardData) {
-      wizardData = JSON.parse(setupWizardData);
-    } else {
-      wizardData = {
-        orgData: {
-          name: organizationData.name,
-          email: organizationData.contactEmail
-        },
-        uploadedFiles: {},
-        skippedSteps: {},
-        completed: false
-      };
-    }
-
-    if (!wizardData.uploadedFiles) {
-      wizardData.uploadedFiles = {};
-    }
-
-    // NEW: Check if this user type already has uploads
-    const newUpload = {
-      content: csvContent,
-      count: rowCount,
+    const uploadRecord = {
       fileName: selectedFile.name,
-      uploadDate: new Date().toISOString()
+      uploadDate: new Date().toISOString(),
+      recordsProcessed: insertedCount,
+      source: 'database'
     };
 
     if (wizardData.uploadedFiles[userType]) {
-      // If already exists, convert to array and add new upload
       if (Array.isArray(wizardData.uploadedFiles[userType])) {
-        wizardData.uploadedFiles[userType].push(newUpload);
+        wizardData.uploadedFiles[userType].push(uploadRecord);
       } else {
-        // Convert existing single upload to array and add new one
-        const existingUpload = wizardData.uploadedFiles[userType];
-        wizardData.uploadedFiles[userType] = [existingUpload, newUpload];
+        wizardData.uploadedFiles[userType] = [wizardData.uploadedFiles[userType], uploadRecord];
       }
     } else {
-      // First upload for this user type
-      wizardData.uploadedFiles[userType] = newUpload;
-    }
-
-    // Mark this user type as no longer skipped
-    if (wizardData.skippedSteps) {
-      wizardData.skippedSteps[userType] = false;
-      wizardData.skippedSteps.users = false;
+      wizardData.uploadedFiles[userType] = uploadRecord;
     }
 
     localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
-     
-    // Check if setup should be auto-completed
-      const orgInfo = wizardData.orgData?.name && wizardData.orgData?.email;
-      const hasUsers = Object.keys(wizardData.uploadedFiles || {}).some(key => 
-        ['heads', 'personnel', 'standardUsers'].includes(key)
-      );
-      const hasAssets = wizardData.uploadedFiles?.assets;
 
-     // Auto-complete setup ONLY if ALL conditions are met (users AND assets)
-const hasAllRequiredData = orgInfo && hasUsers && hasAssets;
-if (hasAllRequiredData && !wizardData.completed) {
-  wizardData.completed = true;
-  wizardData.completedDate = new Date().toISOString();
-  localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
-  setSetupCompleted(true);
-  localStorage.setItem('justCompleted', 'true');
-  
-  // Add completion activity
-  addActivity(
-    'setup_completed',
-    `${organizationData.name} system setup completed automatically`,
-    organizationData.contactPerson
-  );
-}
-    // **CRITICAL: Force refresh organization data**
-    const updatedOrgData = getOrganizationData();
-    setOrganizationData(updatedOrgData);
+    // Refresh dashboard data from database
+    const dbStats = await fetchDatabaseStats();
+    setOrganizationData(prev => ({
+      ...prev,
+      ...dbStats
+    }));
 
     // Add activity log
     const userTypeDisplayName = userType === 'heads' ? 'Heads' : 
-                               userType === 'personnel' ? 'Personnel' : 
-                               'Standard Users';
+                               userType === 'personnel' ? 'Personnel' : 'Standard Users';
     
     addActivity(
       'csv_upload',
-      `${userTypeDisplayName} CSV uploaded: +${rowCount} records added (Total: ${updatedOrgData[userType]})`,
+      `${userTypeDisplayName} CSV uploaded: ${insertedCount} records saved to database`,
       organizationData.contactPerson
     );
 
-    // Close modal and reset form
+    // Update setup progress
+    updateSetupProgress();
+
+    // Close modal and reset
     setShowUserUploadModal(false);
     setSelectedUserType('');
     setPreviewData(null);
     setSelectedFile(null);
     
-    alert(`${userTypeDisplayName} uploaded successfully! Added ${rowCount} records. Total ${userTypeDisplayName}: ${updatedOrgData[userType]}`);
+    alert(`${userTypeDisplayName} uploaded successfully! ${insertedCount} records saved to database.`);
     
   } catch (error) {
     console.error('Error processing user CSV:', error);
-    alert('Error processing the CSV file. Please check the file format.');
+    alert(`Error: ${error.message}`);
   } finally {
     setUploadingUsers(false);
   }
@@ -605,8 +669,8 @@ const handleAssetFilePreview = (file) => {
   reader.readAsText(file);
 };
 
-// MODIFIED: Function to actually process asset upload
-const handleBulkAssetUpload = () => {
+// handleBulkAssetUpload function with this version
+const handleBulkAssetUpload = async () => {
   if (!assetPreviewData || !selectedAssetFile) {
     alert('No file selected for upload!');
     return;
@@ -615,84 +679,183 @@ const handleBulkAssetUpload = () => {
   setUploadingAssets(true);
   
   try {
-    const { csvContent, rowCount } = assetPreviewData;
+    // Get current user's organization ID
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: userData, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (userDataError || !userData) {
+      throw new Error('User data not found');
+    }
+
+    const orgId = userData.organization_id;
+
+    // Parse CSV content
+    const { csvContent } = assetPreviewData;
+    const parseResult = Papa.parse(csvContent, { 
+      header: true, 
+      skipEmptyLines: true,
+      transformHeader: (header) => header.trim()
+    });
+
+    if (parseResult.errors.length > 0) {
+      console.error('CSV Parse Errors:', parseResult.errors);
+    }
+
+    const csvRows = parseResult.data.filter(row => 
+      row['Asset Name'] && row['Asset Name'].trim() !== '' && 
+      row.Category && row.Category.trim() !== ''
+    );
+
+    if (csvRows.length === 0) {
+      throw new Error('No valid asset data found in CSV');
+    }
+
+    // Get unique categories from CSV
+    const uniqueCategories = [...new Set(csvRows.map(row => row.Category.trim()))];
+    console.log('Categories to process:', uniqueCategories);
+
+    // Create/get asset categories first
+    const categoryMap = {};
     
-    // Get or create setup wizard data
+    for (const categoryName of uniqueCategories) {
+      try {
+        // Try to get existing category first
+        const { data: existingCategory } = await supabase
+          .from('asset_categories')
+          .select('category_id, category_name')
+          .eq('category_name', categoryName)
+          .single();
+
+        if (existingCategory) {
+          categoryMap[categoryName] = existingCategory.category_id;
+        } else {
+          // Create new category
+          const { data: newCategory, error: categoryError } = await supabase
+            .from('asset_categories')
+            .insert([{ category_name: categoryName }])
+            .select('category_id, category_name')
+            .single();
+
+          if (categoryError) {
+            console.error(`Failed to create category ${categoryName}:`, categoryError);
+            throw new Error(`Failed to create category: ${categoryName}`);
+          }
+
+          categoryMap[categoryName] = newCategory.category_id;
+        }
+      } catch (categoryError) {
+        console.error(`Error processing category ${categoryName}:`, categoryError);
+        throw new Error(`Error processing category: ${categoryName}`);
+      }
+    }
+
+    console.log('Category mapping:', categoryMap);
+
+    // Prepare assets for insertion
+    const assetsToInsert = csvRows.map((row, index) => ({
+      asset_code: `${row['Asset Name'].trim().replace(/\s+/g, '_')}_${Date.now()}_${index}`,
+      asset_category_id: categoryMap[row.Category.trim()],
+      asset_status: (row.Status || 'operational').toLowerCase(),
+      location: row.Location ? row.Location.trim() : 'Not specified',
+      organization_id: orgId
+    }));
+
+    console.log('Assets to insert:', assetsToInsert);
+
+    // Insert assets one by one to handle individual failures
+    const insertedAssets = [];
+    const failedAssets = [];
+
+    for (const assetData of assetsToInsert) {
+      try {
+        const { data, error } = await supabase
+          .from('assets')
+          .insert([assetData])
+          .select()
+          .single();
+
+        if (error) {
+          console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
+          failedAssets.push({ asset_code: assetData.asset_code, error: error.message });
+        } else {
+          insertedAssets.push(data);
+        }
+      } catch (insertError) {
+        console.error(`Error inserting asset ${assetData.asset_code}:`, insertError);
+        failedAssets.push({ asset_code: assetData.asset_code, error: insertError.message });
+      }
+    }
+
+    const insertedCount = insertedAssets.length;
+    const failedCount = failedAssets.length;
+
+    // Update localStorage for activity tracking
     let setupWizardData = localStorage.getItem('setupWizardData');
-    let wizardData;
-    
-    if (setupWizardData) {
-      wizardData = JSON.parse(setupWizardData);
-    } else {
-      wizardData = {
-        orgData: {
-          name: organizationData.name,
-          email: organizationData.contactEmail
-        },
-        uploadedFiles: {},
-        skippedSteps: {},
-        completed: false
-      };
-    }
-
-    if (!wizardData.uploadedFiles) {
-      wizardData.uploadedFiles = {};
-    }
-
-    // NEW: Check if assets already have uploads
-    const newUpload = {
-      content: csvContent,
-      count: rowCount,
-      fileName: selectedAssetFile.name,
-      uploadDate: new Date().toISOString()
+    let wizardData = setupWizardData ? JSON.parse(setupWizardData) : {
+      orgData: { name: organizationData.name, email: organizationData.contactEmail },
+      uploadedFiles: {},
+      skippedSteps: {},
+      completed: false
     };
 
-    if (wizardData.uploadedFiles.assets) {
-      // If already exists, convert to array and add new upload
-      if (Array.isArray(wizardData.uploadedFiles.assets)) {
-        wizardData.uploadedFiles.assets.push(newUpload);
-      } else {
-        // Convert existing single upload to array and add new one
-        const existingUpload = wizardData.uploadedFiles.assets;
-        wizardData.uploadedFiles.assets = [existingUpload, newUpload];
-      }
-    } else {
-      // First upload for assets
-      wizardData.uploadedFiles.assets = newUpload;
-    }
+    if (!wizardData.uploadedFiles) wizardData.uploadedFiles = {};
+    
+    const uploadRecord = {
+      fileName: selectedAssetFile.name,
+      uploadDate: new Date().toISOString(),
+      recordsProcessed: insertedCount,
+      recordsFailed: failedCount,
+      source: 'database'
+    };
 
+    wizardData.uploadedFiles.assets = uploadRecord;
+    
     // Mark assets as no longer skipped
-    if (wizardData.skippedSteps) {
-      wizardData.skippedSteps.assets = false;
-    }
+    if (!wizardData.skippedSteps) wizardData.skippedSteps = {};
+    wizardData.skippedSteps.assets = false;
 
     localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
 
-    // **CRITICAL: Force refresh organization data**
-    const updatedOrgData = getOrganizationData();
-    setOrganizationData(updatedOrgData);
-
-    // Generate sample assets for display (accumulate with existing)
-    const existingAssets = assetsList.length;
-    setAssetsList(prev => [...prev, ...generateSampleAssets(rowCount)]);
+    // Refresh dashboard data from database
+    const dbStats = await fetchDatabaseStats();
+    setOrganizationData(prev => ({
+      ...prev,
+      ...dbStats
+    }));
 
     // Add activity log
     addActivity(
       'csv_upload',
-      `Assets CSV uploaded: +${rowCount} records added (Total: ${updatedOrgData.totalAssets})`,
+      `Assets CSV uploaded: ${insertedCount} inserted, ${failedCount} failed`,
       organizationData.contactPerson
     );
+
+    // Update setup progress
+    updateSetupProgress();
 
     // Close modal and reset
     setShowAssetUploadModal(false);
     setAssetPreviewData(null);
     setSelectedAssetFile(null);
     
-    alert(`Assets uploaded successfully! Added ${rowCount} records. Total Assets: ${updatedOrgData.totalAssets}`);
+    // Show detailed results
+    let resultMessage = `Asset upload completed!\n\n`;
+    resultMessage += `✅ Successfully inserted: ${insertedCount} assets\n`;
+    if (failedCount > 0) resultMessage += `❌ Failed: ${failedCount} assets\n`;
+    
+    alert(resultMessage);
     
   } catch (error) {
     console.error('Error processing asset CSV:', error);
-    alert('Error processing the CSV file. Please check the file format.');
+    alert(`Error: ${error.message}`);
   } finally {
     setUploadingAssets(false);
   }
@@ -781,60 +944,51 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
   };
 
 useEffect(() => {
-    const loadDashboardData = async () => {
-      try {
-        // Get organization info from localStorage (for basic info)
-        const baseOrgData = getOrganizationData();
-        
-        // Fetch real statistics from database
-        const dbStats = await fetchDatabaseStats();
-        
-        // Merge localStorage org info with database statistics
-        const mergedOrgData = {
-          ...baseOrgData,
-          ...dbStats // This will override the stats with real database data
-        };
-        
-        setOrganizationData(mergedOrgData);
-        
-        // Update dashboard data
-        const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.heads;
-        setDashboardData(prev => ({
-          ...prev,
-          totalUsers: totalUsers,
-          totalAssets: dbStats.totalAssets,
-          systemHealth: dbStats.systemHealthPercentage > 80 ? 'Good' : 
-                       dbStats.systemHealthPercentage > 50 ? 'Warning' : 'Critical'
-        }));
+  const loadDashboardData = async () => {
+    try {
+      // Get organization info from localStorage
+      const baseOrgData = getOrganizationData();
+      
+      // Get all statistics from database
+      const dbStats = await fetchDatabaseStats();
+      
+      // Merge organization info with database statistics
+      const mergedOrgData = {
+        ...baseOrgData,
+        ...dbStats
+      };
+      
+      setOrganizationData(mergedOrgData);
+      
+      // Update dashboard data
+      const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.heads;
+      setDashboardData(prev => ({
+        ...prev,
+        totalUsers: totalUsers,
+        totalAssets: dbStats.totalAssets,
+        systemHealth: dbStats.systemHealthPercentage > 80 ? 'Good' : 
+                     dbStats.systemHealthPercentage > 50 ? 'Warning' : 'Critical'
+      }));
 
-        // Check if setup is complete based on real data
-        const hasUsers = totalUsers > 0;
-        const hasAssets = dbStats.totalAssets > 0;
-        const setupComplete = hasUsers && hasAssets;
-        
-        setSetupCompleted(setupComplete);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+      // Fallback to localStorage only if database fails
+      const fallbackData = getOrganizationData();
+      setOrganizationData({
+        ...fallbackData,
+        personnel: 0,
+        standardUsers: 0,
+        heads: 0,
+        systemAdmins: 1,
+        totalAssets: 0,
+        systemHealthPercentage: 25
+      });
+    }
+     updateSetupProgress();
+  };
 
-        // Load existing activities
-        const savedActivities = localStorage.getItem('recentActivities');
-        if (savedActivities) {
-          const activities = JSON.parse(savedActivities);
-          const updatedActivities = activities.map(activity => ({
-            ...activity,
-            timestamp: activity.timestamp || new Date().toISOString()
-          }));
-          setRecentActivities(updatedActivities);
-        }
-
-      } catch (error) {
-        console.error('Error loading dashboard data:', error);
-        // Fallback to localStorage data
-        refreshOrganizationData();
-      }
-    };
-
-    loadDashboardData();
-  }, []);
-  
+  loadDashboardData();
+}, []);
 
 // Save activities whenever they change
 useEffect(() => {
@@ -1395,10 +1549,9 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
           </div>
         </div>
 
-        {/* Statistics Cards Row */}
-        <div className="row mb-4">
-          
-            {/* Personnel */}
+{/* Statistics Cards Row */}
+<div className="row mb-4">
+  {/* Personnel */}
   <div className="col-lg-4 col-md-6 mb-3">
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
       <div className="card-body text-center position-relative">
@@ -1409,16 +1562,16 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         )}
         <i className="bi bi-people-fill text-primary fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">
-          {organizationData.isUsersDataSkipped ? '0' : organizationData.personnel.toLocaleString()}
+          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.personnel).toLocaleString()}
         </h5>
         <p className="text-muted mb-0 small">Personnel</p>
       </div>
     </div>
   </div>
 
-         {/* Standard Users */}
+  {/* Standard Users */}
   <div className="col-lg-4 col-md-6 mb-3">
-   <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1427,14 +1580,14 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         )}
         <i className="bi bi-person-fill text-info fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">
-          {organizationData.isUsersDataSkipped ? '0' : organizationData.standardUsers.toLocaleString()}
+          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.standardUsers).toLocaleString()}
         </h5>
         <p className="text-muted mb-0 small">Standard Users</p>
       </div>
     </div>
   </div>
 
-          {/* Heads */}
+  {/* Heads */}
   <div className="col-lg-4 col-md-6 mb-3">
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
       <div className="card-body text-center position-relative">
@@ -1445,7 +1598,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         )}
         <i className="bi bi-person-badge-fill text-warning fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">
-          {organizationData.isUsersDataSkipped ? '0' : organizationData.heads}
+          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.heads).toLocaleString()}
         </h5>
         <p className="text-muted mb-0 small">Heads</p>
       </div>
@@ -1453,11 +1606,11 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
   </div>
 </div>
 
-        {/* Second Row Statistics */}
+{/* Second Row Statistics */}
 <div className="row mb-4">
   {/* Total Assets */}
   <div className="col-lg-4 col-md-6 mb-3">
-   <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
       <div className="card-body text-center position-relative">
         {organizationData.isAssetsDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1466,36 +1619,35 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         )}
         <i className="bi bi-box-seam-fill text-success fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">
-          {organizationData.isAssetsDataSkipped ? '0' : organizationData.totalAssets.toLocaleString()}
+          {organizationData.isAssetsDataSkipped ? '0' : safeNumber(organizationData.totalAssets).toLocaleString()}
         </h5>
         <p className="text-muted mb-0 small">Total Assets</p>
       </div>
     </div>
   </div>
 
-          {/* System Administrators */}
-          <div className="col-lg-4 col-md-6 mb-3">
-           <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
-              <div className="card-body text-center">
-                <i className="bi bi-shield-fill-check text-danger fs-3 mb-2 d-block"></i>
-                <h5 className="fw-bold mb-1">{organizationData.systemAdmins}</h5>
-                <p className="text-muted mb-0 small">System Administrators</p>
-              </div>
-            </div>
-          </div>
+  {/* System Administrators */}
+  <div className="col-lg-4 col-md-6 mb-3">
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+      <div className="card-body text-center">
+        <i className="bi bi-shield-fill-check text-danger fs-3 mb-2 d-block"></i>
+        <h5 className="fw-bold mb-1">{safeNumber(organizationData.systemAdmins).toLocaleString()}</h5>
+        <p className="text-muted mb-0 small">System Administrators</p>
+      </div>
+    </div>
+  </div>
 
-          {/* System Health */}
-          <div className="col-lg-4 col-md-6 mb-3">
-            <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
-              <div className="card-body text-center">
-                <i className="bi bi-heart-pulse-fill text-primary fs-3 mb-2 d-block"></i>
-                <h5 className="fw-bold mb-1">{organizationData.systemHealthPercentage}%</h5>
-                <p className="text-muted mb-0 small">System Health</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
+  {/* System Health */}
+  <div className="col-lg-4 col-md-6 mb-3">
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+      <div className="card-body text-center">
+        <i className="bi bi-heart-pulse-fill text-primary fs-3 mb-2 d-block"></i>
+        <h5 className="fw-bold mb-1">{safeNumber(organizationData.systemHealthPercentage)}%</h5>
+        <p className="text-muted mb-0 small">System Health</p>
+      </div>
+    </div>
+  </div>
+</div>
         {/* Recent Activity */}
         <div className="card mb-4 shadow-sm" style={{
   borderRadius: '16px',

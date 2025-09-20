@@ -3,22 +3,39 @@ import { ChevronRight, ChevronLeft, Upload, Download, Users, Building2, Database
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 
-// 1️⃣ Helper: parse CSV into JSON
 const parseCSV = (file) => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
-      const text = e.target.result;
-      const rows = text.split("\n").map(r => r.trim()).filter(r => r.length > 0);
-      const headers = rows[0].split(",").map(h => h.trim());
-      const data = rows.slice(1).map(row => {
-        const values = row.split(",").map(v => v.trim());
-        return headers.reduce((obj, h, i) => {
-          obj[h] = values[i] || "";
-          return obj;
-        }, {});
-      });
-      resolve(data);
+      try {
+        const text = e.target.result;
+        const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+        
+        if (lines.length < 2) {
+          reject(new Error("CSV file must have at least a header and one data row"));
+          return;
+        }
+        
+        const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ''));
+        console.log("CSV Headers:", headers);
+        
+        const data = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ''));
+          if (values.length === headers.length && values.some(v => v.length > 0)) {
+            const row = {};
+            headers.forEach((header, index) => {
+              row[header] = values[index] || "";
+            });
+            data.push(row);
+          }
+        }
+        
+        console.log("Parsed CSV data:", data);
+        resolve(data);
+      } catch (error) {
+        reject(error);
+      }
     };
     reader.onerror = (err) => reject(err);
     reader.readAsText(file);
@@ -28,90 +45,177 @@ const parseCSV = (file) => {
 // 2️⃣ Helper: insert users into Supabase
 const importUsers = async (file, roleMap, orgData) => {
   try {
+    console.log("🔍 Starting user import for:", file.name);
     const rows = await parseCSV(file);
+    console.log("📊 Parsed rows:", rows);
 
-    const inserts = rows.map(r => ({
-      username: r.Email.split("@")[0],
-      full_name: r.Name,
-      email: r.Email,
-      role_id: roleMap[r.Role] || 4, // fallback to Standard user
-      user_status: r.Status.toLowerCase() === "active" ? "active" : "inactive",
-      password_hash: null,
-      auth_uid: null, 
-      organization_id: orgData.organization_id
-    }));
+    if (!rows || rows.length === 0) {
+      console.log("No valid rows found in CSV");
+      return [];
+    }
 
-    const { error } = await supabase.from("users").insert(inserts);
-    if (error) throw error;
+    // Validate required fields
+    const validRows = rows.filter(row => {
+      const hasName = row.Name && row.Name.trim().length > 0;
+      const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
+      const hasRole = row.Role && row.Role.trim().length > 0;
+      
+      if (!hasName || !hasEmail || !hasRole) {
+        console.warn("Skipping invalid row:", row);
+        return false;
+      }
+      return true;
+    });
 
-    console.log(`✅ Imported ${inserts.length} users`);
+    console.log(`Valid rows: ${validRows.length} out of ${rows.length}`);
+
+    const inserts = validRows.map((r, index) => {
+      const email = r.Email.toLowerCase().trim();
+      const username = `${email.split("@")[0]}_${Date.now()}_${index}`;
+      
+      return {
+        username: username,
+        full_name: r.Name.trim(),
+        email: email,
+        role_id: roleMap[r.Role] || 4, // Default to Standard user if role not found
+        user_status: (r.Status || 'active').toLowerCase() === "active" ? "active" : "inactive",
+        password_hash: null,
+        auth_uid: null, 
+        organization_id: orgData.organization_id
+      };
+    });
+
+    console.log("💾 About to insert users:", inserts);
+    
+    // Insert users one by one to handle individual failures
+    const insertedUsers = [];
+    for (const userData of inserts) {
+      try {
+        const { data, error } = await supabase
+          .from("users")
+          .insert([userData])
+          .select()
+          .single();
+        
+        if (error) {
+          console.error(`Failed to insert user ${userData.email}:`, error);
+          continue; // Skip this user but continue with others
+        }
+        
+        insertedUsers.push(data);
+        console.log(`✅ Inserted user: ${userData.email}`);
+      } catch (userError) {
+        console.error(`Error inserting user ${userData.email}:`, userError);
+      }
+    }
+
+    console.log(`✅ Successfully inserted ${insertedUsers.length} users out of ${inserts.length}`);
+    return insertedUsers;
+    
   } catch (err) {
-    console.error("User import failed:", err.message);
+    console.error("❌ User import failed:", err.message);
     alert("❌ User import failed: " + err.message);
+    return [];
   }
 };
 
-// 3️⃣ Helper: insert assets into Supabase (FIXED VERSION)
 const importAssets = async (file, orgData) => {
   try {
+    console.log("🔍 Starting asset import...");
     const rows = await parseCSV(file);
+    console.log("📊 Parsed asset rows:", rows);
 
-    // Step 1: Get unique categories from CSV
-    const uniqueCategories = [...new Set(rows.map(r => r.Category))];
-    
-    // Step 2: Insert categories (ignore duplicates)
-    const categoryInserts = uniqueCategories.map(cat => ({
-      category_name: cat
-    }));
-
-    const { error: categoryError } = await supabase
-      .from("asset_categories")
-      .upsert(categoryInserts, { 
-        onConflict: 'category_name',
-        ignoreDuplicates: true 
-      });
-    
-    if (categoryError) {
-      console.error("Category insert error:", categoryError);
+    if (!rows || rows.length === 0) {
+      console.log("No valid asset rows found");
+      return 0;
     }
 
-    // Step 3: Get all categories with their IDs
+    // Validate asset rows
+    const validRows = rows.filter(row => {
+      const hasName = row["Asset Name"] && row["Asset Name"].trim().length > 0;
+      const hasCategory = row.Category && row.Category.trim().length > 0;
+      
+      if (!hasName || !hasCategory) {
+        console.warn("Skipping invalid asset row:", row);
+        return false;
+      }
+      return true;
+    });
+
+    // Get unique categories
+    const uniqueCategories = [...new Set(validRows.map(r => r.Category.trim()))];
+    console.log("Unique categories to create:", uniqueCategories);
+    
+    // Insert categories
+    for (const categoryName of uniqueCategories) {
+      try {
+        await supabase
+          .from("asset_categories")
+          .upsert({ category_name: categoryName }, { 
+            onConflict: 'category_name',
+            ignoreDuplicates: true 
+          });
+      } catch (catError) {
+        console.error(`Failed to create category ${categoryName}:`, catError);
+      }
+    }
+
+    // Get all categories with IDs
     const { data: categories, error: fetchError } = await supabase
       .from("asset_categories")
       .select("category_id, category_name");
     
-    if (fetchError) throw fetchError;
+    if (fetchError) {
+      console.error("Error fetching categories:", fetchError);
+      return 0;
+    }
 
-    // Step 4: Create category name to ID mapping
     const categoryMap = {};
     categories.forEach(cat => {
       categoryMap[cat.category_name] = cat.category_id;
     });
 
-    // Step 5: Insert assets with correct category_id
-    const assetInserts = rows.map(r => ({
-      asset_code: r["Asset Name"],
-      asset_category_id: categoryMap[r.Category], // Use category_id instead of category_name
-      asset_status: r.Status.toLowerCase(), // Use asset_status instead of status
-      location: r.Location,
-    }));
+    console.log("Category mapping:", categoryMap);
 
-    const { error: assetError } = await supabase
-      .from("assets")
-      .upsert(assetInserts, { 
-        onConflict: 'asset_code',
-        ignoreDuplicates: true 
-      });
+    // Insert assets one by one
+    const insertedAssets = [];
+    for (let i = 0; i < validRows.length; i++) {
+      const row = validRows[i];
+      try {
+        const assetData = {
+          asset_code: `${row["Asset Name"].trim()}_${Date.now()}_${i}`,
+          asset_category_id: categoryMap[row.Category.trim()],
+          asset_status: (row.Status || 'operational').toLowerCase(),
+          location: row.Location ? row.Location.trim() : 'Not specified',
+          organization_id: orgData.organization_id
+        };
+
+        const { data, error } = await supabase
+          .from("assets")
+          .insert([assetData])
+          .select()
+          .single();
+        
+        if (error) {
+          console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
+          continue;
+        }
+        
+        insertedAssets.push(data);
+        console.log(`✅ Inserted asset: ${assetData.asset_code}`);
+      } catch (assetError) {
+        console.error(`Error inserting asset:`, assetError);
+      }
+    }
+
+    console.log(`✅ Successfully imported ${insertedAssets.length} assets`);
+    return insertedAssets.length;
     
-    if (assetError) throw assetError;
-
-    console.log(`✅ Imported ${assetInserts.length} assets`);
   } catch (err) {
-    console.error("Asset import failed:", err.message);
-    alert("❌ Asset import failed: " + err.message);
+    console.error("❌ Asset import failed:", err.message);
+    return 0;
   }
 };
-
 const getRoleMap = async () => {
   try {
     const { data: roles, error } = await supabase
@@ -1077,21 +1181,28 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
                 <button
 onClick={async () => {
   try {
-    // Get current user (instead of creating new one)
+    console.log("=== STARTING SETUP COMPLETION ===");
+    
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     if (userError || !user) {
       throw new Error('Please log in again');
     }
 
-    // 1️⃣ Update user password (if provided)
+    console.log("Current user:", user.email);
+
+    // Update password if provided
     if (orgData.password && orgData.password === orgData.confirmPassword) {
       const { error: passwordError } = await supabase.auth.updateUser({
         password: orgData.password
       });
-      if (passwordError) throw passwordError;
+      if (passwordError) {
+        console.error("Password update error:", passwordError);
+        // Don't throw here, continue with setup
+      }
     }
 
-    // 2️⃣ Create organization
+    // Create organization
+    console.log("Creating organization...");
     const { data: orgResult, error: orgError } = await supabase
       .from("organizations")
       .insert([{
@@ -1106,66 +1217,121 @@ onClick={async () => {
       .select()
       .single();
       
-    if (orgError) throw orgError;
+    if (orgError) {
+      console.error("Organization creation error:", orgError);
+      throw orgError;
+    }
+    
+    console.log("Organization created:", orgResult);
 
-    // 3️⃣ Create user profile  
-    const { error: userInsertError } = await supabase
-      .from("users")
-      .insert([{
-        username: orgData.contactEmail.split("@")[0],
-        full_name: orgData.contactPerson,
-        email: orgData.contactEmail,
-        role_id: 1, // System admin role
-        user_status: "active",
-        password_hash: null,
-        auth_uid: user.id, // Use existing user ID
-        organization_id: orgResult.organization_id
-      }]);
+    // Create admin user profile
+    console.log("Creating admin user profile...");
+   const { error: userInsertError } = await supabase
+  .from("users")
+  .insert([{
+    username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
+    full_name: orgData.contactPerson,
+    email: orgData.contactEmail.toLowerCase().trim(),
+    role_id: 1,
+    user_status: "active",
+    password_hash: null,
+    auth_uid: user.id,
+    organization_id: orgResult.organization_id
+  }]);
       
-    if (userInsertError) throw userInsertError;
+    if (userInsertError) {
+      console.error("User profile creation error:", userInsertError);
+      throw userInsertError;
+    }
 
-    // 4️⃣ Get role mapping for user imports
+    // Get role mapping
     const roleMap = await getRoleMap();
+    console.log("Role mapping:", roleMap);
 
-    // 5️⃣ Import Users from CSV files (if provided)
+    // Import users with better error handling
+    let userImportResults = {
+      heads: 0,
+      personnel: 0,
+      standardUsers: 0
+    };
+
     if (uploadedFiles.heads) {
-      await importUsers(uploadedFiles.heads, roleMap, orgResult);
+      try {
+        console.log("Importing heads...");
+        const result = await importUsers(uploadedFiles.heads, roleMap, orgResult);
+        userImportResults.heads = result ? result.length : 0;
+      } catch (err) {
+        console.error("Heads import failed:", err);
+      }
     }
+
     if (uploadedFiles.personnel) {
-      await importUsers(uploadedFiles.personnel, roleMap, orgResult);
+      try {
+        console.log("Importing personnel...");
+        const result = await importUsers(uploadedFiles.personnel, roleMap, orgResult);
+        userImportResults.personnel = result ? result.length : 0;
+      } catch (err) {
+        console.error("Personnel import failed:", err);
+      }
     }
+
     if (uploadedFiles.standardUsers) {
-      await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
+      try {
+        console.log("Importing standard users...");
+        const result = await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
+        userImportResults.standardUsers = result ? result.length : 0;
+      } catch (err) {
+        console.error("Standard users import failed:", err);
+      }
     }
 
-    // 6️⃣ Import Assets from CSV (if provided)
+    // Import assets
+    let assetImportResult = 0;
     if (uploadedFiles.assets) {
-      await importAssets(uploadedFiles.assets, orgResult);
+      try {
+        console.log("Importing assets...");
+        const result = await importAssets(uploadedFiles.assets, orgResult);
+        assetImportResult = result || 0;
+      } catch (err) {
+        console.error("Asset import failed:", err);
+      }
     }
 
-    // 7️⃣ Save setup progress
+    // Save setup data
     const setupData = {
-      completed: isSetupComplete(),
+      completed: true,
       skippedSteps,
       userImportMethod,
       assetImportMethod,
       uploadedFiles,
       orgData,
-      completedDate: new Date().toISOString()
+      importResults: {
+        users: userImportResults,
+        assets: assetImportResult
+      },
+      completedDate: new Date().toISOString(),
+      organizationId: orgResult.organization_id
     };
+    
     localStorage.setItem("setupWizardData", JSON.stringify(setupData));
     localStorage.removeItem("orgDataFromSignup");
 
-    // 8️⃣ Redirect
-    alert("✅ Setup completed! Please login to access your dashboard.");
+    console.log("=== SETUP COMPLETED ===");
+    console.log("Import results:", setupData.importResults);
+
+    alert(`Setup completed successfully! 
+    Users imported: ${Object.values(userImportResults).reduce((a, b) => a + b, 0)}
+    Assets imported: ${assetImportResult}
+    
+    You will now be redirected to login.`);
+    
     navigate("/login");
 
   } catch (err) {
-    console.error("Setup failed:", err.message);
-    alert("❌ Setup failed: " + err.message);
+    console.error("Setup completion failed:", err);
+    alert("Setup failed: " + err.message + "\n\nCheck console for details.");
   }
 }}
-
 
                   className="btn d-flex align-items-center px-4 py-2 text-white"
                   style={{
