@@ -1,4 +1,3 @@
-import SidebarLayout from '../Layouts/SidebarLayout';
 import { useState } from 'react';
 import { Container, Row, Col, Button, Form, Badge, Card, InputGroup, FormControl, Modal } from 'react-bootstrap';
 
@@ -158,7 +157,6 @@ const handleCancelModal = () => {
                 };  
 
 return (    
-  <SidebarLayout>
   <Container fluid style={{ backgroundColor: '#FFFFFFFF', minHeight: '100vh', padding: 0 }}>  
   <Row>
                                                              
@@ -957,6 +955,5 @@ return (
                </Modal.Footer>
             </Modal>
           </Container>
-       </SidebarLayout>
 );
 }

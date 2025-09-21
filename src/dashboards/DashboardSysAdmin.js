@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import SidebarLayout from '../Layouts/SidebarLayout';
 import { supabase } from '../supabaseClient'; 
 import Papa from 'papaparse'
+import { PasswordUtils } from '../utils/PasswordUtils';
+import { EmailService } from '../utils/EmailService';
+import EmailProgressModal from '../components/EmailProgressModal';
 
 
 export default function DashboardSyAdmin() {
@@ -38,6 +40,17 @@ const addActivity = (type, title, user = organizationData.contactPerson) => {
   };
 
   setRecentActivities(prev => [newActivity, ...prev.slice(0, 9)]); // Keep only latest 10
+};
+
+// Add this function to handle closing the email progress modal
+const handleEmailProgressClose = () => {
+  setEmailProgress(prev => ({ ...prev, isVisible: false }));
+  
+  // Show final summary if there were any failures
+  const { successCount, failedCount } = emailProgress;
+  if (failedCount > 0) {
+    alert(`Email Summary:\nâœ… ${successCount} emails sent successfully\nâŒ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+  }
 };
 
 // Helper function for activity icons
@@ -128,42 +141,55 @@ const getRelativeTime = (timestamp) => {
   // Function to get dynamic organization data
 // Replace your getOrganizationData function with this fixed version:
 
-const getOrganizationData = () => {
+const getOrganizationData = async () => {
   try {
-    const setupWizardData = localStorage.getItem('setupWizardData');
-    if (setupWizardData) {
-      const wizardData = JSON.parse(setupWizardData);
-      if (wizardData.orgData) {
-        return {
-          name: wizardData.orgData.name || "OpenFMS",
-          type: wizardData.orgData.orgType || "Government Agency",
-          address: wizardData.orgData.address || "Not specified",
-          phone: wizardData.orgData.phone || "Not specified",
-          country: wizardData.orgData.country || "Not specified",
-          website: wizardData.orgData.website || "https://openfms.io",
-          contactPerson: wizardData.orgData.contactPerson || "System Administrator",
-          contactEmail: wizardData.orgData.email || "admin@openfms.io",
-          // Remove statistics - these will come from database
-        };
-      }
-    }
-    
-    // Default fallback
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return getDefaultOrgData();
+
+    // Get user's organization from database
+    const { data: userData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (!userData) return getDefaultOrgData();
+
+    // Get organization details
+    const { data: orgData } = await supabase
+      .from('organizations')
+      .select('*')
+      .eq('organization_id', userData.organization_id)
+      .single();
+
+    if (!orgData) return getDefaultOrgData();
+
     return {
-      name: "OpenFMS",
-      type: "Government Agency",
-      address: "Not specified",
-      phone: "Not specified", 
-      country: "Not specified",
-      website: "https://openfms.io",
-      contactPerson: "System Administrator",
-      contactEmail: "admin@openfms.io"
+      name: orgData.org_name || "OpenFMS",
+      type: "Government Agency", // or map from org_type_id
+      address: orgData.address || "Not specified",
+      phone: orgData.phone || "Not specified",
+      country: "Not specified", // or map from country_id
+      website: orgData.website || "https://openfms.io",
+      contactPerson: orgData.contact_person || "System Administrator",
+      contactEmail: orgData.contact_email || "admin@openfms.io"
     };
   } catch (error) {
     console.error('Error loading organization data:', error);
-    return {}; // Fallback
+    return getDefaultOrgData();
   }
 };
+
+const getDefaultOrgData = () => ({
+  name: "OpenFMS",
+  type: "Government Agency",
+  address: "Not specified",
+  phone: "Not specified",
+  country: "Not specified", 
+  website: "https://openfms.io",
+  contactPerson: "System Administrator",
+  contactEmail: "admin@openfms.io"
+});
 
   // Make organizationData dynamic state
 const [organizationData, setOrganizationData] = useState({
@@ -195,6 +221,15 @@ const [organizationData, setOrganizationData] = useState({
     setupProgress: 0,
     systemHealth: 'Good'
   });
+  const [emailProgress, setEmailProgress] = useState({
+  isVisible: false,
+  progress: 0,
+  total: 0,
+  currentEmail: '',
+  successCount: 0,
+  failedCount: 0
+});
+
 
   // Sample data generation functions
   const generateSampleUsers = (count) => {
@@ -238,12 +273,19 @@ const [organizationData, setOrganizationData] = useState({
     return 50;
   };
 
+// Replace your fetchDatabaseStats function in DashboardSysAdmin.js with this:
+
 const fetchDatabaseStats = async () => {
   try {
-    // Get current user and organization
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      console.log('User not authenticated, using default values');
+    // âŒ OLD - Supabase Auth (doesn't work with your localStorage system)
+    // const { data: { user }, error: userError } = await supabase.auth.getUser();
+    
+    // âœ… NEW - Use localStorage authentication 
+    const userEmail = localStorage.getItem('userEmail');
+    const userId = localStorage.getItem('userId');
+    
+    if (!userEmail || !userId) {
+      console.log('User not authenticated in localStorage, using default values');
       return {
         personnel: 0,
         standardUsers: 0,
@@ -254,15 +296,17 @@ const fetchDatabaseStats = async () => {
       };
     }
 
-    // Get user's organization_id
+    console.log('Authenticated user found:', { userEmail, userId });
+
+    // Get user's organization_id using the email from localStorage
     const { data: userData, error: userDataError } = await supabase
       .from('users')
-      .select('organization_id')
-      .eq('auth_uid', user.id)
+      .select('organization_id, user_id')
+      .eq('email', userEmail.toLowerCase()) // Use email instead of auth_uid
       .single();
 
     if (userDataError || !userData) {
-      console.log('User data not found, using default values');
+      console.log('User data not found for email:', userEmail, userDataError);
       return {
         personnel: 0,
         standardUsers: 0,
@@ -274,8 +318,9 @@ const fetchDatabaseStats = async () => {
     }
 
     const orgId = userData.organization_id;
-    console.log('Organization ID:', orgId); // Debug log
+    console.log('Organization ID found:', orgId);
 
+    // Rest of your existing code remains the same...
     const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
       // Personnel count (role_id 3) - exclude inactive_test
       supabase
@@ -354,7 +399,7 @@ const fetchDatabaseStats = async () => {
       )
     };
 
-    console.log('Final Stats:', stats); // Debug log
+    console.log('Final Stats from database:', stats);
     return stats;
 
   } catch (error) {
@@ -508,7 +553,7 @@ const updateSetupProgress = () => {
 };
 
 
-// Replace your handleBulkUserUpload function with this corrected version
+// Replace your existing handleBulkUserUpload function with this corrected version
 const handleBulkUserUpload = async () => {
   if (!previewData || !selectedFile) {
     alert('No file selected for upload!');
@@ -541,7 +586,7 @@ const handleBulkUserUpload = async () => {
     const parseResult = Papa.parse(csvContent, { 
       header: true, 
       skipEmptyLines: true,
-      transformHeader: (header) => header.trim() // Clean headers
+      transformHeader: (header) => header.trim()
     });
 
     if (parseResult.errors.length > 0) {
@@ -553,23 +598,41 @@ const handleBulkUserUpload = async () => {
       row.Email && row.Email.trim() !== ''
     );
 
-    // FIXED: Prepare data for database insertion without created_at/updated_at
-    const usersToInsert = csvRows.map(row => ({
-      full_name: row.Name.trim(),  // Use full_name instead of name
-      email: row.Email.trim().toLowerCase(),
-      user_status: (row.Status || 'active').toLowerCase(),
-      role_id: getRoleIdFromRole(row.Role),
-      organization_id: orgId,
-      username: `${row.Email.trim().toLowerCase().split('@')[0]}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` // Generate unique username
-      // Removed created_at and updated_at - let database handle these
-    }));
+    console.log(`Processing ${csvRows.length} users from CSV`);
 
-    console.log('Users to insert:', usersToInsert); // Debug log
+    // Generate passwords and prepare user data with credentials
+    const usersWithPasswords = csvRows.map(row => {
+      const tempPassword = PasswordUtils.generateSecurePassword(10);
+      const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+      
+      return {
+        full_name: row.Name.trim(),
+        email: row.Email.trim().toLowerCase(),
+        user_status: 'pending_activation',
+        role_id: getRoleIdFromRole(row.Role),
+        organization_id: orgId,
+        username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
+        password_hash: hashedPassword,
+        tempPassword: tempPassword, // Keep for email
+        auth_uid: null
+      };
+    });
 
-    // Insert to database - simple insert without upsert
+    console.log('Generated passwords for users:', usersWithPasswords.map(u => ({
+      name: u.full_name, 
+      email: u.email,
+      password: '[HIDDEN]'
+    })));
+
+    // Insert to database (exclude tempPassword from DB insert)
+    const dbUsers = usersWithPasswords.map(user => {
+      const { tempPassword, ...dbUser } = user;
+      return dbUser;
+    });
+
     const { data: insertResult, error: insertError } = await supabase
       .from('users')
-      .insert(usersToInsert)
+      .insert(dbUsers)
       .select('*');
 
     if (insertError) {
@@ -577,9 +640,79 @@ const handleBulkUserUpload = async () => {
       throw new Error(`Failed to save users to database: ${insertError.message}`);
     }
 
-    const insertedCount = insertResult ? insertResult.length : usersToInsert.length;
+    const insertedCount = insertResult ? insertResult.length : dbUsers.length;
+    console.log(`Successfully inserted ${insertedCount} users to database`);
+    console.log('Starting dashboard refresh after successful user insertion...');
 
-    // Update localStorage for activity tracking only
+// IMMEDIATE dashboard refresh
+setTimeout(async () => {
+  try {
+    const freshStats = await fetchDatabaseStats();
+    setOrganizationData(prev => ({ ...prev, ...freshStats }));
+    console.log('Dashboard forcibly updated with fresh stats:', freshStats);
+  } catch (error) {
+    console.error('Dashboard refresh error:', error);
+  }
+}, 100); // Small delay to ensure database transaction is complete
+    try {
+  const dbStats = await fetchDatabaseStats();
+  console.log('New dashboard stats from database:', dbStats);
+  
+  // Update the organization data state immediately
+  setOrganizationData(prev => {
+    const updated = {
+      ...prev,
+      ...dbStats
+    };
+    console.log('Dashboard state being updated to:', updated);
+    return updated;
+  });
+
+  // Also update dashboard data state for consistency
+  setDashboardData(prev => ({
+    ...prev,
+    totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
+    totalAssets: dbStats.totalAssets
+  }));
+
+  console.log('âœ… Dashboard refresh completed - counts should be updated now');
+} catch (refreshError) {
+  console.error('âŒ Failed to refresh dashboard:', refreshError);
+  alert(`Users created successfully in database, but dashboard refresh failed. Please reload the page to see updated counts.`);
+}
+
+// Then continue with the rest of your existing code...
+// Close the user upload modal BEFORE starting email process
+setShowUserUploadModal(false);
+setSelectedUserType('');
+setPreviewData(null);
+setSelectedFile(null);
+    // ðŸ”¥ CRITICAL FIX: Update dashboard counts IMMEDIATELY after successful DB insertion
+    console.log('Refreshing dashboard counts...');
+    const dbStats = await fetchDatabaseStats();
+    setOrganizationData(prev => ({
+      ...prev,
+      ...dbStats
+    }));
+    console.log('Dashboard counts updated:', dbStats);
+
+    // Close the user upload modal BEFORE starting email process
+    setShowUserUploadModal(false);
+    setSelectedUserType('');
+    setPreviewData(null);
+    setSelectedFile(null);
+
+    // Show email progress modal
+    setEmailProgress({
+      isVisible: true,
+      progress: 0,
+      total: usersWithPasswords.length,
+      currentEmail: '',
+      successCount: 0,
+      failedCount: 0
+    });
+
+    // Update localStorage for activity tracking (before email sending)
     let setupWizardData = localStorage.getItem('setupWizardData');
     let wizardData = setupWizardData ? JSON.parse(setupWizardData) : {
       orgData: { name: organizationData.name, email: organizationData.contactEmail },
@@ -588,14 +721,15 @@ const handleBulkUserUpload = async () => {
       completed: false
     };
 
-    // Track upload activity (don't store actual data)
     if (!wizardData.uploadedFiles) wizardData.uploadedFiles = {};
     
     const uploadRecord = {
       fileName: selectedFile.name,
       uploadDate: new Date().toISOString(),
       recordsProcessed: insertedCount,
-      source: 'database'
+      emailsSent: 0, // Will be updated after email sending
+      emailsFailed: 0,
+      source: 'database_with_emails'
     };
 
     if (wizardData.uploadedFiles[userType]) {
@@ -610,37 +744,106 @@ const handleBulkUserUpload = async () => {
 
     localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
 
-    // Refresh dashboard data from database
-    const dbStats = await fetchDatabaseStats();
-    setOrganizationData(prev => ({
-      ...prev,
-      ...dbStats
-    }));
-
-    // Add activity log
+    // Add activity log immediately for user creation
     const userTypeDisplayName = userType === 'heads' ? 'Heads' : 
                                userType === 'personnel' ? 'Personnel' : 'Standard Users';
     
     addActivity(
-      'csv_upload',
-      `${userTypeDisplayName} CSV uploaded: ${insertedCount} records saved to database`,
+      'user_added',
+      `${userTypeDisplayName} added: ${insertedCount} accounts created successfully`,
       organizationData.contactPerson
     );
 
     // Update setup progress
     updateSetupProgress();
 
-    // Close modal and reset
-    setShowUserUploadModal(false);
-    setSelectedUserType('');
-    setPreviewData(null);
-    setSelectedFile(null);
-    
-    alert(`${userTypeDisplayName} uploaded successfully! ${insertedCount} records saved to database.`);
+    // ðŸ”¥ EMAIL SENDING - This now happens AFTER dashboard is updated
+    console.log('Starting bulk email send...');
+    let emailResults = [];
+    let successfulEmails = 0;
+    let failedEmails = 0;
+
+    try {
+      // Initialize EmailJS
+      if (!EmailService.isConfigured()) {
+        throw new Error('Email service not configured. Check environment variables.');
+      }
+
+      emailResults = await EmailService.sendBulkCredentials(
+        usersWithPasswords,
+        organizationData.name,
+        (sent, total, currentEmail, success) => {
+          setEmailProgress(prev => ({
+            ...prev,
+            progress: sent,
+            currentEmail: currentEmail,
+            successCount: success ? prev.successCount + 1 : prev.successCount,
+            failedCount: success ? prev.failedCount : prev.failedCount + 1
+          }));
+          console.log(`Email progress: ${sent}/${total} - ${currentEmail} - ${success ? 'Success' : 'Failed'}`);
+        }
+      );
+
+      successfulEmails = emailResults.filter(r => r.success).length;
+      failedEmails = emailResults.filter(r => !r.success).length;
+
+      console.log(`Email sending complete: ${successfulEmails} sent, ${failedEmails} failed`);
+
+      // Update the upload record with email results
+      const updatedWizardData = JSON.parse(localStorage.getItem('setupWizardData'));
+      if (updatedWizardData.uploadedFiles[userType]) {
+        const currentRecord = Array.isArray(updatedWizardData.uploadedFiles[userType]) 
+          ? updatedWizardData.uploadedFiles[userType][updatedWizardData.uploadedFiles[userType].length - 1]
+          : updatedWizardData.uploadedFiles[userType];
+        
+        currentRecord.emailsSent = successfulEmails;
+        currentRecord.emailsFailed = failedEmails;
+        localStorage.setItem('setupWizardData', JSON.stringify(updatedWizardData));
+      }
+
+      // Add another activity log for email results
+      if (failedEmails > 0) {
+        addActivity(
+          'csv_upload',
+          `Email sending completed: ${successfulEmails} sent, ${failedEmails} failed`,
+          organizationData.contactPerson
+        );
+      } else {
+        addActivity(
+          'csv_upload',
+          `All ${successfulEmails} welcome emails sent successfully`,
+          organizationData.contactPerson
+        );
+      }
+
+    } catch (emailError) {
+      console.error('Email sending failed:', emailError);
+      failedEmails = usersWithPasswords.length;
+      
+      // Update progress to show all failed
+      setEmailProgress(prev => ({
+        ...prev,
+        progress: usersWithPasswords.length,
+        failedCount: usersWithPasswords.length,
+        currentEmail: 'Email sending failed'
+      }));
+
+      addActivity(
+        'csv_upload',
+        `Users added successfully but email sending failed: ${emailError.message}`,
+        organizationData.contactPerson
+      );
+    }
+
+    console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
     
   } catch (error) {
     console.error('Error processing user CSV:', error);
     alert(`Error: ${error.message}`);
+    
+    // Hide progress modal on error
+    setEmailProgress(prev => ({ ...prev, isVisible: false }));
+    
   } finally {
     setUploadingUsers(false);
   }
@@ -848,8 +1051,8 @@ const handleBulkAssetUpload = async () => {
     
     // Show detailed results
     let resultMessage = `Asset upload completed!\n\n`;
-    resultMessage += `✅ Successfully inserted: ${insertedCount} assets\n`;
-    if (failedCount > 0) resultMessage += `❌ Failed: ${failedCount} assets\n`;
+    resultMessage += `âœ… Successfully inserted: ${insertedCount} assets\n`;
+    if (failedCount > 0) resultMessage += `âŒ Failed: ${failedCount} assets\n`;
     
     alert(resultMessage);
     
@@ -990,12 +1193,7 @@ useEffect(() => {
   loadDashboardData();
 }, []);
 
-// Save activities whenever they change
-useEffect(() => {
-  if (recentActivities.length > 0) {
-    localStorage.setItem('recentActivities', JSON.stringify(recentActivities));
-  }
-}, [recentActivities]);
+
   
   // Auto-dismiss completion message
   useEffect(() => {
@@ -1398,6 +1596,17 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     </div>
   </div>
 )}
+
+{/* Email Progress Modal */}
+<EmailProgressModal
+  isVisible={emailProgress.isVisible}
+  progress={emailProgress.progress}
+  total={emailProgress.total}
+  currentEmail={emailProgress.currentEmail}
+  successCount={emailProgress.successCount}
+  failedCount={emailProgress.failedCount}
+  onClose={handleEmailProgressClose}
+/>
 
         {/* Setup Status Alert */}
         {!setupCompleted && (

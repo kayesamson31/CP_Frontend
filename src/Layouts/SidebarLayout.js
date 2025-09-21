@@ -4,6 +4,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Container, Row, Col, Button, Nav } from 'react-bootstrap';
 import dashboardlogo from '../assets/OpenFMSLogo.png';
 import 'bootstrap-icons/font/bootstrap-icons.css';
+import { supabase } from '../supabaseClient';
 
 const menuConfig = {
   standard: [
@@ -42,13 +43,48 @@ export default function SidebarLayout({ children}) {
   const location = useLocation();
   const activeTab = location.pathname;
   const [notificationCount, setNotificationCount] = useState(0);
-  const role = localStorage.getItem('userRole') || 'standard';
+  const [role, setRole] = useState('standard');
   const menus = menuConfig[role] || menuConfig.standard;
+useEffect(() => {
+  const checkUserRole = async () => {
+   const { data: { user } } = await supabase.auth.getUser();
+if (user) {
+  // Get role from database instead of localStorage
+  const { data: userData } = await supabase
+    .from('users')
+    .select('role_id')
+    .eq('auth_uid', user.id)
+    .single();
+    
+  let userRole = 'standard';
+if (userData) {
+  switch (userData.role_id) {
+    case 1: 
+      userRole = "sysadmin"; 
+      break;
+    case 2: 
+      userRole = "admin"; 
+      break;
+    case 3: 
+      userRole = "personnel"; 
+      break;
+    case 4: 
+      userRole = "standard"; 
+      break;
+    default:
+      userRole = "standard";
+  }
+}
+setRole(userRole);
+}
+  };
+  checkUserRole();
+}, []);
+  
 
   useEffect(() => {
     const updateNotificationCount = () => {
-      const count = localStorage.getItem(`unreadCount_${role}`) || '0';
-      setNotificationCount(parseInt(count));
+const count = 0;      setNotificationCount(parseInt(count));
     };
     
     updateNotificationCount();
@@ -66,15 +102,10 @@ export default function SidebarLayout({ children}) {
     };
   }, [role]);
 
-  const handleLogout = () => {
-    localStorage.removeItem('userEmail');
-    localStorage.removeItem('userName');
-    localStorage.removeItem('userRole');
-    localStorage.removeItem('user');
-    localStorage.removeItem('orgDataFromSignup');
-    navigate('/login');
-  };
-
+  const handleLogout = async () => {
+  await supabase.auth.signOut();
+  navigate('/login');
+};
   const renderIcon = (tab, isActive) => {
     return (
       <i 

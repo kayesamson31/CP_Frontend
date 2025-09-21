@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Container, Row, Col, Button, Form, Card } from 'react-bootstrap';
+import { Container, Row, Col, Button, Form, Card, Alert } from 'react-bootstrap';
 import SidebarLayout from '../../Layouts/SidebarLayout';
+import { supabase } from '../../supabaseClient';
+import { PasswordUtils } from '../../utils/PasswordUtils';
 
 export default function Profile({ role = 'standard' }) {
   const [profileData, setProfileData] = useState({
@@ -15,25 +17,92 @@ export default function Profile({ role = 'standard' }) {
   const [formErrors, setFormErrors] = useState({});
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [requirePasswordChange, setRequirePasswordChange] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [loading, setLoading] = useState(true);
 
 useEffect(() => {
-  // Get user info from localStorage
-  const storedName = localStorage.getItem('userName') || '';
-  const storedEmail = localStorage.getItem('userEmail') || '';
-  const storedRole = localStorage.getItem('userRole') || 'Standard User';
-  
-  const userData = {
-    name: storedName,
-    email: storedEmail,
-    role: storedRole,
+  const loadUserProfile = async () => {
+    try {
+      // Get current authenticated user from Supabase Auth
+      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+      
+      if (authError || !authUser) {
+        console.error('No authenticated user found:', authError);
+        setLoading(false);
+        return;
+      }
+
+      console.log('Profile loading for auth user:', authUser.id);
+
+      // Get user data from database using auth_uid
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_uid', authUser.id)
+        .single();
+
+      if (userError || !userData) {
+        console.error('Failed to load user data:', userError);
+        
+        // Fallback to localStorage if database query fails
+        const fallbackData = {
+          name: localStorage.getItem('userName') || authUser.user_metadata?.full_name || '',
+          email: authUser.email || '',
+          role: localStorage.getItem('userRole') || 'standard',
+        };
+        
+        setProfileData(prev => ({ ...prev, ...fallbackData }));
+        setOriginalData(fallbackData);
+        setLoading(false);
+        return;
+      }
+
+      console.log('User data loaded:', userData);
+
+      // Convert role_id to string
+      let userRole = "";
+      switch (userData.role_id) {
+        case 1: userRole = "sysadmin"; break;
+        case 2: userRole = "admin"; break;
+        case 3: userRole = "personnel"; break;
+        case 4: userRole = "standard"; break;
+        default: userRole = "standard";
+      }
+
+      const profileInfo = {
+        name: userData.full_name || '',
+        email: userData.email || '',
+        role: userRole,
+      };
+
+      setProfileData(prev => ({ ...prev, ...profileInfo }));
+      setOriginalData(profileInfo);
+
+      // Check if password change is required
+      const needsPasswordChange = userData.user_status === 'pending_activation';
+      setRequirePasswordChange(needsPasswordChange);
+
+      // Update localStorage to keep it in sync
+      localStorage.setItem('userName', profileInfo.name);
+      localStorage.setItem('userEmail', profileInfo.email);
+      localStorage.setItem('userRole', userRole);
+      
+      if (needsPasswordChange) {
+        localStorage.setItem('requirePasswordChange', 'true');
+        setHasChanges(true); // Enable save button
+      } else {
+        localStorage.removeItem('requirePasswordChange');
+      }
+
+    } catch (error) {
+      console.error('Error loading profile:', error);
+    } finally {
+      setLoading(false);
+    }
   };
-  
-  setProfileData(prev => ({
-    ...prev,
-    ...userData
-  }));
-  
-  setOriginalData(userData); // Store original data
+
+  loadUserProfile();
 }, []);
 
 const handleChange = (field, value) => {
@@ -45,14 +114,11 @@ const handleChange = (field, value) => {
   // Check if there are actual changes
   const personalInfoChanged = newData.name !== originalData.name || newData.email !== originalData.email;
   const passwordChanged = newData.newPassword || newData.confirmPassword;
-  setHasChanges(personalInfoChanged || passwordChanged);
+  setHasChanges(personalInfoChanged || passwordChanged || requirePasswordChange);
 };
 
-const handleSaveChanges = () => {
-  // Check if there are any changes
-  if (!hasChanges) {
-    return; // Do nothing if no changes
-  }
+const handleSaveChanges = async () => {
+  if (!hasChanges) return;
 
   const errors = {};
 
@@ -68,12 +134,12 @@ const handleSaveChanges = () => {
     errors.email = 'Email is invalid';
   }
 
-  const isChangingPassword = profileData.newPassword || profileData.confirmPassword;
+  const isChangingPassword = profileData.newPassword || profileData.confirmPassword || requirePasswordChange;
 
-  // Validate password if changing
+  // Validate password if changing or required
   if (isChangingPassword) {
     if (!profileData.newPassword) {
-      errors.newPassword = 'New password is required';
+      errors.newPassword = requirePasswordChange ? 'You must set a new password' : 'New password is required';
     } else if (profileData.newPassword.length < 6) {
       errors.newPassword = 'Password must be at least 6 characters';
     }
@@ -90,43 +156,135 @@ const handleSaveChanges = () => {
     return;
   }
 
-  // Determine what was changed
-  const personalInfoChanged = profileData.name !== originalData.name || profileData.email !== originalData.email;
-  
-  // Save updated name and email to localStorage
-  localStorage.setItem('userName', profileData.name);
-  localStorage.setItem('userEmail', profileData.email);
+  setIsUpdating(true);
 
-  // Simulate API call
-  console.log('Saving profile changes:', profileData);
+  try {
+    // Get current authenticated user
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError || !authUser) {
+      alert("Session expired. Please log in again.");
+      setIsUpdating(false);
+      return;
+    }
 
-  // Update original data
-  setOriginalData({
-    name: profileData.name,
-    email: profileData.email,
-    role: profileData.role
-  });
+    // Prepare update data
+    const updateData = {
+      full_name: profileData.name.trim(),
+      email: profileData.email.toLowerCase().trim()
+    };
 
-  // Clear password fields
-  setProfileData(prev => ({
-    ...prev,
-    newPassword: '',
-    confirmPassword: ''
-  }));
+    // Add password update if needed
+    if (isChangingPassword) {
+      updateData.password_hash = PasswordUtils.hashPassword(profileData.newPassword);
+      updateData.user_status = 'active'; // Remove pending_activation status
+    }
 
-  // Set appropriate success message
-  if (isChangingPassword && personalInfoChanged) {
-    setSuccessMessage('Profile and password updated successfully!');
-  } else if (isChangingPassword) {
-    setSuccessMessage('Password changed successfully!');
-  } else if (personalInfoChanged) {
-    setSuccessMessage('Profile updated successfully!');
+    console.log('Updating user profile for auth_uid:', authUser.id);
+
+    // Update database using auth_uid
+    const { data, error: updateError } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('auth_uid', authUser.id)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error('Database update error:', updateError);
+      alert(`Failed to update profile: ${updateError.message}`);
+      setIsUpdating(false);
+      return;
+    }
+
+    console.log('Profile updated successfully:', data);
+
+    // Update Supabase Auth email if it changed
+    if (profileData.email !== originalData.email) {
+      const { error: emailUpdateError } = await supabase.auth.updateUser({
+        email: profileData.email
+      });
+      
+      if (emailUpdateError) {
+        console.warn('Failed to update auth email:', emailUpdateError);
+        // Don't fail the whole operation, just warn
+      }
+    }
+
+    // Update Supabase Auth password if changed
+    if (isChangingPassword) {
+      const { error: passwordUpdateError } = await supabase.auth.updateUser({
+        password: profileData.newPassword
+      });
+      
+      if (passwordUpdateError) {
+        console.warn('Failed to update auth password:', passwordUpdateError);
+        // Don't fail the whole operation since we updated the hash in database
+      }
+    }
+
+    // Update localStorage
+    localStorage.setItem('userName', profileData.name);
+    localStorage.setItem('userEmail', profileData.email);
+    localStorage.removeItem('requirePasswordChange');
+
+    // Update original data
+    setOriginalData({
+      name: profileData.name,
+      email: profileData.email,
+      role: profileData.role
+    });
+
+    // Clear password fields and flags
+    setProfileData(prev => ({
+      ...prev,
+      newPassword: '',
+      confirmPassword: ''
+    }));
+
+    setRequirePasswordChange(false);
+
+    // Set success message
+    const personalInfoChanged = profileData.name !== originalData.name || profileData.email !== originalData.email;
+    
+    if (isChangingPassword && personalInfoChanged) {
+      setSuccessMessage('Profile and password updated successfully!');
+    } else if (isChangingPassword) {
+      setSuccessMessage('Password changed successfully! You can now use the system normally.');
+    } else if (personalInfoChanged) {
+      setSuccessMessage('Profile updated successfully!');
+    }
+
+    setHasChanges(false);
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 5000);
+
+  } catch (error) {
+    console.error('Exception during profile update:', error);
+    alert(`An error occurred: ${error.message}`);
+  } finally {
+    setIsUpdating(false);
   }
-
-  setHasChanges(false);
-  setShowSuccess(true);
-  setTimeout(() => setShowSuccess(false), 3000);
 };
+
+  if (loading) {
+    return (
+      <SidebarLayout role={role}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '50vh',
+          flexDirection: 'column'
+        }}>
+          <div className="spinner-border text-primary" role="status">
+            <span className="visually-hidden">Loading...</span>
+          </div>
+          <p style={{ marginTop: '1rem', color: '#666' }}>Loading profile...</p>
+        </div>
+      </SidebarLayout>
+    );
+  }
 
   return (
     <SidebarLayout role={role}>
@@ -138,6 +296,19 @@ const handleSaveChanges = () => {
               <h2 className="fw-bold text-dark mb-1">Profile Settings</h2>
               <p className="text-muted">Manage your personal information and security settings</p>
             </div>
+
+            {/* Password Change Required Alert */}
+            {requirePasswordChange && (
+              <Alert variant="warning" className="d-flex align-items-center mb-4">
+                <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                <div>
+                  <strong>Password Change Required!</strong>
+                  <div className="mt-1">
+                    You're using a temporary password. Please set a new password to continue using the system.
+                  </div>
+                </div>
+              </Alert>
+            )}
 
             {/* Success Message */}
             {showSuccess && (
@@ -161,7 +332,14 @@ const handleSaveChanges = () => {
                   <div>
                     <h3 className="mb-1 fw-bold">{profileData.name || 'Your Name'}</h3>
                     <p className="mb-1 opacity-90">{profileData.email || 'your.email@example.com'}</p>
-                    <span className="badge bg-white text-primary">{profileData.role}</span>
+                    <div className="d-flex align-items-center">
+                      <span className="badge bg-white text-primary me-2">{profileData.role}</span>
+                      {requirePasswordChange && (
+                        <span className="badge bg-warning text-dark">
+                          <i className="bi bi-key-fill me-1"></i>Password Change Required
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </Card.Header>
@@ -217,12 +395,19 @@ const handleSaveChanges = () => {
                     <i className="bi bi-shield-lock me-2 text-warning"></i>
                     Security Settings
                   </h5>
-                  <p className="text-muted small mb-3">Leave blank to keep your current password</p>
+                  <p className="text-muted small mb-3">
+                    {requirePasswordChange 
+                      ? "You must set a new password to continue using the system." 
+                      : "Leave blank to keep your current password"
+                    }
+                  </p>
                   
                   <Row>
                     <Col md={6}>
                       <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">New Password</Form.Label>
+                        <Form.Label className="fw-semibold">
+                          New Password {requirePasswordChange && <span className="text-danger">*</span>}
+                        </Form.Label>
                         <Form.Control
                           type="password"
                           placeholder="Enter new password"
@@ -237,7 +422,9 @@ const handleSaveChanges = () => {
                     </Col>
                     <Col md={6}>
                       <Form.Group className="mb-3">
-                        <Form.Label className="fw-semibold">Confirm Password</Form.Label>
+                        <Form.Label className="fw-semibold">
+                          Confirm Password {requirePasswordChange && <span className="text-danger">*</span>}
+                        </Form.Label>
                         <Form.Control
                           type="password"
                           placeholder="Confirm new password"
@@ -256,14 +443,23 @@ const handleSaveChanges = () => {
                 {/* Action Button */}
                 <div className="d-flex justify-content-end pt-4 border-top">
                   <Button
-                    variant="primary"
+                    variant={requirePasswordChange ? "warning" : "primary"}
                     onClick={handleSaveChanges}
-                    disabled={!hasChanges}
+                    disabled={!hasChanges || isUpdating}
                     className="px-5 py-2"
                     style={{ fontSize: '1rem' }}
                   >
-                    <i className="bi bi-check2 me-2"></i>
-                    Save Changes
+                    {isUpdating ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check2 me-2"></i>
+                        {requirePasswordChange ? "Set New Password" : "Save Changes"}
+                      </>
+                    )}
                   </Button>
                 </div>
               </Card.Body>

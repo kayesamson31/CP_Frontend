@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Upload, Download, Users, Building2, Database, CheckCircle, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
+import { PasswordUtils } from '../../utils/PasswordUtils';
 
 const parseCSV = (file) => {
   return new Promise((resolve, reject) => {
@@ -42,12 +43,11 @@ const parseCSV = (file) => {
   });
 };
 
-// 2️⃣ Helper: insert users into Supabase
 const importUsers = async (file, roleMap, orgData) => {
   try {
-    console.log("🔍 Starting user import for:", file.name);
+    console.log("Starting user import for:", file.name);
     const rows = await parseCSV(file);
-    console.log("📊 Parsed rows:", rows);
+    console.log("Parsed rows:", rows);
 
     if (!rows || rows.length === 0) {
       console.log("No valid rows found in CSV");
@@ -69,61 +69,86 @@ const importUsers = async (file, roleMap, orgData) => {
 
     console.log(`Valid rows: ${validRows.length} out of ${rows.length}`);
 
-    const inserts = validRows.map((r, index) => {
-      const email = r.Email.toLowerCase().trim();
-      const username = `${email.split("@")[0]}_${Date.now()}_${index}`;
-      
-      return {
-        username: username,
-        full_name: r.Name.trim(),
-        email: email,
-        role_id: roleMap[r.Role] || 4, // Default to Standard user if role not found
-        user_status: (r.Status || 'active').toLowerCase() === "active" ? "active" : "inactive",
-        password_hash: null,
-        auth_uid: null, 
-        organization_id: orgData.organization_id
-      };
-    });
-
-    console.log("💾 About to insert users:", inserts);
-    
-    // Insert users one by one to handle individual failures
+    // Process users one by one (async operations)
     const insertedUsers = [];
-    for (const userData of inserts) {
+    
+    for (let index = 0; index < validRows.length; index++) {
+      const r = validRows[index];
+      
       try {
-        const { data, error } = await supabase
+        const email = r.Email.toLowerCase().trim();
+        const tempPassword = PasswordUtils.generateSecurePassword(10);
+        const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+        const username = `${email.split("@")[0]}_${Date.now()}_${index}`;
+
+        // Step 1: Create Supabase Auth user
+        const { data: authUser, error: authError } = await supabase.auth.signUp({
+          email: email,
+          password: tempPassword,
+          options: {
+            data: {
+              full_name: r.Name.trim(),
+              role: r.Role,
+              temp_password: tempPassword // Store temp password in metadata
+            }
+          }
+        });
+
+        if (authError) {
+          console.error(`Failed to create auth for ${email}:`, authError);
+          continue; // Skip this user
+        }
+
+        // Step 2: Insert user into your database
+        const userData = {
+          username: username,
+          full_name: r.Name.trim(),
+          email: email,
+          role_id: roleMap[r.Role] || 4,
+          user_status: 'pending_activation', // They need to confirm email first
+          password_hash: hashedPassword,
+          auth_uid: authUser.user.id, // Link to Supabase Auth
+          organization_id: orgData.organization_id
+        };
+
+        const { data: dbUser, error: dbError } = await supabase
           .from("users")
           .insert([userData])
           .select()
           .single();
         
-        if (error) {
-          console.error(`Failed to insert user ${userData.email}:`, error);
-          continue; // Skip this user but continue with others
+        if (dbError) {
+          console.error(`Failed to insert user ${email} to database:`, dbError);
+          continue;
         }
         
-        insertedUsers.push(data);
-        console.log(`✅ Inserted user: ${userData.email}`);
+        insertedUsers.push({
+          ...dbUser,
+          tempPassword: tempPassword // Include for email sending
+        });
+        
+        console.log(`Successfully created user: ${email}`);
+        
       } catch (userError) {
-        console.error(`Error inserting user ${userData.email}:`, userError);
+        console.error(`Error processing user ${r.Email}:`, userError);
       }
     }
 
-    console.log(`✅ Successfully inserted ${insertedUsers.length} users out of ${inserts.length}`);
+    console.log(`Successfully processed ${insertedUsers.length} users out of ${validRows.length}`);
     return insertedUsers;
     
   } catch (err) {
-    console.error("❌ User import failed:", err.message);
-    alert("❌ User import failed: " + err.message);
+    console.error("User import failed:", err.message);
+    alert("User import failed: " + err.message);
     return [];
   }
 };
 
 const importAssets = async (file, orgData) => {
   try {
-    console.log("🔍 Starting asset import...");
+    console.log("ðŸ” Starting asset import...");
     const rows = await parseCSV(file);
-    console.log("📊 Parsed asset rows:", rows);
+    console.log("ðŸ“Š Parsed asset rows:", rows);
 
     if (!rows || rows.length === 0) {
       console.log("No valid asset rows found");
@@ -202,17 +227,17 @@ const importAssets = async (file, orgData) => {
         }
         
         insertedAssets.push(data);
-        console.log(`✅ Inserted asset: ${assetData.asset_code}`);
+        console.log(`âœ… Inserted asset: ${assetData.asset_code}`);
       } catch (assetError) {
         console.error(`Error inserting asset:`, assetError);
       }
     }
 
-    console.log(`✅ Successfully imported ${insertedAssets.length} assets`);
+    console.log(`âœ… Successfully imported ${insertedAssets.length} assets`);
     return insertedAssets.length;
     
   } catch (err) {
-    console.error("❌ Asset import failed:", err.message);
+    console.error("âŒ Asset import failed:", err.message);
     return 0;
   }
 };
@@ -1017,7 +1042,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
           <div className="d-flex">
             <CheckCircle className="text-success me-3 mt-1 flex-shrink-0" size={20} />
             <div>
-              <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>🎉 Congratulations!</h6>
+              <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>ðŸŽ‰ Congratulations!</h6>
               <p className="mb-0 small text-muted">
                 Your OpenFMS system has been successfully set up! All data has been imported and your system is now ready for full operation. 
                 You'll be redirected to your System Admin dashboard where you can manage users, assets, and system settings.
@@ -1224,9 +1249,10 @@ onClick={async () => {
     
     console.log("Organization created:", orgResult);
 
-    // Create admin user profile
-    console.log("Creating admin user profile...");
-   const { error: userInsertError } = await supabase
+  // FIND THIS SECTION (around line 800):
+// Create admin user profile
+console.log("Creating admin user profile...");
+const { error: userInsertError } = await supabase
   .from("users")
   .insert([{
     username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
@@ -1234,11 +1260,10 @@ onClick={async () => {
     email: orgData.contactEmail.toLowerCase().trim(),
     role_id: 1,
     user_status: "active",
-    password_hash: null,
-    auth_uid: user.id,
+    password_hash: PasswordUtils.hashPassword(orgData.password),
+    auth_uid: user.id, // â† This should work since user comes from Supabase Auth
     organization_id: orgResult.organization_id
   }]);
-      
     if (userInsertError) {
       console.error("User profile creation error:", userInsertError);
       throw userInsertError;

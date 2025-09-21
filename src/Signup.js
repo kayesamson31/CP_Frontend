@@ -50,7 +50,7 @@ function SignUpPage() {
 const handleSubmit = async (e) => {
   e.preventDefault();
   
-  // 1️⃣ VALIDATE FIRST
+  // 1ï¸âƒ£ VALIDATE FIRST
   if (!validateForm()) return;
   
   setLoading(true);
@@ -58,7 +58,7 @@ const handleSubmit = async (e) => {
   setErrors({}); // Clear previous errors
 
   try {
-    // 2️⃣ Create Supabase Auth user WITHOUT PASSWORD (email confirmation flow)
+    // 2ï¸âƒ£ Create Supabase Auth user WITHOUT PASSWORD (email confirmation flow)
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: orgInfo.contactEmail,
       password: 'temporary-password-123', // Required by Supabase, but won't be used
@@ -94,7 +94,7 @@ const handleSubmit = async (e) => {
 
     console.log("Signup success:", authData);
 
-    // 3️⃣ User is automatically confirmed, redirect to setup wizard
+    // 3ï¸âƒ£ User is automatically confirmed, redirect to setup wizard
     console.log("User created successfully:", authData.user);
     navigate("/setup-wizard");
     
@@ -294,7 +294,7 @@ const handleSubmit = async (e) => {
             </p>
           </div>
 
-    {/* ðŸš¨ Server error alert here */}
+    {/* Ã°Å¸Å¡Â¨ Server error alert here */}
     {serverError && (
       <div style={{ 
         background: '#fee2e2', 

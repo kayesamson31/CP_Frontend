@@ -1,5 +1,6 @@
 // src/App.jsx
-import React from 'react';
+import React, { useEffect } from 'react';
+import { EmailService } from './utils/EmailService';
 import PrivateRoute from './PrivateRoute'; 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 //public
@@ -33,6 +34,34 @@ import UserManagement from './dashboards/AdminNav/UserManagement';
 import AssetManagement from './dashboards/AdminNav/AssetManagement';
 
 function App() {
+    // Add this useEffect for EmailJS initialization
+  useEffect(() => {
+    console.log('Initializing EmailJS...');
+    
+    // Initialize EmailJS when app starts
+    const emailInitResult = EmailService.init();
+    if (emailInitResult) {
+      console.log('EmailJS initialized successfully');
+    } else {
+      console.warn('Email service not configured properly. Check environment variables:', {
+        serviceId: process.env.REACT_APP_EMAILJS_SERVICE_ID ? 'Set' : 'Missing',
+        templateId: process.env.REACT_APP_EMAILJS_TEMPLATE_ID ? 'Set' : 'Missing',
+        publicKey: process.env.REACT_APP_EMAILJS_PUBLIC_KEY ? 'Set' : 'Missing'
+      });
+    }
+    
+    // Optional: Test the configuration in development
+    if (process.env.NODE_ENV === 'development') {
+      EmailService.testConfiguration().then(result => {
+        if (result.success) {
+          console.log('Ã¢Å“â€¦ EmailJS configuration test passed');
+        } else {
+          console.error('Ã¢ÂÅ’ EmailJS configuration test failed:', result.error);
+          console.log('Make sure your EmailJS service, template, and public key are correctly configured.');
+        }
+      });
+    }
+  }, []); 
   return (
     <Router>
       <Routes>
@@ -55,6 +84,22 @@ function App() {
       </PrivateRoute>
     } 
   />
+<Route 
+  path="/dashboard-user/profile" 
+  element={
+    <PrivateRoute allowedRoles={['standard']}>
+      <Profile role="standard" />
+    </PrivateRoute>
+  } 
+/>
+<Route 
+  path="/dashboard-user/notification" 
+  element={
+    <PrivateRoute allowedRoles={['standard']}>
+      <Notification role="standard" />
+    </PrivateRoute>
+  } 
+/>
 
        {/*  <Route path="/dashboard-user/VehicleRequest" element={<VehicleRequest/>} /> */}
        {/*  <Route path="/dashboard-user/FacilityRequest" element={<FacilityRequest/>} /> */ }

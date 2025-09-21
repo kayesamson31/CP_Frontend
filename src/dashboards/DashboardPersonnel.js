@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import SidebarLayout from '../Layouts/SidebarLayout';
 import { Col, Modal, Badge } from 'react-bootstrap';
 import { 
   Calendar as CalendarIcon,
@@ -571,7 +570,6 @@ const capitalizePriority = (priority) => {
   };
 
   return (
-    <SidebarLayout role="personnel">
       <Col md={12} className="p-4">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
           <h2 style={{ margin: 0 }}>Welcome back!</h2>
@@ -982,6 +980,5 @@ const capitalizePriority = (priority) => {
           </div>
         )}
       </Col>
-    </SidebarLayout>
   );
 }
