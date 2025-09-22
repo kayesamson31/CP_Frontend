@@ -25,32 +25,34 @@ useEffect(() => {
   const loadUserProfile = async () => {
     try {
       // Get current authenticated user from Supabase Auth
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      
-      if (authError || !authUser) {
-        console.error('No authenticated user found:', authError);
-        setLoading(false);
-        return;
-      }
+// Load user from localStorage (set during login)
+const stored = localStorage.getItem('currentUser');
+if (!stored) {
+  console.error('No user found in localStorage. Please log in again.');
+  setLoading(false);
+  return;
+}
+const currentUser = JSON.parse(stored);
+console.log('Profile loading for local user:', currentUser);
 
-      console.log('Profile loading for auth user:', authUser.id);
+// Query DB using email (since auth_uid is null in custom auth)
+const { data: userData, error: userError } = await supabase
+  .from('users')
+  .select('*')
+  .eq('email', currentUser.email)
+  .single();
 
-      // Get user data from database using auth_uid
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('auth_uid', authUser.id)
-        .single();
 
       if (userError || !userData) {
         console.error('Failed to load user data:', userError);
         
         // Fallback to localStorage if database query fails
-        const fallbackData = {
-          name: localStorage.getItem('userName') || authUser.user_metadata?.full_name || '',
-          email: authUser.email || '',
-          role: localStorage.getItem('userRole') || 'standard',
-        };
+const fallbackData = {
+  name: localStorage.getItem('userName') || '',
+  email: localStorage.getItem('userEmail') || '',
+  role: localStorage.getItem('userRole') || 'standard',
+};
+
         
         setProfileData(prev => ({ ...prev, ...fallbackData }));
         setOriginalData(fallbackData);
@@ -160,13 +162,14 @@ const handleSaveChanges = async () => {
 
   try {
     // Get current authenticated user
-    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-    
-    if (authError || !authUser) {
-      alert("Session expired. Please log in again.");
-      setIsUpdating(false);
-      return;
-    }
+// Get current user from localStorage
+const stored = localStorage.getItem('currentUser');
+if (!stored) {
+  alert("Session expired. Please log in again.");
+  setIsUpdating(false);
+  return;
+}
+const currentUser = JSON.parse(stored);
 
     // Prepare update data
     const updateData = {
@@ -180,15 +183,15 @@ const handleSaveChanges = async () => {
       updateData.user_status = 'active'; // Remove pending_activation status
     }
 
-    console.log('Updating user profile for auth_uid:', authUser.id);
+console.log('Updating user profile for:', currentUser.email);
 
-    // Update database using auth_uid
-    const { data, error: updateError } = await supabase
-      .from('users')
-      .update(updateData)
-      .eq('auth_uid', authUser.id)
-      .select()
-      .single();
+const { data, error: updateError } = await supabase
+  .from('users')
+  .update(updateData)
+  .eq('email', currentUser.email)   // ✅ match by email
+  .select()
+  .single();
+
 
     if (updateError) {
       console.error('Database update error:', updateError);
@@ -198,30 +201,6 @@ const handleSaveChanges = async () => {
     }
 
     console.log('Profile updated successfully:', data);
-
-    // Update Supabase Auth email if it changed
-    if (profileData.email !== originalData.email) {
-      const { error: emailUpdateError } = await supabase.auth.updateUser({
-        email: profileData.email
-      });
-      
-      if (emailUpdateError) {
-        console.warn('Failed to update auth email:', emailUpdateError);
-        // Don't fail the whole operation, just warn
-      }
-    }
-
-    // Update Supabase Auth password if changed
-    if (isChangingPassword) {
-      const { error: passwordUpdateError } = await supabase.auth.updateUser({
-        password: profileData.newPassword
-      });
-      
-      if (passwordUpdateError) {
-        console.warn('Failed to update auth password:', passwordUpdateError);
-        // Don't fail the whole operation since we updated the hash in database
-      }
-    }
 
     // Update localStorage
     localStorage.setItem('userName', profileData.name);

@@ -6,44 +6,45 @@ import { PasswordUtils } from '../../utils/PasswordUtils';
 
 const parseCSV = (file) => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target.result;
-        const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+  const reader = new FileReader();
+  reader.onload = (e) => {
+  try {
+  const text = e.target.result;
+  const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
         
-        if (lines.length < 2) {
-          reject(new Error("CSV file must have at least a header and one data row"));
-          return;
+  if (lines.length < 2) {
+  reject(new Error("CSV file must have at least a header and one data row"));
+    return;
+    }
+        
+  const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ''));
+  console.log("CSV Headers:", headers);
+        
+  const data = [];
+  for (let i = 1; i < lines.length; i++) {
+  const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ''));
+  if (values.length === headers.length && values.some(v => v.length > 0)) {
+  const row = {};
+  headers.forEach((header, index) => {
+    row[header] = values[index] || "";
+       });
+    data.push(row);
+         }
         }
         
-        const headers = lines[0].split(",").map(h => h.trim().replace(/"/g, ''));
-        console.log("CSV Headers:", headers);
-        
-        const data = [];
-        for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(",").map(v => v.trim().replace(/"/g, ''));
-          if (values.length === headers.length && values.some(v => v.length > 0)) {
-            const row = {};
-            headers.forEach((header, index) => {
-              row[header] = values[index] || "";
-            });
-            data.push(row);
-          }
-        }
-        
-        console.log("Parsed CSV data:", data);
-        resolve(data);
+   console.log("Parsed CSV data:", data);
+    resolve(data);
       } catch (error) {
         reject(error);
       }
     };
     reader.onerror = (err) => reject(err);
     reader.readAsText(file);
-  });
-};
+    });
+    };
 
-const importUsers = async (file, roleMap, orgData) => {
+
+  const importUsers = async (file, roleMap, orgData) => {
   try {
     console.log("Starting user import for:", file.name);
     const rows = await parseCSV(file);
@@ -55,117 +56,98 @@ const importUsers = async (file, roleMap, orgData) => {
     }
 
     // Validate required fields
-    const validRows = rows.filter(row => {
-      const hasName = row.Name && row.Name.trim().length > 0;
-      const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
-      const hasRole = row.Role && row.Role.trim().length > 0;
+  const validRows = rows.filter(row => {
+    const hasName = row.Name && row.Name.trim().length > 0;
+    const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
+    const hasRole = row.Role && row.Role.trim().length > 0;
       
-      if (!hasName || !hasEmail || !hasRole) {
-        console.warn("Skipping invalid row:", row);
-        return false;
-      }
-      return true;
-    });
+  if (!hasName || !hasEmail || !hasRole) {
+  console.warn("Skipping invalid row:", row);
+  return false;
+  }
+  return true;
+  });
 
-    console.log(`Valid rows: ${validRows.length} out of ${rows.length}`);
+  console.log(`Valid rows: ${validRows.length} out of ${rows.length}`);
 
-    // Process users one by one (async operations)
-    const insertedUsers = [];
+  // Process users - INSERT DIRECTLY TO DATABASE (skip Supabase Auth for now)
+  const insertedUsers = [];
     
-    for (let index = 0; index < validRows.length; index++) {
-      const r = validRows[index];
+  for (let index = 0; index < validRows.length; index++) {
+  const r = validRows[index];
       
-      try {
-        const email = r.Email.toLowerCase().trim();
-        const tempPassword = PasswordUtils.generateSecurePassword(10);
-        const hashedPassword = PasswordUtils.hashPassword(tempPassword);
-        const username = `${email.split("@")[0]}_${Date.now()}_${index}`;
+  try {
+  const email = r.Email.toLowerCase().trim();
+  const tempPassword = PasswordUtils.generateSecurePassword(10);
+  const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+  const username = `${email.split("@")[0]}_${Date.now()}_${index}`;
 
-        // Step 1: Create Supabase Auth user
-        const { data: authUser, error: authError } = await supabase.auth.signUp({
-          email: email,
-          password: tempPassword,
-          options: {
-            data: {
-              full_name: r.Name.trim(),
-              role: r.Role,
-              temp_password: tempPassword // Store temp password in metadata
-            }
-          }
-        });
+  // Insert user directly to database without Supabase Auth (for now)
+  const userData = {
+  username: username,
+  full_name: r.Name.trim(),
+  email: email,
+  role_id: roleMap[r.Role] || 4,
+  user_status: 'active', // Set as active since we're not using email confirmation yet
+  password_hash: hashedPassword,
+  auth_uid: null, // Will be null for now
+  organization_id: orgData.organization_id
+  };
 
-        if (authError) {
-          console.error(`Failed to create auth for ${email}:`, authError);
-          continue; // Skip this user
-        }
-
-        // Step 2: Insert user into your database
-        const userData = {
-          username: username,
-          full_name: r.Name.trim(),
-          email: email,
-          role_id: roleMap[r.Role] || 4,
-          user_status: 'pending_activation', // They need to confirm email first
-          password_hash: hashedPassword,
-          auth_uid: authUser.user.id, // Link to Supabase Auth
-          organization_id: orgData.organization_id
-        };
-
-        const { data: dbUser, error: dbError } = await supabase
-          .from("users")
-          .insert([userData])
-          .select()
-          .single();
+  const { data: dbUser, error: dbError } = await supabase
+  .from("users")
+  .insert([userData])
+  .select()
+  .single();
         
-        if (dbError) {
-          console.error(`Failed to insert user ${email} to database:`, dbError);
-          continue;
-        }
+  if (dbError) {
+  console.log(`✅ User inserted: ${dbUser.full_name} (${dbUser.email}) - Role: ${dbUser.role_id}`);          continue;
+  }
         
-        insertedUsers.push({
-          ...dbUser,
-          tempPassword: tempPassword // Include for email sending
-        });
+  insertedUsers.push({
+  ...dbUser,
+  tempPassword: tempPassword // Include for potential email sending later
+  });
         
-        console.log(`Successfully created user: ${email}`);
+  console.log(`✅ Successfully created user: ${email}`);
         
-      } catch (userError) {
-        console.error(`Error processing user ${r.Email}:`, userError);
-      }
-    }
+  } catch (userError) {
+  console.error(`Error processing user ${r.Email}:`, userError);
+  }
+  }
 
-    console.log(`Successfully processed ${insertedUsers.length} users out of ${validRows.length}`);
-    return insertedUsers;
+  console.log(`Successfully processed ${insertedUsers.length} users out of ${validRows.length}`);
+  return insertedUsers;
     
   } catch (err) {
     console.error("User import failed:", err.message);
     alert("User import failed: " + err.message);
     return [];
   }
-};
+  };
 
-const importAssets = async (file, orgData) => {
+  const importAssets = async (file, orgData) => {
   try {
     console.log("ðŸ” Starting asset import...");
     const rows = await parseCSV(file);
     console.log("ðŸ“Š Parsed asset rows:", rows);
 
-    if (!rows || rows.length === 0) {
-      console.log("No valid asset rows found");
-      return 0;
+  if (!rows || rows.length === 0) {
+    console.log("No valid asset rows found");
+    return 0;
     }
 
     // Validate asset rows
-    const validRows = rows.filter(row => {
-      const hasName = row["Asset Name"] && row["Asset Name"].trim().length > 0;
-      const hasCategory = row.Category && row.Category.trim().length > 0;
+  const validRows = rows.filter(row => {
+  const hasName = row["Asset Name"] && row["Asset Name"].trim().length > 0;
+  const hasCategory = row.Category && row.Category.trim().length > 0;
       
-      if (!hasName || !hasCategory) {
-        console.warn("Skipping invalid asset row:", row);
-        return false;
-      }
-      return true;
-    });
+  if (!hasName || !hasCategory) {
+  console.warn("Skipping invalid asset row:", row);
+  return false;
+  }
+  return true;
+  });
 
     // Get unique categories
     const uniqueCategories = [...new Set(validRows.map(r => r.Category.trim()))];
@@ -241,6 +223,7 @@ const importAssets = async (file, orgData) => {
     return 0;
   }
 };
+// Sa SetupWizard.js, replace ang getRoleMap function:
 const getRoleMap = async () => {
   try {
     const { data: roles, error } = await supabase
@@ -252,25 +235,27 @@ const getRoleMap = async () => {
     // Create mapping from role names to IDs
     const roleMap = {};
     roles.forEach(role => {
-      // Map various role name variations to role_id
-      if (role.role_name.toLowerCase().includes('system') || role.role_name.toLowerCase().includes('admin')) {
+      const roleName = role.role_name.toLowerCase();
+      if (roleName.includes('system') && roleName.includes('admin')) {
         roleMap['system admin'] = role.role_id;
         roleMap['System admin'] = role.role_id;
+      } else if (roleName.includes('admin') && roleName.includes('official')) {
         roleMap['Admin official'] = role.role_id;
         roleMap['admin official'] = role.role_id;
-      } else if (role.role_name.toLowerCase().includes('personnel')) {
+      } else if (roleName.includes('personnel')) {
         roleMap['Personnel'] = role.role_id;
         roleMap['personnel'] = role.role_id;
-      } else if (role.role_name.toLowerCase().includes('standard') || role.role_name.toLowerCase().includes('user')) {
+      } else if (roleName.includes('standard') || roleName.includes('user')) {
         roleMap['Standard user'] = role.role_id;
         roleMap['standard user'] = role.role_id;
       }
     });
     
+    console.log("Role mapping created:", roleMap);
     return roleMap;
   } catch (err) {
     console.error("Error fetching roles:", err);
-    // Fallback role mapping based on typical role IDs
+    // Fallback - based sa typical OpenFMS role structure
     return {
       'system admin': 1,
       'System admin': 1, 
@@ -283,6 +268,7 @@ const getRoleMap = async () => {
     };
   }
 };
+
 
 export default function SetupWizard() {
   const navigate = useNavigate();
@@ -1204,6 +1190,8 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
                 </button>
               ) : (
                 <button
+// Replace the setup completion button onClick function in SetupWizard.js
+
 onClick={async () => {
   try {
     console.log("=== STARTING SETUP COMPLETION ===");
@@ -1238,6 +1226,7 @@ onClick={async () => {
         address: orgData.address,
         contact_person: orgData.contactPerson,
         contact_email: orgData.contactEmail,
+        phone: orgData.phone
       }])
       .select()
       .single();
@@ -1249,115 +1238,160 @@ onClick={async () => {
     
     console.log("Organization created:", orgResult);
 
-  // FIND THIS SECTION (around line 800):
-// Create admin user profile
-console.log("Creating admin user profile...");
-const { error: userInsertError } = await supabase
-  .from("users")
-  .insert([{
-    username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
-    full_name: orgData.contactPerson,
-    email: orgData.contactEmail.toLowerCase().trim(),
-    role_id: 1,
-    user_status: "active",
-    password_hash: PasswordUtils.hashPassword(orgData.password),
-    auth_uid: user.id, // â† This should work since user comes from Supabase Auth
-    organization_id: orgResult.organization_id
-  }]);
+    // Create admin user profile
+    console.log("Creating admin user profile...");
+    const { error: userInsertError } = await supabase
+      .from("users")
+      .insert([{
+        username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
+        full_name: orgData.contactPerson,
+        email: orgData.contactEmail.toLowerCase().trim(),
+        role_id: 1, // System admin role
+        user_status: "active",
+        password_hash: PasswordUtils.hashPassword(orgData.password),
+        auth_uid: user.id,
+        organization_id: orgResult.organization_id
+      }]);
+
     if (userInsertError) {
       console.error("User profile creation error:", userInsertError);
       throw userInsertError;
     }
 
+    localStorage.setItem('userEmail', orgData.contactEmail.toLowerCase().trim());
+    localStorage.setItem('userId', user.id);
+    localStorage.setItem('userRole', 'sysadmin');// System admin
+    localStorage.setItem('organizationId', orgResult.organization_id.toString());
+
     // Get role mapping
     const roleMap = await getRoleMap();
     console.log("Role mapping:", roleMap);
 
-    // Import users with better error handling
+    // Import users with proper organization ID
     let userImportResults = {
       heads: 0,
       personnel: 0,
       standardUsers: 0
     };
 
+    // Process each user type
+    const importPromises = [];
+    
     if (uploadedFiles.heads) {
-      try {
-        console.log("Importing heads...");
-        const result = await importUsers(uploadedFiles.heads, roleMap, orgResult);
-        userImportResults.heads = result ? result.length : 0;
-      } catch (err) {
-        console.error("Heads import failed:", err);
-      }
+      importPromises.push(
+        importUsers(uploadedFiles.heads, roleMap, orgResult).then(result => {
+          userImportResults.heads = result ? result.length : 0;
+          console.log(`Heads imported: ${userImportResults.heads}`);
+        }).catch(err => {
+          console.error("Heads import failed:", err);
+          userImportResults.heads = 0;
+        })
+      );
     }
 
     if (uploadedFiles.personnel) {
-      try {
-        console.log("Importing personnel...");
-        const result = await importUsers(uploadedFiles.personnel, roleMap, orgResult);
-        userImportResults.personnel = result ? result.length : 0;
-      } catch (err) {
-        console.error("Personnel import failed:", err);
-      }
+      importPromises.push(
+        importUsers(uploadedFiles.personnel, roleMap, orgResult).then(result => {
+          userImportResults.personnel = result ? result.length : 0;
+          console.log(`Personnel imported: ${userImportResults.personnel}`);
+        }).catch(err => {
+          console.error("Personnel import failed:", err);
+          userImportResults.personnel = 0;
+        })
+      );
     }
 
     if (uploadedFiles.standardUsers) {
-      try {
-        console.log("Importing standard users...");
-        const result = await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
-        userImportResults.standardUsers = result ? result.length : 0;
-      } catch (err) {
-        console.error("Standard users import failed:", err);
-      }
+      importPromises.push(
+        importUsers(uploadedFiles.standardUsers, roleMap, orgResult).then(result => {
+          userImportResults.standardUsers = result ? result.length : 0;
+          console.log(`Standard users imported: ${userImportResults.standardUsers}`);
+        }).catch(err => {
+          console.error("Standard users import failed:", err);
+          userImportResults.standardUsers = 0;
+        })
+      );
     }
+
+    // Wait for all user imports to complete
+    await Promise.all(importPromises);
 
     // Import assets
     let assetImportResult = 0;
     if (uploadedFiles.assets) {
       try {
         console.log("Importing assets...");
-        const result = await importAssets(uploadedFiles.assets, orgResult);
-        assetImportResult = result || 0;
+        assetImportResult = await importAssets(uploadedFiles.assets, orgResult);
+        console.log(`Assets imported: ${assetImportResult}`);
       } catch (err) {
         console.error("Asset import failed:", err);
+        assetImportResult = 0;
       }
     }
 
-    // Save setup data
+    // Save setup data to localStorage
     const setupData = {
       completed: true,
+      completedDate: new Date().toISOString(),
+      organizationId: orgResult.organization_id,
+      orgData: {
+        name: orgData.name,
+        contactPerson: orgData.contactPerson,
+        contactEmail: orgData.contactEmail
+      },
+      uploadedFiles: {
+        heads: uploadedFiles.heads ? { 
+          fileName: uploadedFiles.heads.name, 
+          count: userImportResults.heads,
+          uploadDate: new Date().toISOString()
+        } : null,
+        personnel: uploadedFiles.personnel ? { 
+          fileName: uploadedFiles.personnel.name, 
+          count: userImportResults.personnel,
+          uploadDate: new Date().toISOString()
+        } : null,
+        standardUsers: uploadedFiles.standardUsers ? { 
+          fileName: uploadedFiles.standardUsers.name, 
+          count: userImportResults.standardUsers,
+          uploadDate: new Date().toISOString()
+        } : null,
+        assets: uploadedFiles.assets ? { 
+          fileName: uploadedFiles.assets.name, 
+          count: assetImportResult,
+          uploadDate: new Date().toISOString()
+        } : null
+      },
       skippedSteps,
       userImportMethod,
       assetImportMethod,
-      uploadedFiles,
-      orgData,
       importResults: {
         users: userImportResults,
         assets: assetImportResult
-      },
-      completedDate: new Date().toISOString(),
-      organizationId: orgResult.organization_id
+      }
     };
     
     localStorage.setItem("setupWizardData", JSON.stringify(setupData));
     localStorage.removeItem("orgDataFromSignup");
-
+    localStorage.setItem('setupJustCompleted', 'true');
     console.log("=== SETUP COMPLETED ===");
     console.log("Import results:", setupData.importResults);
 
+    const totalUsers = Object.values(userImportResults).reduce((a, b) => a + b, 0) + 1; // +1 for admin
+    
     alert(`Setup completed successfully! 
-    Users imported: ${Object.values(userImportResults).reduce((a, b) => a + b, 0)}
-    Assets imported: ${assetImportResult}
+Users imported: ${totalUsers} (including your account)
+Assets imported: ${assetImportResult}
+
+You will now be redirected to your dashboard.`);
     
-    You will now be redirected to login.`);
-    
-    navigate("/login");
+    // Navigate to dashboard instead of login since user is already authenticated
+    navigate("/dashboard-sysadmin");
 
   } catch (err) {
     console.error("Setup completion failed:", err);
     alert("Setup failed: " + err.message + "\n\nCheck console for details.");
   }
 }}
-
                   className="btn d-flex align-items-center px-4 py-2 text-white"
                   style={{
                     backgroundColor: isSetupComplete() ? '#28a745' : styles.accentColor,

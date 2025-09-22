@@ -1,6 +1,5 @@
 //hello_Sample2
 import React, { useState } from 'react';
-import SidebarLayout from '../Layouts/SidebarLayout';
 import { useNavigate } from 'react-router-dom';
 import { Col, Modal, Badge } from 'react-bootstrap';
 import { 
@@ -668,7 +667,6 @@ const statCardStyle = {
   };
 
   return (
-    <SidebarLayout role="admin">
       <Col md={12} className="p-4">
         {/* Stats Cards */}
         <div style={gridStyle}>
@@ -940,6 +938,5 @@ const statCardStyle = {
   </div>
 )}
       </Col>
-    </SidebarLayout>
   );
 }

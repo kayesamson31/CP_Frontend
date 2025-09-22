@@ -84,16 +84,27 @@ const safeNumber = (value) => {
   return Number(value);
 };
 
+
 const getRoleIdFromRole = (roleString) => {
+  if (!roleString || typeof roleString !== 'string') {
+    return 4; // Default to Standard user
+  }
+  
+  // Normalize the input: trim whitespace and convert to lowercase
+  const normalizedRole = roleString.trim().toLowerCase();
+  
   const roleMap = {
-    'Admin official': 2,
+    'admin official': 2,
     'system admin': 1,
-    'System admin': 1,
-    'Personnel': 3,
-    'Standard user': 4,
-    'Standard User': 4
+    'sysadmin': 1,
+    'sys admin': 1,
+    'personnel': 3,
+    'standard user': 4,
+    'standard': 4,
+    'user': 4
   };
-  return roleMap[roleString] || 4; // Default to Standard user
+  
+  return roleMap[normalizedRole] || 4; // Default to Standard user
 };
 
 
@@ -141,38 +152,38 @@ const getRelativeTime = (timestamp) => {
   // Function to get dynamic organization data
 // Replace your getOrganizationData function with this fixed version:
 
+// Sa DashboardSysAdmin.js, replace ang getOrganizationData:
 const getOrganizationData = async () => {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return getDefaultOrgData();
+    // Try to get from localStorage first
+    const orgId = localStorage.getItem('organizationId');
+    const userEmail = localStorage.getItem('userEmail');
+    
+    if (!orgId || !userEmail) {
+      return getDefaultOrgData();
+    }
 
-    // Get user's organization from database
-    const { data: userData } = await supabase
-      .from('users')
-      .select('organization_id')
-      .eq('auth_uid', user.id)
-      .single();
-
-    if (!userData) return getDefaultOrgData();
-
-    // Get organization details
-    const { data: orgData } = await supabase
+    // Get organization details from database
+    const { data: orgData, error } = await supabase
       .from('organizations')
       .select('*')
-      .eq('organization_id', userData.organization_id)
+      .eq('organization_id', orgId)
       .single();
 
-    if (!orgData) return getDefaultOrgData();
+    if (error || !orgData) {
+      console.log('Organization data not found, using default');
+      return getDefaultOrgData();
+    }
 
     return {
       name: orgData.org_name || "OpenFMS",
-      type: "Government Agency", // or map from org_type_id
+      type: "Government Agency",
       address: orgData.address || "Not specified",
-      phone: orgData.phone || "Not specified",
-      country: "Not specified", // or map from country_id
+      phone: orgData.phone || "Not specified", 
+      country: "Not specified",
       website: orgData.website || "https://openfms.io",
       contactPerson: orgData.contact_person || "System Administrator",
-      contactEmail: orgData.contact_email || "admin@openfms.io"
+      contactEmail: orgData.contact_email || userEmail
     };
   } catch (error) {
     console.error('Error loading organization data:', error);
@@ -273,16 +284,14 @@ const [organizationData, setOrganizationData] = useState({
     return 50;
   };
 
-// Replace your fetchDatabaseStats function in DashboardSysAdmin.js with this:
+// Replace your fetchDatabaseStats function in DashboardSysAdmin.js
 
 const fetchDatabaseStats = async () => {
   try {
-    // âŒ OLD - Supabase Auth (doesn't work with your localStorage system)
-    // const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    // âœ… NEW - Use localStorage authentication 
+    // Use localStorage authentication 
     const userEmail = localStorage.getItem('userEmail');
     const userId = localStorage.getItem('userId');
+    const orgId = localStorage.getItem('organizationId');
     
     if (!userEmail || !userId) {
       console.log('User not authenticated in localStorage, using default values');
@@ -296,17 +305,25 @@ const fetchDatabaseStats = async () => {
       };
     }
 
-    console.log('Authenticated user found:', { userEmail, userId });
+    console.log('Authenticated user found:', { userEmail, userId, orgId });
 
-    // Get user's organization_id using the email from localStorage
-    const { data: userData, error: userDataError } = await supabase
-      .from('users')
-      .select('organization_id, user_id')
-      .eq('email', userEmail.toLowerCase()) // Use email instead of auth_uid
-      .single();
+    // If we don't have orgId in localStorage, try to get it from database
+    let organizationId = orgId;
+    if (!organizationId) {
+      const { data: userData } = await supabase
+        .from('users')
+        .select('organization_id')
+        .eq('email', userEmail.toLowerCase())
+        .single();
 
-    if (userDataError || !userData) {
-      console.log('User data not found for email:', userEmail, userDataError);
+      if (userData) {
+        organizationId = userData.organization_id;
+        localStorage.setItem('organizationId', organizationId.toString());
+      }
+    }
+
+    if (!organizationId) {
+      console.log('No organization ID found');
       return {
         personnel: 0,
         standardUsers: 0,
@@ -317,63 +334,58 @@ const fetchDatabaseStats = async () => {
       };
     }
 
-    const orgId = userData.organization_id;
-    console.log('Organization ID found:', orgId);
+    console.log('Organization ID found:', organizationId);
 
-    // Rest of your existing code remains the same...
+    // Query all user counts by role
     const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
-      // Personnel count (role_id 3) - exclude inactive_test
+      // Personnel count (role_id 3)
       supabase
         .from('users')
         .select('*', { count: 'exact' })
-        .eq('organization_id', orgId)
+        .eq('organization_id', organizationId)
         .eq('role_id', 3)
-        .neq('user_status', 'inactive_test')
-        .eq('user_status', 'active'),
+        .in('user_status', ['active', 'pending_activation']),
 
-      // Standard Users count (role_id 4) - exclude inactive_test
+      // Standard Users count (role_id 4)
       supabase
         .from('users')
         .select('*', { count: 'exact' })
-        .eq('organization_id', orgId)
+        .eq('organization_id', organizationId)
         .eq('role_id', 4)
-        .neq('user_status', 'inactive_test')
-        .eq('user_status', 'active'),
+        .in('user_status', ['active', 'pending_activation']),
 
-      // Heads count (role_id 1 AND 2) - exclude inactive_test
+      // Admin Officials (role_id 2) - these should count as "heads"
       supabase
         .from('users')
         .select('*', { count: 'exact' })
-        .eq('organization_id', orgId)
-        .in('role_id', [1, 2])
-        .neq('user_status', 'inactive_test')
-        .eq('user_status', 'active'),
+        .eq('organization_id', organizationId)
+        .eq('role_id', 2)
+        .in('user_status', ['active', 'pending_activation']),
 
-      // System Admins count (role_id 1 only) - exclude inactive_test
+      // System Admins (role_id 1) 
       supabase
         .from('users')
         .select('*', { count: 'exact' })
-        .eq('organization_id', orgId)
+        .eq('organization_id', organizationId)
         .eq('role_id', 1)
-        .neq('user_status', 'inactive_test')
-        .eq('user_status', 'active'),
+        .in('user_status', ['active', 'pending_activation']),
 
-      // Assets count - exclude inactive_test
+      // Assets count
       supabase
         .from('assets')
         .select('*', { count: 'exact' })
-        .eq('organization_id', orgId)
+        .eq('organization_id', organizationId)
         .neq('asset_status', 'inactive_test')
     ]);
 
-    // Debug logs to see what we're getting
+    // Debug logs
     console.log('Personnel Result:', personnelResult);
     console.log('Standard Users Result:', standardUsersResult);
-    console.log('Heads Result:', headsResult);
+    console.log('Admin Officials (Heads) Result:', headsResult);
     console.log('System Admins Result:', systemAdminsResult);
     console.log('Assets Result:', assetsResult);
 
-    // Handle any errors
+    // Handle errors
     const errors = [
       personnelResult.error, 
       standardUsersResult.error, 
@@ -386,16 +398,25 @@ const fetchDatabaseStats = async () => {
       console.error('Database query errors:', errors);
     }
 
-    // Return results with safety checks
+    // Calculate totals
+    const personnel = personnelResult.count || 0;
+    const standardUsers = standardUsersResult.count || 0;
+    const heads = headsResult.count || 0; // Admin officials
+    const systemAdmins = systemAdminsResult.count || 0; // System admins
+    const totalAssets = assetsResult.count || 0;
+    
+    // System admins are also "heads" in the UI, so we add them to heads count for display
+    const totalHeads = heads + systemAdmins;
+    
     const stats = {
-      personnel: personnelResult.count || 0,
-      standardUsers: standardUsersResult.count || 0,
-      heads: headsResult.count || 0,
-      systemAdmins: systemAdminsResult.count || 0,
-      totalAssets: assetsResult.count || 0,
+      personnel: personnel,
+      standardUsers: standardUsers,
+      heads: totalHeads, // This includes both admin officials and system admins
+      systemAdmins: systemAdmins,
+      totalAssets: totalAssets,
       systemHealthPercentage: calculateSystemHealth(
-        (personnelResult.count || 0) + (standardUsersResult.count || 0) + (headsResult.count || 0),
-        assetsResult.count || 0
+        personnel + standardUsers + totalHeads,
+        totalAssets
       )
     };
 
@@ -564,16 +585,24 @@ const handleBulkUserUpload = async () => {
   
   try {
     // Get current user's organization ID
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('User not authenticated');
-    }
+// Load user from localStorage instead of Supabase Auth
+const stored = localStorage.getItem('currentUser');
+if (!stored) {
+  throw new Error('User not authenticated - please log in again.');
+}
+const currentUser = JSON.parse(stored);
 
-    const { data: userData, error: userDataError } = await supabase
-      .from('users')
-      .select('organization_id')
-      .eq('auth_uid', user.id)
-      .single();
+// Get organization_id by email instead of auth_uid
+const { data: userData, error: userDataError } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('email', currentUser.email)
+  .single();
+
+if (userDataError || !userData) {
+  throw new Error('User data not found in database');
+}
+
 
     if (userDataError || !userData) {
       throw new Error('User data not found');
@@ -600,23 +629,25 @@ const handleBulkUserUpload = async () => {
 
     console.log(`Processing ${csvRows.length} users from CSV`);
 
-    // Generate passwords and prepare user data with credentials
-    const usersWithPasswords = csvRows.map(row => {
-      const tempPassword = PasswordUtils.generateSecurePassword(10);
-      const hashedPassword = PasswordUtils.hashPassword(tempPassword);
-      
-      return {
-        full_name: row.Name.trim(),
-        email: row.Email.trim().toLowerCase(),
-        user_status: 'pending_activation',
-        role_id: getRoleIdFromRole(row.Role),
-        organization_id: orgId,
-        username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
-        password_hash: hashedPassword,
-        tempPassword: tempPassword, // Keep for email
-        auth_uid: null
-      };
-    });
+// Generate passwords and prepare user data with credentials
+const usersWithPasswords = csvRows.map((row) => {
+  const tempPassword = PasswordUtils.generateSecurePassword(10);
+  const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+
+  return {
+    full_name: row.Name.trim(),
+    email: row.Email.trim().toLowerCase(),
+    user_status: 'pending_activation',
+    role_id: getRoleIdFromRole(row.Role),
+    organization_id: orgId,
+    username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
+    password_hash: hashedPassword,   // ⬅️ important for custom auth
+    tempPassword: tempPassword,
+    auth_uid: null
+  };
+});
+
+
 
     console.log('Generated passwords for users:', usersWithPasswords.map(u => ({
       name: u.full_name, 
@@ -624,11 +655,13 @@ const handleBulkUserUpload = async () => {
       password: '[HIDDEN]'
     })));
 
-    // Insert to database (exclude tempPassword from DB insert)
-    const dbUsers = usersWithPasswords.map(user => {
-      const { tempPassword, ...dbUser } = user;
-      return dbUser;
-    });
+const dbUsers = usersWithPasswords
+  .filter(u => u !== null) // skip failed Auth creations
+  .map(user => {
+    const { tempPassword, ...dbUser } = user;
+    return dbUser;
+  });
+
 
     const { data: insertResult, error: insertError } = await supabase
       .from('users')
@@ -883,20 +916,24 @@ const handleBulkAssetUpload = async () => {
   
   try {
     // Get current user's organization ID
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      throw new Error('User not authenticated');
-    }
+// Load current user from localStorage (custom auth)
+const stored = localStorage.getItem('currentUser');
+if (!stored) {
+  throw new Error('User not authenticated - please log in again.');
+}
+const currentUser = JSON.parse(stored);
 
-    const { data: userData, error: userDataError } = await supabase
-      .from('users')
-      .select('organization_id')
-      .eq('auth_uid', user.id)
-      .single();
+// Get organization_id by email (since we don’t use auth_uid anymore)
+const { data: userData, error: userDataError } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('email', currentUser.email)
+  .single();
 
-    if (userDataError || !userData) {
-      throw new Error('User data not found');
-    }
+if (userDataError || !userData) {
+  throw new Error('User data not found in database');
+}
+
 
     const orgId = userData.organization_id;
 
@@ -1146,11 +1183,20 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
     reader.readAsText(file);
   };
 
+// Replace ang useEffect sa DashboardSysAdmin.js:
 useEffect(() => {
   const loadDashboardData = async () => {
     try {
-      // Get organization info from localStorage
-      const baseOrgData = getOrganizationData();
+      // Check if just completed setup
+      const justCompleted = localStorage.getItem('setupJustCompleted');
+      if (justCompleted === 'true') {
+        // Small delay to ensure all database operations are complete
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        localStorage.removeItem('setupJustCompleted');
+      }
+
+      // Get organization info
+      const baseOrgData = await getOrganizationData(); // Make this async
       
       // Get all statistics from database
       const dbStats = await fetchDatabaseStats();
@@ -1173,26 +1219,27 @@ useEffect(() => {
                      dbStats.systemHealthPercentage > 50 ? 'Warning' : 'Critical'
       }));
 
+      console.log('Dashboard loaded with stats:', dbStats);
+
     } catch (error) {
       console.error('Error loading dashboard data:', error);
-      // Fallback to localStorage only if database fails
-      const fallbackData = getOrganizationData();
-      setOrganizationData({
-        ...fallbackData,
+      // Fallback to default values
+      setOrganizationData(prev => ({
+        ...prev,
         personnel: 0,
         standardUsers: 0,
-        heads: 0,
+        heads: 1, // At least 1 for the system admin
         systemAdmins: 1,
         totalAssets: 0,
         systemHealthPercentage: 25
-      });
+      }));
     }
-     updateSetupProgress();
+    
+    updateSetupProgress();
   };
 
   loadDashboardData();
-}, []);
-
+}, []); // Remove dependency array issues
 
   
   // Auto-dismiss completion message

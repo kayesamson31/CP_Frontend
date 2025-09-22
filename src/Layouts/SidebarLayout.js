@@ -7,11 +7,12 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import { supabase } from '../supabaseClient';
 
 const menuConfig = {
-  standard: [
-    { label: 'Dashboard', path: '/dashboard-user', icon: 'bi bi-speedometer2' },
-    { label: 'Profile', path: '/profile', icon: 'bi bi-person' },
-    { label: 'Notification', path: '/notification', icon: 'bi bi-bell' },
-  ],
+standard: [
+  { label: 'Dashboard', path: '/dashboard-user', icon: 'bi bi-speedometer2' },
+  { label: 'Profile', path: '/dashboard-user/profile', icon: 'bi bi-person' },
+  { label: 'Notification', path: '/dashboard-user/notification', icon: 'bi bi-bell' },
+],
+
   personnel: [
     { label: 'Dashboard', path: '/dashboard-personnel', icon: 'bi bi-speedometer2' },
     { label: 'Profile', path: '/dashboard-personnel/profile', icon: 'bi bi-person' },
@@ -45,42 +46,35 @@ export default function SidebarLayout({ children}) {
   const [notificationCount, setNotificationCount] = useState(0);
   const [role, setRole] = useState('standard');
   const menus = menuConfig[role] || menuConfig.standard;
+
 useEffect(() => {
-  const checkUserRole = async () => {
-   const { data: { user } } = await supabase.auth.getUser();
-if (user) {
-  // Get role from database instead of localStorage
-  const { data: userData } = await supabase
-    .from('users')
-    .select('role_id')
-    .eq('auth_uid', user.id)
-    .single();
-    
-  let userRole = 'standard';
-if (userData) {
-  switch (userData.role_id) {
-    case 1: 
-      userRole = "sysadmin"; 
-      break;
-    case 2: 
-      userRole = "admin"; 
-      break;
-    case 3: 
-      userRole = "personnel"; 
-      break;
-    case 4: 
-      userRole = "standard"; 
-      break;
-    default:
-      userRole = "standard";
-  }
-}
-setRole(userRole);
-}
+  const loadRoleFromStorage = () => {
+    const stored = localStorage.getItem('currentUser');
+    if (!stored) {
+      setRole('standard');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(stored);
+      setRole(parsed.role || 'standard');
+    } catch (err) {
+      console.warn('SidebarLayout: failed to parse currentUser from localStorage', err);
+      setRole('standard');
+    }
   };
-  checkUserRole();
+
+  loadRoleFromStorage();
+
+  const onStorage = (e) => {
+    if (e.key === 'currentUser' || e.key === 'userRole') {
+      loadRoleFromStorage();
+    }
+  };
+  window.addEventListener('storage', onStorage);
+
+  return () => window.removeEventListener('storage', onStorage);
 }, []);
-  
+
 
   useEffect(() => {
     const updateNotificationCount = () => {
@@ -102,10 +96,17 @@ const count = 0;      setNotificationCount(parseInt(count));
     };
   }, [role]);
 
-  const handleLogout = async () => {
-  await supabase.auth.signOut();
+const handleLogout = () => {
+  // Clear demo/local auth state
+  localStorage.removeItem('currentUser');
+  localStorage.removeItem('userRole'); // in case something else set this
+  // Optionally clear other session keys you use
+  // localStorage.removeItem('someOtherKey');
+
+  // Redirect to login
   navigate('/login');
 };
+
   const renderIcon = (tab, isActive) => {
     return (
       <i 

@@ -14,28 +14,24 @@ const handleLogin = async (e) => {
   e.preventDefault();
 
   try {
-    // Step 1: Sign in with Supabase Auth
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.toLowerCase(),
-      password: password
-    });
+  // Step 1: Get user data directly from users table
+const { data: userData, error } = await supabase
+  .from("users")
+  .select("*")
+  .eq("email", email.toLowerCase())
+  .single();
 
-    if (authError) {
-      alert("Invalid email or password. Please try again.");
-      return;
-    }
+if (error || !userData) {
+  alert("Invalid email or password");
+  return;
+}
 
-    // Step 2: Get user data from your database using auth_uid
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("*")
-      .eq("auth_uid", authData.user.id)
-      .single();
-
-    if (userError || !userData) {
-      alert("User profile not found. Please contact administrator.");
-      return;
-    }
+// Step 2: Verify password using PasswordUtils
+const inputHash = PasswordUtils.hashPassword(password);
+if (inputHash !== userData.password_hash) {
+  alert("Invalid email or password");
+  return;
+}
 
     // Step 3: Determine user role and redirect
     let userRole = "";
@@ -47,32 +43,43 @@ const handleLogin = async (e) => {
       default: userRole = "standard";
     }
 
-    console.log('Login successful:', {
-      email: userData.email,
-      name: userData.full_name,
-      role: userRole,
-      status: userData.user_status
-    });
+console.log('Login successful:', {
+  email: userData.email,
+  name: userData.full_name,
+  role: userRole,
+  status: userData.user_status
+});
 
-    // Step 4: Check user status and redirect
-    if (userData.user_status === 'pending_activation') {
-      alert("Welcome! Please change your temporary password to continue.");
-      
-      switch (userRole) {
-        case "sysadmin": navigate("/dashboard-sysadmin/profile"); break;
-        case "admin": navigate("/dashboard-admin/profile"); break;
-        case "personnel": navigate("/dashboard-personnel/profile"); break;
-        case "standard": navigate("/dashboard-user/profile"); break;
-        default: navigate("/dashboard-user/profile");
-      }
-      return;
-    }
+// Save current user to localStorage for PrivateRoute (custom auth)
+const currentUser = {
+  id: userData.id,
+  email: userData.email,
+  role: userRole,
+  status: userData.user_status,
+  full_name: userData.full_name
+};
+localStorage.setItem('currentUser', JSON.stringify(currentUser));
 
-    if (userData.user_status !== 'active') {
-      alert("Your account is not active. Please contact the administrator.");
-      await supabase.auth.signOut();
-      return;
-    }
+// Step 4: Check user status and redirect
+if (userData.user_status === 'pending_activation') {
+  alert("Welcome! Please change your temporary password to continue.");
+  
+  switch (userRole) {
+    case "sysadmin": navigate("/dashboard-sysadmin/profile"); break;
+    case "admin": navigate("/dashboard-admin/profile"); break;
+    case "personnel": navigate("/dashboard-personnel/profile"); break;
+    case "standard": navigate("/dashboard-user/profile"); break;
+    default: navigate("/dashboard-user/profile");
+  }
+  return;
+}
+
+if (userData.user_status !== 'active') {
+  alert("Your account is not active. Please contact the administrator.");
+  // No supabase.auth.signOut() here because we are using localStorage-based auth for demo
+  return;
+}
+
 
     // Step 5: Redirect active users to their dashboard
     switch (userRole) {
