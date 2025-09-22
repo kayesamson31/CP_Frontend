@@ -9,86 +9,132 @@ function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
-
 const handleLogin = async (e) => {
   e.preventDefault();
 
   try {
-  // Step 1: Get user data directly from users table
-const { data: userData, error } = await supabase
-  .from("users")
-  .select("*")
-  .eq("email", email.toLowerCase())
-  .single();
+    console.log('Starting login for:', email.toLowerCase());
 
-if (error || !userData) {
-  alert("Invalid email or password");
-  return;
-}
+    // Get user from database first
+    const { data: userData, error: userError } = await supabase
+      .from("users")
+      .select("*")
+      .eq("email", email.toLowerCase())
+      .single();
 
-// Step 2: Verify password using PasswordUtils
-const inputHash = PasswordUtils.hashPassword(password);
-if (inputHash !== userData.password_hash) {
-  alert("Invalid email or password");
-  return;
-}
-
-    // Step 3: Determine user role and redirect
-    let userRole = "";
-    switch (userData.role_id) {
-      case 1: userRole = "sysadmin"; break;
-      case 2: userRole = "admin"; break;
-      case 3: userRole = "personnel"; break;
-      case 4: userRole = "standard"; break;
-      default: userRole = "standard";
+    if (userError || !userData) {
+      console.log('User not found in database:', userError);
+      alert("Invalid email or password");
+      return;
     }
 
-console.log('Login successful:', {
-  email: userData.email,
-  name: userData.full_name,
-  role: userRole,
-  status: userData.user_status
-});
+    console.log('User found:', userData.full_name, 'Has auth_uid:', !!userData.auth_uid);
 
-// Save current user to localStorage for PrivateRoute (custom auth)
-const currentUser = {
-  id: userData.id,
-  email: userData.email,
-  role: userRole,
-  status: userData.user_status,
-  full_name: userData.full_name
-};
-localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    // If user has auth_uid, use Supabase Auth
+    if (userData.auth_uid) {
+      console.log('User has auth_uid, using Supabase Auth...');
+      
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: email.toLowerCase(),
+        password: password,
+      });
 
-// Step 4: Check user status and redirect
-if (userData.user_status === 'pending_activation') {
-  alert("Welcome! Please change your temporary password to continue.");
-  
-  switch (userRole) {
-    case "sysadmin": navigate("/dashboard-sysadmin/profile"); break;
-    case "admin": navigate("/dashboard-admin/profile"); break;
-    case "personnel": navigate("/dashboard-personnel/profile"); break;
-    case "standard": navigate("/dashboard-user/profile"); break;
-    default: navigate("/dashboard-user/profile");
-  }
-  return;
-}
+      if (authError) {
+        console.log('Supabase Auth failed:', authError);
+        alert("Invalid email or password");
+        return;
+      }
 
-if (userData.user_status !== 'active') {
-  alert("Your account is not active. Please contact the administrator.");
-  // No supabase.auth.signOut() here because we are using localStorage-based auth for demo
-  return;
-}
-
-
-    // Step 5: Redirect active users to their dashboard
-    switch (userRole) {
-      case "sysadmin": navigate("/dashboard-sysadmin"); break;
-      case "admin": navigate("/dashboard-admin"); break;
-      case "personnel": navigate("/dashboard-personnel"); break;
-      case "standard": navigate("/dashboard-user"); break;
-      default: navigate("/dashboard-user");
+      console.log('Supabase Auth successful');
+      handleSuccessfulLogin(userData);
+      return;
     }
+
+    // User has no auth_uid - verify database password
+    console.log('User has no auth_uid, checking database password...');
+    
+    if (!PasswordUtils.verifyPassword(password, userData.password_hash)) {
+      console.log('Database password verification failed');
+      alert("Invalid email or password");
+      return;
+    }
+
+    console.log('Database password verified, creating Supabase Auth account...');
+
+    // Create Supabase Auth account
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: email.toLowerCase(),
+      password: password,
+      options: {
+        data: {
+          full_name: userData.full_name,
+          role_id: userData.role_id,
+          organization_id: userData.organization_id
+        }
+      }
+    });
+
+    if (signUpError) {
+      console.error('Auth account creation failed:', signUpError);
+      
+      if (signUpError.message?.includes('already registered')) {
+        console.log('Account exists, trying to sign in...');
+        
+        const { data: existingAuth, error: existingError } = await supabase.auth.signInWithPassword({
+          email: email.toLowerCase(),
+          password: password
+        });
+
+        if (!existingError && existingAuth?.user) {
+          await supabase
+            .from('users')
+            .update({ 
+              auth_uid: existingAuth.user.id,
+              user_status: 'active'
+            })
+            .eq('email', email.toLowerCase());
+
+          handleSuccessfulLogin({...userData, auth_uid: existingAuth.user.id});
+          return;
+        }
+      }
+      
+      alert("Failed to create authentication account. Please contact support.");
+      return;
+    }
+
+    if (!signUpData?.user) {
+      alert("Account creation failed. Please try again.");
+      return;
+    }
+
+    // Update database with new auth_uid
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ 
+        auth_uid: signUpData.user.id,
+        user_status: 'active'
+      })
+      .eq('email', email.toLowerCase());
+
+    if (updateError) {
+      console.error('Failed to link auth account:', updateError);
+      alert("Failed to complete account setup. Please try again.");
+      return;
+    }
+
+    // Sign in with newly created account
+    const { data: finalAuth, error: finalError } = await supabase.auth.signInWithPassword({
+      email: email.toLowerCase(),
+      password: password
+    });
+
+    if (finalError || !finalAuth?.user) {
+      alert("Account created successfully. Please try logging in again.");
+      return;
+    }
+
+    handleSuccessfulLogin({...userData, auth_uid: finalAuth.user.id, user_status: 'active'});
 
   } catch (error) {
     console.error('Login error:', error);
@@ -96,6 +142,53 @@ if (userData.user_status !== 'active') {
   }
 };
 
+// Keep your existing handleSuccessfulLogin logic or use this:
+const handleSuccessfulLogin = (userData) => {
+  // Your existing user role and redirect logic here
+  let userRole = "";
+  switch (userData.role_id) {
+    case 1: userRole = "sysadmin"; break;
+    case 2: userRole = "admin"; break; 
+    case 3: userRole = "personnel"; break;
+    case 4: userRole = "standard"; break;
+    default: userRole = "standard";
+  }
+
+  // Store session data
+  localStorage.setItem('currentUser', JSON.stringify({
+    id: userData.user_id,
+    email: userData.email,
+    name: userData.full_name,
+    role: userData.role_id,
+    organizationId: userData.organization_id,
+    authUid: userData.auth_uid
+  }));
+
+  // Your existing redirect logic
+  if (userData.user_status === 'pending_activation') {
+    alert("Welcome! Please change your temporary password to continue.");
+    switch (userRole) {
+      case "sysadmin": navigate("/dashboard-sysadmin/profile"); return;
+      case "admin": navigate("/dashboard-admin/profile"); return;
+      case "personnel": navigate("/dashboard-personnel/profile"); return;
+      case "standard": navigate("/dashboard-user/profile"); return;
+      default: navigate("/dashboard-user/profile"); return;
+    }
+  }
+
+  if (userData.user_status !== 'active') {
+    alert("Your account is not active. Please contact the administrator.");
+    return;
+  }
+
+  switch (userRole) {
+    case "sysadmin": navigate("/dashboard-sysadmin"); break;
+    case "admin": navigate("/dashboard-admin"); break;
+    case "personnel": navigate("/dashboard-personnel"); break;
+    case "standard": navigate("/dashboard-user"); break;
+    default: navigate("/dashboard-user");
+  }
+};
   const handleGoogleSignIn = () => {
     alert('Google Sign-In Clicked (Mock only)');
   };

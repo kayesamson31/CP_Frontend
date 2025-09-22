@@ -33,6 +33,12 @@ export class PasswordUtils {
     return CryptoJS.SHA256(password).toString();
   }
 
+  // 🆕 ADDED: Verify password against hash
+  static verifyPassword(plainPassword, hashedPassword) {
+    const inputHash = CryptoJS.SHA256(plainPassword).toString();
+    return inputHash === hashedPassword;
+  }
+
   // Generate unique username from email
   static generateUsername(email) {
     const emailPart = email.split('@')[0].toLowerCase();

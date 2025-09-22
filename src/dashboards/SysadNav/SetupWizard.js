@@ -46,6 +46,7 @@ const parseCSV = (file) => {
     };
 
 
+// UPDATED: This version creates actual Supabase Auth accounts
 const importUsers = async (file, roleMap, orgData) => {
   try {
     console.log("Starting user import for:", file.name);
@@ -68,26 +69,64 @@ const importUsers = async (file, roleMap, orgData) => {
       return true;
     });
 
-    // Generate passwords and prepare user data with credentials
-    const usersWithPasswords = validRows.map((row) => {
-      const tempPassword = PasswordUtils.generateSecurePassword(10);
-      const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+    const usersWithCredentials = [];
 
-      return {
-        full_name: row.Name.trim(),
-        email: row.Email.trim().toLowerCase(),
-        user_status: 'pending_activation',
-        role_id: roleMap[row.Role] || 4,
-        organization_id: orgData.organization_id,
-        username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
-        password_hash: hashedPassword,
-        tempPassword: tempPassword,
-        auth_uid: null
-      };
-    });
+    // Process each user individually
+    for (const row of validRows) {
+      try {
+        const tempPassword = PasswordUtils.generateSecurePassword(10);
+        const email = row.Email.trim().toLowerCase();
+        
+        console.log(`Creating Supabase Auth account for: ${email}`);
+        
+        // Create Supabase Auth user
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+          email: email,
+          password: tempPassword,
+          email_confirm: true, // Auto-confirm email
+          user_metadata: {
+            full_name: row.Name.trim(),
+            role: row.Role.trim(),
+            organization_id: orgData.organization_id
+          }
+        });
 
-    // Insert to database
-    const dbUsers = usersWithPasswords.map(user => {
+        if (authError) {
+          console.error(`Failed to create auth for ${email}:`, authError);
+          // Continue with next user instead of failing completely
+          continue;
+        }
+
+        console.log(`Successfully created auth user: ${email}`);
+
+        // Prepare user data for database
+        const userData = {
+          full_name: row.Name.trim(),
+          email: email,
+          user_status: 'pending_activation',
+          role_id: roleMap[row.Role.trim()] || 4,
+          organization_id: orgData.organization_id,
+          username: PasswordUtils.generateUsername(email),
+          password_hash: PasswordUtils.hashPassword(tempPassword), // Keep hash as backup
+          auth_uid: authData.user.id, // Link to Supabase Auth
+          tempPassword: tempPassword // For email sending
+        };
+
+        usersWithCredentials.push(userData);
+
+      } catch (userError) {
+        console.error(`Error processing user ${row.Email}:`, userError);
+        continue;
+      }
+    }
+
+    if (usersWithCredentials.length === 0) {
+      console.log("No users were successfully processed");
+      return [];
+    }
+
+    // Insert users to database (remove tempPassword before inserting)
+    const dbUsers = usersWithCredentials.map(user => {
       const { tempPassword, ...dbUser } = user;
       return dbUser;
     });
@@ -98,13 +137,24 @@ const importUsers = async (file, roleMap, orgData) => {
       .select('*');
 
     if (insertError) {
+      console.error("Database insert error:", insertError);
+      
+      // Cleanup: Delete created auth users if database insert fails
+      for (const user of usersWithCredentials) {
+        try {
+          await supabase.auth.admin.deleteUser(user.auth_uid);
+        } catch (cleanupError) {
+          console.error(`Failed to cleanup auth user ${user.email}:`, cleanupError);
+        }
+      }
+      
       throw new Error(`Failed to save users to database: ${insertError.message}`);
     }
 
     console.log(`Successfully inserted ${insertResult.length} users to database`);
 
     // Return users with passwords for email sending
-    return usersWithPasswords;
+    return usersWithCredentials;
     
   } catch (err) {
     console.error("User import failed:", err.message);

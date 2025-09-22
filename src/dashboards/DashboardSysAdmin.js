@@ -7,7 +7,10 @@ import { EmailService } from '../utils/EmailService';
 import EmailProgressModal from '../components/EmailProgressModal';
 
 
+
 export default function DashboardSyAdmin() {
+
+  
   const navigate = useNavigate();
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [showSetupDetails, setShowSetupDetails] = useState(false);
@@ -134,6 +137,8 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
   window.URL.revokeObjectURL(url);
 };
 
+
+
 // Helper function to format timestamp to relative time
 const getRelativeTime = (timestamp) => {
   const now = new Date();
@@ -152,44 +157,45 @@ const getRelativeTime = (timestamp) => {
   // Function to get dynamic organization data
 // Replace your getOrganizationData function with this fixed version:
 
-// Sa DashboardSysAdmin.js, replace ang getOrganizationData:
+// REPLACEMENT: fetch organization data directly from Supabase
 const getOrganizationData = async () => {
   try {
-    // Try to get from localStorage first
-    const orgId = localStorage.getItem('organizationId');
-    const userEmail = localStorage.getItem('userEmail');
-    
-    if (!orgId || !userEmail) {
+    // Replace localStorage check with Supabase auth
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+
+    if (!userEmail) {
       return getDefaultOrgData();
     }
 
-    // Get organization details from database
-    const { data: orgData, error } = await supabase
+    // Get organization based on user email
+    const { data: orgData, error: orgError } = await supabase
       .from('organizations')
       .select('*')
-      .eq('organization_id', orgId)
+      .eq('contact_email', userEmail)
       .single();
 
-    if (error || !orgData) {
-      console.log('Organization data not found, using default');
+    if (orgError || !orgData) {
+      console.log('Organization not found, using default');
       return getDefaultOrgData();
     }
 
     return {
-      name: orgData.org_name || "OpenFMS",
-      type: "Government Agency",
+      name: orgData.org_name,
+      type: orgData.org_type || "Government Agency",
       address: orgData.address || "Not specified",
-      phone: orgData.phone || "Not specified", 
-      country: "Not specified",
+      phone: orgData.phone || "Not specified",
+      country: orgData.country || "Not specified",
       website: orgData.website || "https://openfms.io",
       contactPerson: orgData.contact_person || "System Administrator",
       contactEmail: orgData.contact_email || userEmail
     };
   } catch (error) {
-    console.error('Error loading organization data:', error);
+console.error('Error loading organization data:', error);
     return getDefaultOrgData();
   }
 };
+
 
 const getDefaultOrgData = () => ({
   name: "OpenFMS",
@@ -286,155 +292,52 @@ const [organizationData, setOrganizationData] = useState({
 
 // Replace your fetchDatabaseStats function in DashboardSysAdmin.js
 
+// REPLACEMENT: Fetch stats directly from Supabase based on user auth
 const fetchDatabaseStats = async () => {
   try {
-    // Use localStorage authentication 
-    const userEmail = localStorage.getItem('userEmail');
-    const userId = localStorage.getItem('userId');
-    const orgId = localStorage.getItem('organizationId');
-    
-    if (!userEmail || !userId) {
-      console.log('User not authenticated in localStorage, using default values');
-      return {
-        personnel: 0,
-        standardUsers: 0,
-        heads: 0,
-        systemAdmins: 1,
-        totalAssets: 0,
-        systemHealthPercentage: 25
-      };
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+
+    if (!userEmail) {
+      console.log('No authenticated user found');
+      return { personnel:0, standardUsers:0, heads:0, systemAdmins:1, totalAssets:0, systemHealthPercentage:25 };
     }
 
-    console.log('Authenticated user found:', { userEmail, userId, orgId });
+    // Get the organization ID from Supabase users table
+    const { data: userData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
 
-    // If we don't have orgId in localStorage, try to get it from database
-    let organizationId = orgId;
-    if (!organizationId) {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('organization_id')
-        .eq('email', userEmail.toLowerCase())
-        .single();
+    const organizationId = userData?.organization_id;
+    if (!organizationId) return { personnel:0, standardUsers:0, heads:0, systemAdmins:1, totalAssets:0, systemHealthPercentage:25 };
 
-      if (userData) {
-        organizationId = userData.organization_id;
-        localStorage.setItem('organizationId', organizationId.toString());
-      }
-    }
-
-    if (!organizationId) {
-      console.log('No organization ID found');
-      return {
-        personnel: 0,
-        standardUsers: 0,
-        heads: 0,
-        systemAdmins: 1,
-        totalAssets: 0,
-        systemHealthPercentage: 25
-      };
-    }
-
-    console.log('Organization ID found:', organizationId);
-
-    // Query all user counts by role
+    // Fetch counts
     const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
-      // Personnel count (role_id 3)
-      supabase
-        .from('users')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .eq('role_id', 3)
-        .in('user_status', ['active', 'pending_activation']),
-
-      // Standard Users count (role_id 4)
-      supabase
-        .from('users')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .eq('role_id', 4)
-        .in('user_status', ['active', 'pending_activation']),
-
-      // Admin Officials (role_id 2) - these should count as "heads"
-      supabase
-        .from('users')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .eq('role_id', 2)
-        .in('user_status', ['active', 'pending_activation']),
-
-      // System Admins (role_id 1) 
-      supabase
-        .from('users')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .eq('role_id', 1)
-        .in('user_status', ['active', 'pending_activation']),
-
-      // Assets count
-      supabase
-        .from('assets')
-        .select('*', { count: 'exact' })
-        .eq('organization_id', organizationId)
-        .neq('asset_status', 'inactive_test')
+      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 3).in('user_status', ['active','pending_activation']),
+      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 4).in('user_status', ['active','pending_activation']),
+      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 2).in('user_status', ['active','pending_activation']),
+      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 1).in('user_status', ['active','pending_activation']),
+      supabase.from('assets').select('*', { count: 'exact' }).eq('organization_id', organizationId).neq('asset_status', 'inactive_test')
     ]);
 
-    // Debug logs
-    console.log('Personnel Result:', personnelResult);
-    console.log('Standard Users Result:', standardUsersResult);
-    console.log('Admin Officials (Heads) Result:', headsResult);
-    console.log('System Admins Result:', systemAdminsResult);
-    console.log('Assets Result:', assetsResult);
-
-    // Handle errors
-    const errors = [
-      personnelResult.error, 
-      standardUsersResult.error, 
-      headsResult.error, 
-      systemAdminsResult.error, 
-      assetsResult.error
-    ].filter(Boolean);
-    
-    if (errors.length > 0) {
-      console.error('Database query errors:', errors);
-    }
-
-    // Calculate totals
     const personnel = personnelResult.count || 0;
     const standardUsers = standardUsersResult.count || 0;
-    const heads = headsResult.count || 0; // Admin officials
-    const systemAdmins = systemAdminsResult.count || 0; // System admins
+    const heads = (headsResult.count || 0) + (systemAdminsResult.count || 0); // include system admins
+    const systemAdmins = systemAdminsResult.count || 0;
     const totalAssets = assetsResult.count || 0;
-    
-    // System admins are also "heads" in the UI, so we add them to heads count for display
-    const totalHeads = heads + systemAdmins;
-    
-    const stats = {
-      personnel: personnel,
-      standardUsers: standardUsers,
-      heads: totalHeads, // This includes both admin officials and system admins
-      systemAdmins: systemAdmins,
-      totalAssets: totalAssets,
-      systemHealthPercentage: calculateSystemHealth(
-        personnel + standardUsers + totalHeads,
-        totalAssets
-      )
-    };
 
-    console.log('Final Stats from database:', stats);
-    return stats;
+    const systemHealthPercentage = calculateSystemHealth(personnel + standardUsers + heads, totalAssets);
+
+    return { personnel, standardUsers, heads, systemAdmins, totalAssets, systemHealthPercentage };
 
   } catch (error) {
-    console.error('Error fetching database stats:', error);
-    return {
-      personnel: 0,
-      standardUsers: 0,
-      heads: 0,
-      systemAdmins: 1,
-      totalAssets: 0,
-      systemHealthPercentage: 25
-    };
+    console.error('Error fetching stats:', error);
+    return { personnel:0, standardUsers:0, heads:0, systemAdmins:1, totalAssets:0, systemHealthPercentage:25 };
   }
 };
+
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
@@ -574,7 +477,7 @@ const updateSetupProgress = () => {
 };
 
 
-// Replace your existing handleBulkUserUpload function with this corrected version
+// PRACTICAL SOLUTION: Database-only approach with null auth_uid
 const handleBulkUserUpload = async () => {
   if (!previewData || !selectedFile) {
     alert('No file selected for upload!');
@@ -585,24 +488,17 @@ const handleBulkUserUpload = async () => {
   
   try {
     // Get current user's organization ID
-// Load user from localStorage instead of Supabase Auth
-const stored = localStorage.getItem('currentUser');
-if (!stored) {
-  throw new Error('User not authenticated - please log in again.');
-}
-const currentUser = JSON.parse(stored);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated - please log in again.');
+    }
 
-// Get organization_id by email instead of auth_uid
-const { data: userData, error: userDataError } = await supabase
-  .from('users')
-  .select('organization_id')
-  .eq('email', currentUser.email)
-  .single();
-
-if (userDataError || !userData) {
-  throw new Error('User data not found in database');
-}
-
+    const userEmail = user.email;
+    const { data: userData, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
 
     if (userDataError || !userData) {
       throw new Error('User data not found');
@@ -610,7 +506,7 @@ if (userDataError || !userData) {
 
     const orgId = userData.organization_id;
 
-    // Parse CSV content
+    // Parse CSV content  
     const { csvContent, userType } = previewData;
     const parseResult = Papa.parse(csvContent, { 
       header: true, 
@@ -629,25 +525,24 @@ if (userDataError || !userData) {
 
     console.log(`Processing ${csvRows.length} users from CSV`);
 
-// Generate passwords and prepare user data with credentials
-const usersWithPasswords = csvRows.map((row) => {
-  const tempPassword = PasswordUtils.generateSecurePassword(10);
-  const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+    // Generate passwords and prepare user data with credentials
+    const usersWithPasswords = csvRows.map((row) => {
+      const tempPassword = PasswordUtils.generateSecurePassword(10);
+      const hashedPassword = PasswordUtils.hashPassword(tempPassword);
 
-  return {
-    full_name: row.Name.trim(),
-    email: row.Email.trim().toLowerCase(),
-    user_status: 'pending_activation',
-    role_id: getRoleIdFromRole(row.Role),
-    organization_id: orgId,
-    username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
-    password_hash: hashedPassword,   // â¬…ï¸ important for custom auth
-    tempPassword: tempPassword,
-    auth_uid: null
-  };
-});
-
-
+      return {
+        full_name: row.Name.trim(),
+        email: row.Email.trim().toLowerCase(),
+        user_status: 'pending_activation', // Mark as pending - they need to activate account
+        role_id: getRoleIdFromRole(row.Role),
+        organization_id: orgId,
+        username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
+        password_hash: hashedPassword,
+        auth_uid: null, // Will be populated when they first login and create Supabase auth
+        tempPassword: tempPassword,
+        needs_auth_setup: true // Custom flag to indicate auth setup needed
+      };
+    });
 
     console.log('Generated passwords for users:', usersWithPasswords.map(u => ({
       name: u.full_name, 
@@ -655,13 +550,12 @@ const usersWithPasswords = csvRows.map((row) => {
       password: '[HIDDEN]'
     })));
 
-const dbUsers = usersWithPasswords
-  .filter(u => u !== null) // skip failed Auth creations
-  .map(user => {
-    const { tempPassword, ...dbUser } = user;
-    return dbUser;
-  });
-
+    // Prepare database users (remove tempPassword and needs_auth_setup)
+    const dbUsers = usersWithPasswords
+      .map(user => {
+        const { tempPassword, needs_auth_setup, ...dbUser } = user;
+        return dbUser;
+      });
 
     const { data: insertResult, error: insertError } = await supabase
       .from('users')
@@ -675,9 +569,8 @@ const dbUsers = usersWithPasswords
 
     const insertedCount = insertResult ? insertResult.length : dbUsers.length;
     console.log(`Successfully inserted ${insertedCount} users to database`);
-    console.log('Starting dashboard refresh after successful user insertion...');
 
-// Single, proper dashboard refresh after database insertion
+    // Dashboard refresh
     console.log('Refreshing dashboard counts...');
     const dbStats = await fetchDatabaseStats();
     setOrganizationData(prev => ({
@@ -685,14 +578,11 @@ const dbUsers = usersWithPasswords
       ...dbStats
     }));
 
-    // Also update dashboard data state for consistency
     setDashboardData(prev => ({
       ...prev,
       totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
       totalAssets: dbStats.totalAssets
     }));
-
-    console.log('Dashboard counts updated:', dbStats);
 
     // Close the user upload modal BEFORE starting email process
     setShowUserUploadModal(false);
@@ -710,7 +600,7 @@ const dbUsers = usersWithPasswords
       failedCount: 0
     });
 
-    // Update localStorage for activity tracking (before email sending)
+    // Update localStorage for activity tracking
     let setupWizardData = localStorage.getItem('setupWizardData');
     let wizardData = setupWizardData ? JSON.parse(setupWizardData) : {
       orgData: { name: organizationData.name, email: organizationData.contactEmail },
@@ -725,9 +615,9 @@ const dbUsers = usersWithPasswords
       fileName: selectedFile.name,
       uploadDate: new Date().toISOString(),
       recordsProcessed: insertedCount,
-      emailsSent: 0, // Will be updated after email sending
+      emailsSent: 0,
       emailsFailed: 0,
-      source: 'database_with_emails'
+      source: 'database_auth_pending' // Users need to setup auth on first login
     };
 
     if (wizardData.uploadedFiles[userType]) {
@@ -742,33 +632,30 @@ const dbUsers = usersWithPasswords
 
     localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
 
-    // Add activity log immediately for user creation
+    // Add activity log
     const userTypeDisplayName = userType === 'heads' ? 'Heads' : 
                                userType === 'personnel' ? 'Personnel' : 'Standard Users';
     
     addActivity(
       'user_added',
-      `${userTypeDisplayName} added: ${insertedCount} accounts created successfully`,
+      `${userTypeDisplayName} added: ${insertedCount} accounts created (pending auth setup)`,
       organizationData.contactPerson
     );
 
-    // Update setup progress
     updateSetupProgress();
 
-    // Ã°Å¸â€Â¥ EMAIL SENDING - This now happens AFTER dashboard is updated
+    // EMAIL SENDING with special instruction for first-time login
     console.log('Starting bulk email send...');
-    let emailResults = [];
     let successfulEmails = 0;
     let failedEmails = 0;
 
     try {
-      // Initialize EmailJS
       if (!EmailService.isConfigured()) {
         throw new Error('Email service not configured. Check environment variables.');
       }
 
-      emailResults = await EmailService.sendBulkCredentials(
-        usersWithPasswords,
+      const emailResults = await EmailService.sendBulkCredentials(
+        usersWithPasswords, // This contains tempPassword for emails
         organizationData.name,
         (sent, total, currentEmail, success) => {
           setEmailProgress(prev => ({
@@ -778,14 +665,11 @@ const dbUsers = usersWithPasswords
             successCount: success ? prev.successCount + 1 : prev.successCount,
             failedCount: success ? prev.failedCount : prev.failedCount + 1
           }));
-          console.log(`Email progress: ${sent}/${total} - ${currentEmail} - ${success ? 'Success' : 'Failed'}`);
         }
       );
 
       successfulEmails = emailResults.filter(r => r.success).length;
       failedEmails = emailResults.filter(r => !r.success).length;
-
-      console.log(`Email sending complete: ${successfulEmails} sent, ${failedEmails} failed`);
 
       // Update the upload record with email results
       const updatedWizardData = JSON.parse(localStorage.getItem('setupWizardData'));
@@ -799,26 +683,18 @@ const dbUsers = usersWithPasswords
         localStorage.setItem('setupWizardData', JSON.stringify(updatedWizardData));
       }
 
-      // Add another activity log for email results
-      if (failedEmails > 0) {
-        addActivity(
-          'csv_upload',
-          `Email sending completed: ${successfulEmails} sent, ${failedEmails} failed`,
-          organizationData.contactPerson
-        );
-      } else {
-        addActivity(
-          'csv_upload',
-          `All ${successfulEmails} welcome emails sent successfully`,
-          organizationData.contactPerson
-        );
-      }
+      addActivity(
+        'csv_upload',
+        failedEmails > 0 
+          ? `Email sending completed: ${successfulEmails} sent, ${failedEmails} failed`
+          : `All ${successfulEmails} welcome emails sent successfully`,
+        organizationData.contactPerson
+      );
 
     } catch (emailError) {
       console.error('Email sending failed:', emailError);
       failedEmails = usersWithPasswords.length;
       
-      // Update progress to show all failed
       setEmailProgress(prev => ({
         ...prev,
         progress: usersWithPasswords.length,
@@ -838,10 +714,7 @@ const dbUsers = usersWithPasswords
   } catch (error) {
     console.error('Error processing user CSV:', error);
     alert(`Error: ${error.message}`);
-    
-    // Hide progress modal on error
     setEmailProgress(prev => ({ ...prev, isVisible: false }));
-    
   } finally {
     setUploadingUsers(false);
   }
@@ -881,19 +754,22 @@ const handleBulkAssetUpload = async () => {
   
   try {
     // Get current user's organization ID
-// Load current user from localStorage (custom auth)
-const stored = localStorage.getItem('currentUser');
-if (!stored) {
+// Get current user directly from Supabase Auth
+const { data: { user }, error: authError } = await supabase.auth.getUser();
+if (!user || authError) {
   throw new Error('User not authenticated - please log in again.');
 }
-const currentUser = JSON.parse(stored);
 
-// Get organization_id by email (since we donâ€™t use auth_uid anymore)
+const userEmail = user.email;
+
+// Get organization_id from database
 const { data: userData, error: userDataError } = await supabase
   .from('users')
   .select('organization_id')
-  .eq('email', currentUser.email)
+  .eq('email', userEmail)
   .single();
+
+
 
 if (userDataError || !userData) {
   throw new Error('User data not found in database');
