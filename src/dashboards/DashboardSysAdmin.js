@@ -49,7 +49,7 @@ const handleEmailProgressClose = () => {
   // Show final summary if there were any failures
   const { successCount, failedCount } = emailProgress;
   if (failedCount > 0) {
-    alert(`Email Summary:\nâœ… ${successCount} emails sent successfully\nâŒ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+    alert(`Email Summary:\nÃ¢Å“â€¦ ${successCount} emails sent successfully\nÃ¢ÂÅ’ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
   }
 };
 
@@ -641,7 +641,7 @@ const usersWithPasswords = csvRows.map((row) => {
     role_id: getRoleIdFromRole(row.Role),
     organization_id: orgId,
     username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
-    password_hash: hashedPassword,   // ⬅️ important for custom auth
+    password_hash: hashedPassword,   // â¬…ï¸ important for custom auth
     tempPassword: tempPassword,
     auth_uid: null
   };
@@ -677,56 +677,21 @@ const dbUsers = usersWithPasswords
     console.log(`Successfully inserted ${insertedCount} users to database`);
     console.log('Starting dashboard refresh after successful user insertion...');
 
-// IMMEDIATE dashboard refresh
-setTimeout(async () => {
-  try {
-    const freshStats = await fetchDatabaseStats();
-    setOrganizationData(prev => ({ ...prev, ...freshStats }));
-    console.log('Dashboard forcibly updated with fresh stats:', freshStats);
-  } catch (error) {
-    console.error('Dashboard refresh error:', error);
-  }
-}, 100); // Small delay to ensure database transaction is complete
-    try {
-  const dbStats = await fetchDatabaseStats();
-  console.log('New dashboard stats from database:', dbStats);
-  
-  // Update the organization data state immediately
-  setOrganizationData(prev => {
-    const updated = {
-      ...prev,
-      ...dbStats
-    };
-    console.log('Dashboard state being updated to:', updated);
-    return updated;
-  });
-
-  // Also update dashboard data state for consistency
-  setDashboardData(prev => ({
-    ...prev,
-    totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
-    totalAssets: dbStats.totalAssets
-  }));
-
-  console.log('âœ… Dashboard refresh completed - counts should be updated now');
-} catch (refreshError) {
-  console.error('âŒ Failed to refresh dashboard:', refreshError);
-  alert(`Users created successfully in database, but dashboard refresh failed. Please reload the page to see updated counts.`);
-}
-
-// Then continue with the rest of your existing code...
-// Close the user upload modal BEFORE starting email process
-setShowUserUploadModal(false);
-setSelectedUserType('');
-setPreviewData(null);
-setSelectedFile(null);
-    // ðŸ”¥ CRITICAL FIX: Update dashboard counts IMMEDIATELY after successful DB insertion
+// Single, proper dashboard refresh after database insertion
     console.log('Refreshing dashboard counts...');
     const dbStats = await fetchDatabaseStats();
     setOrganizationData(prev => ({
       ...prev,
       ...dbStats
     }));
+
+    // Also update dashboard data state for consistency
+    setDashboardData(prev => ({
+      ...prev,
+      totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
+      totalAssets: dbStats.totalAssets
+    }));
+
     console.log('Dashboard counts updated:', dbStats);
 
     // Close the user upload modal BEFORE starting email process
@@ -790,7 +755,7 @@ setSelectedFile(null);
     // Update setup progress
     updateSetupProgress();
 
-    // ðŸ”¥ EMAIL SENDING - This now happens AFTER dashboard is updated
+    // Ã°Å¸â€Â¥ EMAIL SENDING - This now happens AFTER dashboard is updated
     console.log('Starting bulk email send...');
     let emailResults = [];
     let successfulEmails = 0;
@@ -923,7 +888,7 @@ if (!stored) {
 }
 const currentUser = JSON.parse(stored);
 
-// Get organization_id by email (since we don’t use auth_uid anymore)
+// Get organization_id by email (since we donâ€™t use auth_uid anymore)
 const { data: userData, error: userDataError } = await supabase
   .from('users')
   .select('organization_id')
@@ -1065,12 +1030,21 @@ if (userDataError || !userData) {
     localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
 
     // Refresh dashboard data from database
-    const dbStats = await fetchDatabaseStats();
-    setOrganizationData(prev => ({
-      ...prev,
-      ...dbStats
-    }));
+console.log('Refreshing asset counts...');
+const dbStats = await fetchDatabaseStats();
+setOrganizationData(prev => ({
+  ...prev,
+  ...dbStats
+}));
 
+// Also update dashboard data state for consistency
+setDashboardData(prev => ({
+  ...prev,
+  totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
+  totalAssets: dbStats.totalAssets
+}));
+
+console.log('Asset counts updated:', dbStats);
     // Add activity log
     addActivity(
       'csv_upload',
@@ -1088,8 +1062,8 @@ if (userDataError || !userData) {
     
     // Show detailed results
     let resultMessage = `Asset upload completed!\n\n`;
-    resultMessage += `âœ… Successfully inserted: ${insertedCount} assets\n`;
-    if (failedCount > 0) resultMessage += `âŒ Failed: ${failedCount} assets\n`;
+    resultMessage += `Ã¢Å“â€¦ Successfully inserted: ${insertedCount} assets\n`;
+    if (failedCount > 0) resultMessage += `Ã¢ÂÅ’ Failed: ${failedCount} assets\n`;
     
     alert(resultMessage);
     
@@ -1183,20 +1157,22 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
     reader.readAsText(file);
   };
 
-// Replace ang useEffect sa DashboardSysAdmin.js:
 useEffect(() => {
   const loadDashboardData = async () => {
     try {
-      // Check if just completed setup
+      // Check if just completed setup or needs forced refresh
       const justCompleted = localStorage.getItem('setupJustCompleted');
-      if (justCompleted === 'true') {
+      const forceRefresh = localStorage.getItem('forceRefreshDashboard');
+      
+      if (justCompleted === 'true' || forceRefresh === 'true') {
         // Small delay to ensure all database operations are complete
         await new Promise(resolve => setTimeout(resolve, 1000));
         localStorage.removeItem('setupJustCompleted');
+        localStorage.removeItem('forceRefreshDashboard');
       }
 
       // Get organization info
-      const baseOrgData = await getOrganizationData(); // Make this async
+      const baseOrgData = await getOrganizationData();
       
       // Get all statistics from database
       const dbStats = await fetchDatabaseStats();
@@ -1228,7 +1204,7 @@ useEffect(() => {
         ...prev,
         personnel: 0,
         standardUsers: 0,
-        heads: 1, // At least 1 for the system admin
+        heads: 1,
         systemAdmins: 1,
         totalAssets: 0,
         systemHealthPercentage: 25

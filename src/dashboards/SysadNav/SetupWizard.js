@@ -3,6 +3,8 @@ import { ChevronRight, ChevronLeft, Upload, Download, Users, Building2, Database
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../supabaseClient';
 import { PasswordUtils } from '../../utils/PasswordUtils';
+import { EmailService } from '../../utils/EmailService';
+import EmailProgressModal from '../../components/EmailProgressModal';
 
 const parseCSV = (file) => {
   return new Promise((resolve, reject) => {
@@ -44,93 +46,77 @@ const parseCSV = (file) => {
     };
 
 
-  const importUsers = async (file, roleMap, orgData) => {
+const importUsers = async (file, roleMap, orgData) => {
   try {
     console.log("Starting user import for:", file.name);
     const rows = await parseCSV(file);
-    console.log("Parsed rows:", rows);
-
+    
     if (!rows || rows.length === 0) {
-      console.log("No valid rows found in CSV");
       return [];
     }
 
     // Validate required fields
-  const validRows = rows.filter(row => {
-    const hasName = row.Name && row.Name.trim().length > 0;
-    const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
-    const hasRole = row.Role && row.Role.trim().length > 0;
+    const validRows = rows.filter(row => {
+      const hasName = row.Name && row.Name.trim().length > 0;
+      const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
+      const hasRole = row.Role && row.Role.trim().length > 0;
       
-  if (!hasName || !hasEmail || !hasRole) {
-  console.warn("Skipping invalid row:", row);
-  return false;
-  }
-  return true;
-  });
+      if (!hasName || !hasEmail || !hasRole) {
+        console.warn("Skipping invalid row:", row);
+        return false;
+      }
+      return true;
+    });
 
-  console.log(`Valid rows: ${validRows.length} out of ${rows.length}`);
+    // Generate passwords and prepare user data with credentials
+    const usersWithPasswords = validRows.map((row) => {
+      const tempPassword = PasswordUtils.generateSecurePassword(10);
+      const hashedPassword = PasswordUtils.hashPassword(tempPassword);
 
-  // Process users - INSERT DIRECTLY TO DATABASE (skip Supabase Auth for now)
-  const insertedUsers = [];
-    
-  for (let index = 0; index < validRows.length; index++) {
-  const r = validRows[index];
-      
-  try {
-  const email = r.Email.toLowerCase().trim();
-  const tempPassword = PasswordUtils.generateSecurePassword(10);
-  const hashedPassword = PasswordUtils.hashPassword(tempPassword);
-  const username = `${email.split("@")[0]}_${Date.now()}_${index}`;
+      return {
+        full_name: row.Name.trim(),
+        email: row.Email.trim().toLowerCase(),
+        user_status: 'pending_activation',
+        role_id: roleMap[row.Role] || 4,
+        organization_id: orgData.organization_id,
+        username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
+        password_hash: hashedPassword,
+        tempPassword: tempPassword,
+        auth_uid: null
+      };
+    });
 
-  // Insert user directly to database without Supabase Auth (for now)
-  const userData = {
-  username: username,
-  full_name: r.Name.trim(),
-  email: email,
-  role_id: roleMap[r.Role] || 4,
-  user_status: 'active', // Set as active since we're not using email confirmation yet
-  password_hash: hashedPassword,
-  auth_uid: null, // Will be null for now
-  organization_id: orgData.organization_id
-  };
+    // Insert to database
+    const dbUsers = usersWithPasswords.map(user => {
+      const { tempPassword, ...dbUser } = user;
+      return dbUser;
+    });
 
-  const { data: dbUser, error: dbError } = await supabase
-  .from("users")
-  .insert([userData])
-  .select()
-  .single();
-        
-  if (dbError) {
-  console.log(`✅ User inserted: ${dbUser.full_name} (${dbUser.email}) - Role: ${dbUser.role_id}`);          continue;
-  }
-        
-  insertedUsers.push({
-  ...dbUser,
-  tempPassword: tempPassword // Include for potential email sending later
-  });
-        
-  console.log(`✅ Successfully created user: ${email}`);
-        
-  } catch (userError) {
-  console.error(`Error processing user ${r.Email}:`, userError);
-  }
-  }
+    const { data: insertResult, error: insertError } = await supabase
+      .from('users')
+      .insert(dbUsers)
+      .select('*');
 
-  console.log(`Successfully processed ${insertedUsers.length} users out of ${validRows.length}`);
-  return insertedUsers;
+    if (insertError) {
+      throw new Error(`Failed to save users to database: ${insertError.message}`);
+    }
+
+    console.log(`Successfully inserted ${insertResult.length} users to database`);
+
+    // Return users with passwords for email sending
+    return usersWithPasswords;
     
   } catch (err) {
     console.error("User import failed:", err.message);
-    alert("User import failed: " + err.message);
-    return [];
+    throw err;
   }
-  };
+};
 
   const importAssets = async (file, orgData) => {
   try {
-    console.log("ðŸ” Starting asset import...");
+    console.log("Ã°Å¸â€Â Starting asset import...");
     const rows = await parseCSV(file);
-    console.log("ðŸ“Š Parsed asset rows:", rows);
+    console.log("Ã°Å¸â€œÅ  Parsed asset rows:", rows);
 
   if (!rows || rows.length === 0) {
     console.log("No valid asset rows found");
@@ -209,17 +195,17 @@ const parseCSV = (file) => {
         }
         
         insertedAssets.push(data);
-        console.log(`âœ… Inserted asset: ${assetData.asset_code}`);
+        console.log(`Ã¢Å“â€¦ Inserted asset: ${assetData.asset_code}`);
       } catch (assetError) {
         console.error(`Error inserting asset:`, assetError);
       }
     }
 
-    console.log(`âœ… Successfully imported ${insertedAssets.length} assets`);
+    console.log(`Ã¢Å“â€¦ Successfully imported ${insertedAssets.length} assets`);
     return insertedAssets.length;
     
   } catch (err) {
-    console.error("âŒ Asset import failed:", err.message);
+    console.error("Ã¢ÂÅ’ Asset import failed:", err.message);
     return 0;
   }
 };
@@ -274,6 +260,7 @@ export default function SetupWizard() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   
+  
   // Get org data from signup if available
  const getInitialOrgData = () => {
   // Will be populated by useEffect from user metadata
@@ -307,6 +294,16 @@ export default function SetupWizard() {
     standardUsers: false,
     assets: false
   });
+
+const [emailProgress, setEmailProgress] = useState({
+  isVisible: false,
+  progress: 0,
+  total: 0,
+  currentEmail: '',
+  successCount: 0,
+  failedCount: 0
+});
+
   const totalSteps = 4;
 
 useEffect(() => {
@@ -1028,7 +1025,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
           <div className="d-flex">
             <CheckCircle className="text-success me-3 mt-1 flex-shrink-0" size={20} />
             <div>
-              <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>ðŸŽ‰ Congratulations!</h6>
+              <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Ã°Å¸Å½â€° Congratulations!</h6>
               <p className="mb-0 small text-muted">
                 Your OpenFMS system has been successfully set up! All data has been imported and your system is now ready for full operation. 
                 You'll be redirected to your System Admin dashboard where you can manage users, assets, and system settings.
@@ -1191,7 +1188,6 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
               ) : (
                 <button
 // Replace the setup completion button onClick function in SetupWizard.js
-
 onClick={async () => {
   try {
     console.log("=== STARTING SETUP COMPLETION ===");
@@ -1201,8 +1197,6 @@ onClick={async () => {
       throw new Error('Please log in again');
     }
 
-    console.log("Current user:", user.email);
-
     // Update password if provided
     if (orgData.password && orgData.password === orgData.confirmPassword) {
       const { error: passwordError } = await supabase.auth.updateUser({
@@ -1210,12 +1204,10 @@ onClick={async () => {
       });
       if (passwordError) {
         console.error("Password update error:", passwordError);
-        // Don't throw here, continue with setup
       }
     }
 
     // Create organization
-    console.log("Creating organization...");
     const { data: orgResult, error: orgError } = await supabase
       .from("organizations")
       .insert([{
@@ -1232,21 +1224,17 @@ onClick={async () => {
       .single();
       
     if (orgError) {
-      console.error("Organization creation error:", orgError);
       throw orgError;
     }
-    
-    console.log("Organization created:", orgResult);
 
     // Create admin user profile
-    console.log("Creating admin user profile...");
     const { error: userInsertError } = await supabase
       .from("users")
       .insert([{
         username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
         full_name: orgData.contactPerson,
         email: orgData.contactEmail.toLowerCase().trim(),
-        role_id: 1, // System admin role
+        role_id: 1,
         user_status: "active",
         password_hash: PasswordUtils.hashPassword(orgData.password),
         auth_uid: user.id,
@@ -1254,79 +1242,44 @@ onClick={async () => {
       }]);
 
     if (userInsertError) {
-      console.error("User profile creation error:", userInsertError);
       throw userInsertError;
     }
 
     localStorage.setItem('userEmail', orgData.contactEmail.toLowerCase().trim());
     localStorage.setItem('userId', user.id);
-    localStorage.setItem('userRole', 'sysadmin');// System admin
+    localStorage.setItem('userRole', 'sysadmin');
     localStorage.setItem('organizationId', orgResult.organization_id.toString());
 
     // Get role mapping
     const roleMap = await getRoleMap();
-    console.log("Role mapping:", roleMap);
 
-    // Import users with proper organization ID
-    let userImportResults = {
-      heads: 0,
-      personnel: 0,
-      standardUsers: 0
-    };
+    // Import users and collect all users for email sending
+    let allUsersForEmail = [];
+    let userImportResults = { heads: 0, personnel: 0, standardUsers: 0 };
 
-    // Process each user type
-    const importPromises = [];
-    
+    // Process each user type and collect users with passwords
     if (uploadedFiles.heads) {
-      importPromises.push(
-        importUsers(uploadedFiles.heads, roleMap, orgResult).then(result => {
-          userImportResults.heads = result ? result.length : 0;
-          console.log(`Heads imported: ${userImportResults.heads}`);
-        }).catch(err => {
-          console.error("Heads import failed:", err);
-          userImportResults.heads = 0;
-        })
-      );
+      const headUsers = await importUsers(uploadedFiles.heads, roleMap, orgResult);
+      allUsersForEmail.push(...headUsers);
+      userImportResults.heads = headUsers.length;
     }
 
     if (uploadedFiles.personnel) {
-      importPromises.push(
-        importUsers(uploadedFiles.personnel, roleMap, orgResult).then(result => {
-          userImportResults.personnel = result ? result.length : 0;
-          console.log(`Personnel imported: ${userImportResults.personnel}`);
-        }).catch(err => {
-          console.error("Personnel import failed:", err);
-          userImportResults.personnel = 0;
-        })
-      );
+      const personnelUsers = await importUsers(uploadedFiles.personnel, roleMap, orgResult);
+      allUsersForEmail.push(...personnelUsers);
+      userImportResults.personnel = personnelUsers.length;
     }
 
     if (uploadedFiles.standardUsers) {
-      importPromises.push(
-        importUsers(uploadedFiles.standardUsers, roleMap, orgResult).then(result => {
-          userImportResults.standardUsers = result ? result.length : 0;
-          console.log(`Standard users imported: ${userImportResults.standardUsers}`);
-        }).catch(err => {
-          console.error("Standard users import failed:", err);
-          userImportResults.standardUsers = 0;
-        })
-      );
+      const standardUsers = await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
+      allUsersForEmail.push(...standardUsers);
+      userImportResults.standardUsers = standardUsers.length;
     }
-
-    // Wait for all user imports to complete
-    await Promise.all(importPromises);
 
     // Import assets
     let assetImportResult = 0;
     if (uploadedFiles.assets) {
-      try {
-        console.log("Importing assets...");
-        assetImportResult = await importAssets(uploadedFiles.assets, orgResult);
-        console.log(`Assets imported: ${assetImportResult}`);
-      } catch (err) {
-        console.error("Asset import failed:", err);
-        assetImportResult = 0;
-      }
+      assetImportResult = await importAssets(uploadedFiles.assets, orgResult);
     }
 
     // Save setup data to localStorage
@@ -1370,28 +1323,81 @@ onClick={async () => {
       }
     };
     
+    
     localStorage.setItem("setupWizardData", JSON.stringify(setupData));
     localStorage.removeItem("orgDataFromSignup");
     localStorage.setItem('setupJustCompleted', 'true');
-    console.log("=== SETUP COMPLETED ===");
-    console.log("Import results:", setupData.importResults);
 
-    const totalUsers = Object.values(userImportResults).reduce((a, b) => a + b, 0) + 1; // +1 for admin
+    // START EMAIL SENDING PROCESS
+    if (allUsersForEmail.length > 0) {
+      console.log('Starting bulk email send for', allUsersForEmail.length, 'users...');
+      
+      // Show email progress modal
+      setEmailProgress({
+        isVisible: true,
+        progress: 0,
+        total: allUsersForEmail.length,
+        currentEmail: '',
+        successCount: 0,
+        failedCount: 0
+      });
+
+      try {
+        // Initialize EmailJS
+        if (!EmailService.isConfigured()) {
+          throw new Error('Email service not configured. Check environment variables.');
+        }
+
+        // Send bulk emails
+        const emailResults = await EmailService.sendBulkCredentials(
+          allUsersForEmail,
+          orgData.name,
+          (sent, total, currentEmail, success) => {
+            setEmailProgress(prev => ({
+              ...prev,
+              progress: sent,
+              currentEmail: currentEmail,
+              successCount: success ? prev.successCount + 1 : prev.successCount,
+              failedCount: success ? prev.failedCount : prev.failedCount + 1
+            }));
+          }
+        );
+
+        const successfulEmails = emailResults.filter(r => r.success).length;
+        const failedEmails = emailResults.filter(r => !r.success).length;
+
+        console.log(`Email sending complete: ${successfulEmails} sent, ${failedEmails} failed`);
+
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError);
+        setEmailProgress(prev => ({
+          ...prev,
+          progress: allUsersForEmail.length,
+          failedCount: allUsersForEmail.length,
+          currentEmail: 'Email sending failed'
+        }));
+      }
+    }
+
+    const totalUsers = Object.values(userImportResults).reduce((a, b) => a + b, 0) + 1;
     
     alert(`Setup completed successfully! 
 Users imported: ${totalUsers} (including your account)
 Assets imported: ${assetImportResult}
 
+${allUsersForEmail.length > 0 ? 'Login credentials are being sent to users via email.' : ''}
+
 You will now be redirected to your dashboard.`);
     
-    // Navigate to dashboard instead of login since user is already authenticated
+    // Navigate to dashboard
     navigate("/dashboard-sysadmin");
 
   } catch (err) {
     console.error("Setup completion failed:", err);
-    alert("Setup failed: " + err.message + "\n\nCheck console for details.");
+    alert("Setup failed: " + err.message);
   }
-}}
+}
+}
                   className="btn d-flex align-items-center px-4 py-2 text-white"
                   style={{
                     backgroundColor: isSetupComplete() ? '#28a745' : styles.accentColor,
@@ -1407,6 +1413,16 @@ You will now be redirected to your dashboard.`);
           </div>
         </div>
       </div>
+      {/* Add this before the closing </div> */}
+<EmailProgressModal
+  isVisible={emailProgress.isVisible}
+  progress={emailProgress.progress}
+  total={emailProgress.total}
+  currentEmail={emailProgress.currentEmail}
+  successCount={emailProgress.successCount}
+  failedCount={emailProgress.failedCount}
+  onClose={() => setEmailProgress(prev => ({ ...prev, isVisible: false }))}
+/>
     </div>
   );
 }
