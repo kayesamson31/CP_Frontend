@@ -1,6 +1,7 @@
 // src/components/WorkOrder.js
 import { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
+import { supabase } from '../../supabaseClient';
 
 export default function WorkOrder() {
   const [activeTab, setActiveTab] = useState('To Review');
@@ -26,335 +27,101 @@ const [extensionReason, setExtensionReason] = useState('');
   // API Base URL - update this to match your backend
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
 
-  // Hardcoded example data
-  const hardcodedWorkOrders = [
-    // To Review Examples
-    {
-      id: 'WO-2024-001',
-      requester: 'Maria Santos',
-      category: 'Electrical',
-      location: 'Building A - Room 201',
-      status: 'To Review',
-      priority: 'High',
-      suggestedPriority: 'High',
-      requestDate: '2024-01-15T08:00:00Z',
-      dueDate: '2024-01-20T17:00:00Z',
-      description: 'Electrical outlet not working in conference room',
-      detailedDescription: 'The main electrical outlet near the projector in conference room 201 is not working. This is affecting our daily meetings and presentations. Please check the wiring and replace if necessary.',
-      assetEquipment: 'Wall Outlet #A201-03'
-    },
-    {
-      id: 'WO-2024-002',
-      requester: 'John Rodriguez',
-      category: 'Plumbing',
-      location: 'Building B - 2nd Floor Restroom',
-      status: 'To Review',
-      priority: 'Medium',
-      suggestedPriority: 'Medium',
-      requestDate: '2024-01-16T10:30:00Z',
-      dueDate: '2024-01-25T17:00:00Z',
-      description: 'Leaking faucet in men\'s restroom',
-      detailedDescription: 'The faucet in the men\'s restroom on the 2nd floor has been dripping continuously for the past week. It\'s wasting water and the sound is disturbing nearby offices.',
-      assetEquipment: 'Faucet Unit B2-MR-01'
-    },
-
-    // Pending Examples
-    {
-      id: 'WO-2024-003',
-      requester: 'Ana Dela Cruz',
-      category: 'HVAC',
-      location: 'Building C - Server Room',
-      status: 'Pending',
-      priority: 'High',
-      suggestedPriority: 'Medium',
-      adminUpdatedPriority: 'High',
-      requestDate: '2024-01-14T09:00:00Z',
-      dueDate: '2024-01-18T17:00:00Z',
-      description: 'Air conditioning unit making loud noises',
-      detailedDescription: 'The main AC unit in the server room has been making unusual grinding noises and the temperature is not maintaining properly. This could affect our server equipment.',
-      assetEquipment: 'AC Unit C-SR-01',
-      assignedTo: 'Roberto Martinez'
-    },
-    {
-      id: 'WO-2024-004',
-      requester: 'Carlos Reyes',
-      category: 'Carpentry / Structural',
-      location: 'Building A - Main Lobby',
-      status: 'Pending',
-      priority: 'Low',
-      suggestedPriority: 'Low',
-      requestDate: '2024-01-13T14:20:00Z',
-      dueDate: '2024-01-30T17:00:00Z',
-      description: 'Loose handrail on main staircase',
-      detailedDescription: 'The handrail on the main staircase leading to the second floor is becoming loose. It needs to be tightened or reinforced for safety reasons.',
-      assetEquipment: 'Staircase Handrail A-ML-01',
-      assignedTo: 'Miguel Santos'
-    },
-
-    // In Progress Examples
-    {
-      id: 'WO-2024-005',
-      requester: 'Lisa Garcia',
-      category: 'Painting / Finishing',
-      location: 'Building D - Conference Room 301',
-      status: 'In Progress',
-      isOverdue: true,
-  extendedDueDate: '2024-01-28T17:00:00Z',
-  extensionReason: 'Waiting for special primer paint to arrive from supplier',
-      priority: 'Medium',
-      suggestedPriority: 'Medium',
-      requestDate: '2024-01-10T11:00:00Z',
-      dueDate: '2024-01-22T17:00:00Z',
-      description: 'Wall paint peeling in conference room',
-      detailedDescription: 'The paint on the north wall of conference room 301 is peeling and looks unprofessional. Need to scrape, prime, and repaint the entire wall.',
-      assetEquipment: 'Conference Room D301',
-      assignedTo: 'Fernando Cruz'
-    },
-    {
-      id: 'WO-2024-006',
-      requester: 'David Lim',
-      category: 'General Services / Miscellaneous',
-      location: 'Building B - Parking Lot',
-      status: 'In Progress',
-      isOverdue: false,
-  extendedDueDate: '2024-01-25T17:00:00Z',
-  extensionReason: 'Additional security equipment needed for proper installation',
-      priority: 'High',
-      suggestedPriority: 'Low',
-      adminUpdatedPriority: 'High',
-      requestDate: '2024-01-12T16:45:00Z',
-      dueDate: '2024-01-19T17:00:00Z',
-      description: 'Broken security camera in parking lot',
-      detailedDescription: 'Security camera #5 in the main parking lot is not functioning. This creates a security blind spot that needs immediate attention.',
-      assetEquipment: 'Security Camera B-PL-05',
-      assignedTo: 'Ricardo Torres'
-    },
-
-    // Completed Examples
-    {
-      id: 'WO-2024-007',
-      requester: 'Sofia Valdez',
-      category: 'Electrical',
-      location: 'Building A - IT Department',
-      status: 'Completed',
-      priority: 'Medium',
-      suggestedPriority: 'Medium',
-      requestDate: '2024-01-08T09:30:00Z',
-      dueDate: '2024-01-15T17:00:00Z',
-      description: 'Install additional power outlets for new workstations',
-      detailedDescription: 'Need to install 4 additional power outlets in the IT department to accommodate new workstations. Should include both regular power and UPS connections.',
-      assetEquipment: 'IT Department Power Grid A-IT',
-      assignedTo: 'Eduardo Ramos'
-    },
-    {
-      id: 'WO-2024-008',
-      requester: 'Patricia Morales',
-      category: 'Groundskeeping & Landscaping',
-      location: 'Building Exterior - Front Garden',
-      status: 'Completed',
-      priority: 'Low',
-      suggestedPriority: 'Low',
-      requestDate: '2024-01-05T13:15:00Z',
-      dueDate: '2024-01-12T17:00:00Z',
-      description: 'Trim overgrown bushes blocking windows',
-      detailedDescription: 'The bushes along the front of the building have grown too tall and are blocking natural light from entering the ground floor offices. Need professional trimming.',
-      assetEquipment: 'Front Landscape Area',
-      assignedTo: 'Juan Dela Rosa'
-    },
-
-    // Failed Examples
-    {
-      id: 'WO-2024-009',
-      requester: 'Michael Chen',
-      category: 'Masonry / Civil Works',
-      location: 'Building C - Basement',
-      status: 'Failed',
-      priority: 'High',
-      suggestedPriority: 'High',
-      requestDate: '2024-01-03T08:00:00Z',
-      dueDate: '2024-01-10T17:00:00Z',
-      description: 'Water seepage through basement wall',
-      detailedDescription: 'There is water seeping through the east wall of the basement during heavy rains. This could damage stored equipment and create mold issues.',
-      assetEquipment: 'Basement East Wall C-BM',
-      assignedTo: 'Antonio Silva',
-      failureReason: 'Unable to complete due to need for specialized waterproofing materials not currently available. Requires external contractor with proper equipment and permits.'
-    },
-    {
-      id: 'WO-2024-010',
-      requester: 'Jennifer Taylor',
-      category: 'HVAC',
-      location: 'Building D - Executive Floor',
-      status: 'Failed',
-      priority: 'Medium',
-      suggestedPriority: 'Medium',
-      requestDate: '2024-01-06T12:00:00Z',
-      dueDate: '2024-01-20T17:00:00Z',
-      description: 'Replace old thermostat with smart thermostat',
-      detailedDescription: 'The current thermostat system on the executive floor is outdated. Need to install a smart thermostat system for better energy efficiency and control.',
-      assetEquipment: 'Thermostat System D-EF',
-      assignedTo: 'Gabriel Mendoza',
-      failureReason: 'Installation failed due to incompatible wiring system. The building\'s electrical infrastructure needs upgrading before smart thermostat can be installed.'
-    },
-
-    // Rejected Examples
-    {
-      id: 'WO-2024-011',
-      requester: 'Robert Kim',
-      category: 'General Services / Miscellaneous',
-      location: 'Building A - Personal Office',
-      status: 'Rejected',
-      priority: 'Low',
-      suggestedPriority: 'Low',
-      requestDate: '2024-01-07T10:00:00Z',
-      dueDate: '2024-02-01T17:00:00Z',
-      description: 'Install personal mini-fridge in office',
-      detailedDescription: 'Request to install a personal mini-fridge in my office for convenience. Will pay for the appliance myself, just need electrical work.',
-      assetEquipment: 'Office A-205',
-      rejectionReason: 'Personal convenience requests are not covered under facility maintenance. Please use the shared kitchen facilities available on each floor.'
-    },
-    {
-      id: 'WO-2024-012',
-      requester: 'Linda Wang',
-      category: 'Painting / Finishing',
-      location: 'Building B - Reception Area',
-      status: 'Rejected',
-      priority: 'Medium',
-      suggestedPriority: 'Medium',
-      requestDate: '2024-01-09T15:30:00Z',
-      dueDate: '2024-01-25T17:00:00Z',
-      description: 'Change wall color to match personal preference',
-      detailedDescription: 'I would like to change the wall color in the reception area from the current beige to a more vibrant blue to make it more welcoming.',
-      assetEquipment: 'Reception Area B-RA',
-      rejectionReason: 'Color scheme changes must follow corporate branding guidelines and require approval from management and facilities committee before implementation.'
-    },
-
-    // Cancelled Examples
-    {
-      id: 'WO-2024-013',
-      requester: 'Thomas Brown',
-      category: 'Electrical',
-      location: 'Building C - Conference Room 205',
-      status: 'Cancelled',
-      priority: 'Medium',
-      suggestedPriority: 'Medium',
-      requestDate: '2024-01-04T11:20:00Z',
-      dueDate: '2024-01-18T17:00:00Z',
-      description: 'Install additional lighting in conference room',
-      detailedDescription: 'The conference room is too dark for video conferences. Need to install additional LED lighting to improve visibility.',
-      assetEquipment: 'Conference Room C205'
-    },
-    {
-      id: 'WO-2024-014',
-      requester: 'Sarah Johnson',
-      category: 'Plumbing',
-      location: 'Building D - Kitchen Area',
-      status: 'Cancelled',
-      priority: 'Low',
-      suggestedPriority: 'Low',
-      requestDate: '2024-01-11T14:10:00Z',
-      dueDate: '2024-01-28T17:00:00Z',
-      description: 'Install water filter system in kitchen sink',
-      detailedDescription: 'Request to install a water filtration system in the main kitchen area to provide better quality drinking water for staff.',
-      assetEquipment: 'Kitchen Sink D-KA-01'
-    }
-  ];
-
-  // Hardcoded personnel data
-  const hardcodedPersonnel = [
-    { id: 'P001', name: 'Roberto Martinez', department: 'HVAC Specialist' },
-    { id: 'P002', name: 'Miguel Santos', department: 'Carpenter' },
-    { id: 'P003', name: 'Fernando Cruz', department: 'Painter' },
-    { id: 'P004', name: 'Ricardo Torres', department: 'General Maintenance' },
-    { id: 'P005', name: 'Eduardo Ramos', department: 'Electrician' },
-    { id: 'P006', name: 'Juan Dela Rosa', department: 'Groundskeeper' },
-    { id: 'P007', name: 'Antonio Silva', department: 'Mason' },
-    { id: 'P008', name: 'Gabriel Mendoza', department: 'HVAC Technician' }
-  ];
 
   // Fetch work orders from backend
-  const fetchWorkOrders = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await fetch(`${API_BASE_URL}/work-orders`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`, // Adjust based on your auth method
-        },
-      });
+// Replace the fetchWorkOrders function
+const fetchWorkOrders = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+const { data, error } = await supabase
+  .from('work_orders')
+  .select(`
+    *,
+    users!requested_by(full_name, email),
+    statuses(status_name, color_code),
+    priority_levels(priority_name, color_code),
+    assigned_user:users!assigned_to(full_name, email)
+  `)
+  .order('date_requested', { ascending: false });
+    if (error) throw error;
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
+    // Transform data to match your component structure
+const transformedOrders = data.map(wo => ({
+  id: `WO-${wo.work_order_id}`,
+  requester: wo.users?.full_name || 'Unknown', // Temporarily hardcode since we're not joining users yet
+  category: wo.category,
+  location: wo.location,
+  status: wo.statuses?.status_name || 'To Review',// Temporarily hardcode since we're not joining statuses yet
+ priority: wo.priority_levels?.priority_name || 'Low',
+suggestedPriority: wo.priority_levels?.priority_name || 'Low',
+  requestDate: wo.date_requested,
+  dueDate: wo.due_date,
+  description: wo.title,
+  detailedDescription: wo.description,
+  assetEquipment: wo.asset || 'Not specified',
+  work_order_id: wo.work_order_id,
+  assignedTo: wo.assigned_user?.full_name || null,
+}));
 
-      const data = await response.json();
-      const apiWorkOrders = data.workOrders || data || [];
-      
-      // Combine API data with hardcoded examples
-      setWorkOrders([...hardcodedWorkOrders, ...apiWorkOrders]);
-    } catch (err) {
-      console.error('Error fetching work orders:', err);
-      setError('API not available. Showing example data.');
-      // Use only hardcoded data when API fails
-      setWorkOrders(hardcodedWorkOrders);
-    } finally {
-      setLoading(false);
-    }
-  };
+    setWorkOrders(transformedOrders);
 
-  // Fetch personnel list for assignment
-  const fetchPersonnel = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/personnel`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+  } catch (err) {
+    console.error('Error fetching work orders:', err);
+    setError('Failed to load work orders from database.');
+    setWorkOrders([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
-      if (response.ok) {
-        const data = await response.json();
-        const apiPersonnel = data.personnel || data || [];
-        // Combine API data with hardcoded examples
-        setPersonnel([...hardcodedPersonnel, ...apiPersonnel]);
-      } else {
-        // Use hardcoded data when API fails
-        setPersonnel(hardcodedPersonnel);
-      }
-    } catch (err) {
-      console.error('Error fetching personnel:', err);
-      // Fallback to hardcoded data
-      setPersonnel(hardcodedPersonnel);
-    }
-  };
+const fetchPersonnel = async () => {
+  try {
+    // Fetch actual personnel from users table where role is Personnel
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, full_name, email, role_id')
+      .eq('role_id', 3) // Assuming role_id 3 is Personnel based on your roles table
+      .order('full_name');
 
-  // Fetch categories for filter
-  const fetchCategories = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/categories`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-      });
+    if (error) throw error;
 
-      if (response.ok) {
-        const data = await response.json();
-        setCategories(data.categories || data || []);
-      } else {
-        // Fallback to default categories
-        setCategories(['Electrical', 'Plumbing', 'HVAC', 'Carpentry / Structural', 'Masonry / Civil Works', 'Groundskeeping & Landscaping', 'General Services / Miscellaneous', 'Painting / Finishing']);
-      }
-    } catch (err) {
-      console.error('Error fetching categories:', err);
-      // Fallback to default categories
-      setCategories(['Electrical', 'Plumbing', 'HVAC', 'Carpentry / Structural', 'Masonry / Civil Works', 'Groundskeeping & Landscaping', 'General Services / Miscellaneous', 'Painting / Finishing']);
-    }
-  };
+    // Transform to match your current structure
+    const transformedPersonnel = data.map(user => ({
+      id: user.user_id,
+      name: user.full_name,
+      email: user.email,
+      department: 'Personnel' // You can add department field to users table later if needed
+    }));
+    
+    setPersonnel(transformedPersonnel);
+  } catch (err) {
+    console.error('Error fetching personnel:', err);
+    setPersonnel([]);
+  }
+};
+
+const fetchCategories = async () => {
+  try {
+    // Use the same categories from your user form
+    const defaultCategories = [
+      'Electrical', 
+      'Plumbing', 
+      'HVAC', 
+      'Carpentry', 
+      'Masonry', 
+      'General Services', 
+      'Groundskeeping', 
+      'Painting'
+    ];
+    
+    setCategories(defaultCategories);
+  } catch (err) {
+    console.error('Error setting categories:', err);
+    setCategories([]);
+  }
+};
 
   useEffect(() => {
     fetchWorkOrders();
@@ -398,157 +165,95 @@ const [extensionReason, setExtensionReason] = useState('');
     setShowRejectModal(true);
   };
 
-  // API call to assign personnel
-  const confirmAssignment = async () => {
-    if (!assignedPersonnel) return;
+const confirmAssignment = async () => {
+  if (!assignedPersonnel) return;
 
-    try {
-      setLoading(true);
-      
-      // Try API call first
-      const response = await fetch(`${API_BASE_URL}/work-orders/${selectedOrder.id}/assign`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          assignedTo: assignedPersonnel,
-          priority: adminPriority || selectedOrder.priority,
-          adminUpdatedPriority: adminPriority || null
-        }),
-      });
+  try {
+    setLoading(true);
+    
+    // Get "Pending" status
+    const { data: statusData, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'Pending')
+      .eq('status_category', 'work_order')
+      .single();
 
-      let updatedOrder;
-      
-      if (response.ok) {
-        updatedOrder = await response.json();
-      } else {
-        // Fallback to local state update when API fails
-        updatedOrder = {
-          ...selectedOrder,
-          status: 'Pending',
-          assignedTo: assignedPersonnel,
-          priority: adminPriority || selectedOrder.priority,
-          adminUpdatedPriority: adminPriority || null
-        };
-      }
-      
-      // Update local state
-      const updatedOrders = workOrders.map(order => 
-        order.id === selectedOrder.id ? updatedOrder : order
-      );
-      setWorkOrders(updatedOrders);
+    if (statusError) throw statusError;
 
-      // Reset modal states
-      setShowAssignModal(false);
-      setAssignedPersonnel('');
-      setAdminPriority('');
-      setSelectedOrder(null);
-    } catch (err) {
-      console.error('Error assigning personnel:', err);
-      
-      // Even if API fails, update local state for demo purposes
-      const updatedOrder = {
-        ...selectedOrder,
-        status: 'Pending',
-        assignedTo: assignedPersonnel,
-        priority: adminPriority || selectedOrder.priority,
-        adminUpdatedPriority: adminPriority || null
-      };
-      
-      const updatedOrders = workOrders.map(order => 
-        order.id === selectedOrder.id ? updatedOrder : order
-      );
-      setWorkOrders(updatedOrders);
-      
-      // Reset modal states
-      setShowAssignModal(false);
-      setAssignedPersonnel('');
-      setAdminPriority('');
-      setSelectedOrder(null);
-      
-      setError('API not available, but assignment completed locally for demo.');
-    } finally {
-      setLoading(false);
-    }
-  };
+    // Update work order
+    const { error: updateError } = await supabase
+      .from('work_orders')
+      .update({ 
+        status_id: statusData.status_id,
+        assigned_to: parseInt(assignedPersonnel), // Convert to integer since assigned_to expects user_id
+        date_assigned: new Date().toISOString()
+      })
+      .eq('work_order_id', selectedOrder.work_order_id);
 
-  // API call to reject work order
-  const confirmRejection = async () => {
-    if (!rejectReason.trim()) return;
+    if (updateError) throw updateError;
 
-    try {
-      setLoading(true);
-      
-      // Try API call first
-      const response = await fetch(`${API_BASE_URL}/work-orders/${selectedOrder.id}/reject`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`,
-        },
-        body: JSON.stringify({
-          rejectionReason: rejectReason,
-          priority: adminPriority || selectedOrder.priority,
-          adminUpdatedPriority: adminPriority || null
-        }),
-      });
+    // Reload work orders
+    await fetchWorkOrders();
 
-      let updatedOrder;
-      
-      if (response.ok) {
-        updatedOrder = await response.json();
-      } else {
-        // Fallback to local state update when API fails
-        updatedOrder = {
-          ...selectedOrder,
-          status: 'Rejected',
-          rejectionReason: rejectReason,
-          priority: adminPriority || selectedOrder.priority,
-          adminUpdatedPriority: adminPriority || null
-        };
-      }
-      
-      // Update local state
-      const updatedOrders = workOrders.map(order => 
-        order.id === selectedOrder.id ? updatedOrder : order
-      );
-      setWorkOrders(updatedOrders);
+    // Reset modal states
+    setShowAssignModal(false);
+    setAssignedPersonnel('');
+    setAdminPriority('');
+    setSelectedOrder(null);
 
-      // Reset modal states
-      setShowRejectModal(false);
-      setRejectReason('');
-      setAdminPriority('');
-      setSelectedOrder(null);
-    } catch (err) {
-      console.error('Error rejecting work order:', err);
-      
-      // Even if API fails, update local state for demo purposes
-      const updatedOrder = {
-        ...selectedOrder,
-        status: 'Rejected',
-        rejectionReason: rejectReason,
-        priority: adminPriority || selectedOrder.priority,
-        adminUpdatedPriority: adminPriority || null
-      };
-      
-      const updatedOrders = workOrders.map(order => 
-        order.id === selectedOrder.id ? updatedOrder : order
-      );
-      setWorkOrders(updatedOrders);
-      
-      // Reset modal states
-      setShowRejectModal(false);
-      setRejectReason('');
-      setAdminPriority('');
-      setSelectedOrder(null);
-      
-      setError('API not available, but rejection completed locally for demo.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (err) {
+    console.error('Error assigning personnel:', err);
+    setError('Failed to assign personnel.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const confirmRejection = async () => {
+  if (!rejectReason.trim()) return;
+
+  try {
+    setLoading(true);
+    
+    // Get "Rejected" status
+    const { data: statusData, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'Rejected')
+      .eq('status_category', 'work_order')
+      .single();
+
+    if (statusError) throw statusError;
+
+    // Update work order
+    const { error: updateError } = await supabase
+      .from('work_orders')
+      .update({ 
+        status_id: statusData.status_id,
+        rejection_reason: rejectReason,
+        date_resolved: new Date().toISOString()
+      })
+      .eq('work_order_id', selectedOrder.work_order_id);
+
+    if (updateError) throw updateError;
+
+    // Reload work orders
+    await fetchWorkOrders();
+
+    // Reset modal states
+    setShowRejectModal(false);
+    setRejectReason('');
+    setAdminPriority('');
+    setSelectedOrder(null);
+
+  } catch (err) {
+    console.error('Error rejecting work order:', err);
+    setError('Failed to reject work order.');
+  } finally {
+    setLoading(false);
+  }
+};
 
 
   const getStatusBadge = (status) => {
@@ -1037,10 +742,10 @@ const [extensionReason, setExtensionReason] = useState('');
                     >
                       <option value="">Choose personnel...</option>
                       {personnel.map(person => (
-                        <option key={person.id || person.name} value={person.name || person.id}>
-                          {person.name || person.firstName + ' ' + person.lastName || person.id}
-                          {person.department && ` - ${person.department}`}
-                        </option>
+                       <option key={person.id} value={person.id}>
+                        {person.name}
+                        {person.department && ` - ${person.department}`}
+                      </option>
                       ))}
                     </select>
                   </div>

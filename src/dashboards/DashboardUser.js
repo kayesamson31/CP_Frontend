@@ -1,23 +1,42 @@
-import { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Form, Badge, Card, InputGroup, FormControl, Modal } from 'react-bootstrap';
-
+import { WorkOrderService } from '../services/WorkOrderService';
 
 export default function DashboardUser() {
-  const [selectedStatus, setSelectedStatus] = useState('All');
-  const [selectedPriority, setSelectedPriority] = useState('All');
-  const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
-  const getStatusCounts = () => {
-  const defaultStatuses = ['To Review', 'Pending', 'In Progress', 'Completed', 'Rejected', 'Failed', 'Cancelled'];
-
-return defaultStatuses.map(status => ({
-  label: status,
-  color: '#ffffff',
-  icon: getStatusIcon(status),
-  count: historyData.filter(item => item.status === status).length
-  }));
-  };
-
+const [selectedStatus, setSelectedStatus] = useState('All');
+const [selectedPriority, setSelectedPriority] = useState('All');
+const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
 const [searchTerm, setSearchTerm] = useState(''); 
+const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
+const [showDetailsModal, setShowDetailsModal] = useState(false);
+const [showPriorityModal, setShowPriorityModal] = useState(false);
+
+// State for data from Supabase
+const [historyData, setHistoryData] = useState([]);
+const [statusCounts, setStatusCounts] = useState([]);
+const [priorities, setPriorities] = useState([]);
+const [loading, setLoading] = useState(true);
+const [submitting, setSubmitting] = useState(false);
+const [error, setError] = useState('');
+
+// Form data state
+const [formData, setFormData] = useState({
+  title: '',
+  category: '',
+  priority: 'Low',
+  location: '',
+  asset: '',
+  description: '',
+  attachment: null,
+  dateNeeded: ''
+});
+
+const [formErrors, setFormErrors] = useState({});
+
+const handleChange = (field, value) => {
+  setFormData(prev => ({ ...prev, [field]: value }));
+  setFormErrors(prev => ({ ...prev, [field]: '' }));
+};
 
 const getStatusIcon = (status) => {
   switch (status) {
@@ -32,34 +51,80 @@ const getStatusIcon = (status) => {
   }
 };
 
-const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
-const [showDetailsModal, setShowDetailsModal] = useState(false);
+// Load data on component mount
+useEffect(() => {
+  loadInitialData();
+}, []);
 
-const [formData, setFormData] = useState({
-  title: '',
-  category: '',
-  priority: '',
-  location: '',
-  asset: '',
-  description: '',
-  attachment: null,
-  dateNeeded: ''
-  });
+// Reload work orders when filters change
+useEffect(() => {
+  if (!loading) {
+    loadWorkOrders();
+  }
+}, [selectedStatus, selectedPriority, searchTerm]);
 
-const [formErrors, setFormErrors] = useState({});
-const handleChange = (field, value) => {
-  setFormData(prev => ({ ...prev, [field]: value }));
-  setFormErrors(prev => ({ ...prev, [field]: '' }));
+const loadInitialData = async () => {
+  setLoading(true);
+  try {
+    // Load priorities
+    const priorityResult = await WorkOrderService.getPriorityLevels();
+    if (priorityResult.success) {
+      setPriorities(priorityResult.data);
+    }
+
+    // Load status counts
+    await loadStatusCounts();
+
+    // Load work orders
+    await loadWorkOrders();
+
+  } catch (error) {
+    console.error('Failed to load initial data:', error);
+    setError('Failed to load data. Please refresh the page.');
+  } finally {
+    setLoading(false);
+  }
+};
+
+const loadStatusCounts = async () => {
+  const result = await WorkOrderService.getStatusCounts();
+  if (result.success) {
+    setStatusCounts(result.data);
+  }
+};
+
+const loadWorkOrders = async () => {
+  const filters = {
+    status: selectedStatus,
+    priority: selectedPriority,
+    search: searchTerm
   };
 
-const [showPriorityModal, setShowPriorityModal] = useState(false);
-const priorities = [
-  { label: 'Low', color: '#00C417' },
-  { label: 'Medium', color: '#FF7308' },
-  { label: 'High', color: '#FF0000' }
-  ];
-
-const [historyData, setHistoryData] = useState([]); // start empty
+  const result = await WorkOrderService.getUserWorkOrders(filters);
+  if (result.success) {
+    // Transform data to match existing component structure
+// Transform data to match existing component structure
+const transformedData = result.data.map(wo => ({
+  work_order_id: wo.work_order_id,
+  title: wo.title,
+  category: wo.category,
+  priority: wo.priority_levels?.priority_name || 'Low',
+  location: wo.location || '',     // Just use the location from work order
+  asset: wo.asset || '—',          // Just show dash if no asset specified
+  dateNeeded: wo.due_date ? wo.due_date.split('T')[0] : '',
+  description: wo.description,
+  status: wo.statuses?.status_name || 'To Review',
+  color: wo.statuses?.color_code || '#F0D400',
+  priorityColor: wo.priority_levels?.color_code || '#00C417',
+  timestamp: wo.date_requested ? wo.date_requested.split('T')[0] : '',
+  reason: wo.rejection_reason || '—'
+}));
+    
+    setHistoryData(transformedData);
+  } else {
+    setError(result.error || 'Failed to load work orders');
+  }
+};
 
 const filteredHistory = historyData.filter(item => {
 const statusMatch = selectedStatus === 'All' || item.status === selectedStatus;
@@ -71,75 +136,70 @@ const searchMatch = searchTerm === '' ||
   return statusMatch && priorityMatch && searchMatch;
 });
 
-const handleAddWorkOrder = () => {
-const errors = {};
+const handleAddWorkOrder = async () => {
+  const errors = {};
   if (!formData.title.trim()) errors.title = 'Title is required';
   if (!formData.category) errors.category = 'Category is required';
   if (!formData.location.trim()) errors.location = 'Location is required';
   if (!formData.dateNeeded) errors.dateNeeded = 'Date is required';
 
   if (Object.keys(errors).length > 0) {
-   setFormErrors(errors);
-   return;
-    }
-
-const selectedPriority = formData.priority || 'Low';
-const matchedPriority = priorities.find(p => p.label === selectedPriority);
-const priorityColor = matchedPriority ? matchedPriority.color : '#00C417';
-
-const newItem = {
-        title: formData.title,
-        category: formData.category,
-        priority: selectedPriority,
-        location: formData.location,
-        asset: formData.asset,
-        dateNeeded: formData.dateNeeded,
-        description: formData.description, // ✅ Include detailed description
-        attachment: formData.attachment,   // ✅ Include attachment (if needed)
-        status: 'To Review',
-        reason: '—',
-        color: '#F0D400',
-        priorityColor: priorityColor,
-        timestamp: new Date().toISOString().split('T')[0]
-    };
-
-setHistoryData(prev => [...prev, newItem]);
-setShowWorkOrderModal(false);
-setFormData({
-       title: '',
-       category: '',
-       priority: '',
-       location: '',
-       asset: '',
-       description: '',
-       attachment: null,
-      dateNeeded: ''
-          });
-setFormErrors({});
-          };
-
-const handleCancelRequest = (indexInFiltered) => {
-const itemToCancel = filteredHistory[indexInFiltered];
-const realIndex = historyData.findIndex(item =>
-  item.description === itemToCancel.description &&
-  item.timestamp === itemToCancel.timestamp &&
-  item.status === itemToCancel.status
-         );
-
-if (realIndex !== -1) {
-  setHistoryData(prevData => {
-  const updatedData = [...prevData];
-  updatedData[realIndex] = {
-  ...updatedData[realIndex],
-  status: 'Cancelled',
-  color: '#B0B0B0',
-  reason: 'Cancelled by user'
-  };
-  
-  return updatedData;
-  });
+    setFormErrors(errors);
+    return;
   }
-  };
+
+  setSubmitting(true);
+  
+  try {
+    const result = await WorkOrderService.submitWorkOrder(formData);
+    
+    if (result.success) {
+      setShowWorkOrderModal(false);
+      setFormData({
+        title: '',
+        category: '',
+        priority: 'Low',
+        location: '',
+        asset: '',
+        description: '',
+        attachment: null,
+        dateNeeded: ''
+      });
+      setFormErrors({});
+      
+      // Reload data
+      await loadStatusCounts();
+      await loadWorkOrders();
+      
+      // Show success message
+      setError('');
+    } else {
+      setError(result.error || 'Failed to submit work order');
+    }
+  } catch (error) {
+    setError('An unexpected error occurred. Please try again.');
+  } finally {
+    setSubmitting(false);
+  }
+};
+
+const handleCancelRequest = async (item) => {
+  if (window.confirm('Are you sure you want to cancel this work order?')) {
+    try {
+      const result = await WorkOrderService.cancelWorkOrder(item.work_order_id);
+      
+      if (result.success) {
+        // Reload data
+        await loadStatusCounts();
+        await loadWorkOrders();
+      } else {
+        alert('Failed to cancel work order: ' + result.error);
+      }
+    } catch (error) {
+      alert('An error occurred while canceling the work order');
+    }
+  }
+};
 
 const handleCancelModal = () => {
   setShowWorkOrderModal(false);
@@ -156,7 +216,20 @@ const handleCancelModal = () => {
   setFormErrors({});
                 };  
 
-return (    
+if (loading) {
+  return (
+    <Container fluid className="d-flex justify-content-center align-items-center" style={{ minHeight: '100vh' }}>
+      <div className="text-center">
+        <div className="spinner-border" role="status" style={{ color: '#284CFF' }}>
+          <span className="visually-hidden">Loading...</span>
+        </div>
+        <p className="mt-3">Loading your work orders...</p>
+      </div>
+    </Container>
+  );
+}
+
+return ( 
   <Container fluid style={{ backgroundColor: '#FFFFFFFF', minHeight: '100vh', padding: 0 }}>  
   <Row>
                                                              
@@ -179,6 +252,13 @@ return (
 {/* Status Cards */}
 
  <Row className="w-100">
+  {/* Error Alert */}
+{error && (
+  <div className="alert alert-danger alert-dismissible fade show mb-3" role="alert">
+    {error}
+    <button type="button" className="btn-close" onClick={() => setError('')} aria-label="Close"></button>
+  </div>
+)}
 {/* Status Tabs */}
 <div className="mb-4" style={{ 
   display: 'flex', 
@@ -223,49 +303,49 @@ return (
     </span>
   </div>
 
-  {getStatusCounts().map((status) => (
-    <div
-      key={status.label}
-     style={{
-  flex: 1,
-  padding: '12px 16px',
-  textAlign: 'center',
-  cursor: 'pointer',
-  borderRadius: '25px',
-  transition: 'all 0.3s ease',
-  backgroundColor: selectedStatus === status.label ? '#284CFF' : '#ffffff',
-  color: selectedStatus === status.label ? 'white' : '#495057',
-  fontSize: '14px',
-  fontWeight: selectedStatus === status.label ? '700' : '500',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '8px',
-  border: selectedStatus === status.label ? '2px solid #284CFF' : '0.2px solid #ECEBF0',
-  boxShadow: selectedStatus === status.label ? '0 4px 12px rgba(40, 76, 255, 0.2)' : '0 2px 4px rgba(0,0,0,0.05)'
+{statusCounts.map((status) => (
+  <div
+    key={status.label}
+   style={{
+flex: 1,
+padding: '12px 16px',
+textAlign: 'center',
+cursor: 'pointer',
+borderRadius: '25px',
+transition: 'all 0.3s ease',
+backgroundColor: selectedStatus === status.label ? '#284CFF' : '#ffffff',
+color: selectedStatus === status.label ? 'white' : '#495057',
+fontSize: '14px',
+fontWeight: selectedStatus === status.label ? '700' : '500',
+display: 'flex',
+alignItems: 'center',
+justifyContent: 'center',
+gap: '8px',
+border: selectedStatus === status.label ? '2px solid #284CFF' : '0.2px solid #ECEBF0',
+boxShadow: selectedStatus === status.label ? '0 4px 12px rgba(40, 76, 255, 0.2)' : '0 2px 4px rgba(0,0,0,0.05)'
 }}
-      onClick={() => setSelectedStatus(status.label)}
-    >
-    <i 
-  className={status.icon}
-  style={{ 
-  fontSize: '16px',
-  color: selectedStatus === status.label ? 'white' : '#495057'
+    onClick={() => setSelectedStatus(status.label)}
+  >
+  <i 
+className={status.icon}
+style={{ 
+fontSize: '16px',
+color: selectedStatus === status.label ? 'white' : '#495057'
 }}
 />
-      <span>{status.label}</span>
-      <span style={{
-        backgroundColor: selectedStatus === status.label ? 'rgba(255,255,255,0.2)' : '#e9ecef',
-        color: selectedStatus === status.label ? 'white' : '#666',
-        padding: '2px 8px',
-        borderRadius: '12px',
-        fontSize: '12px',
-        fontWeight: '600'
-      }}>
-        {status.count}
-      </span>
-    </div>
-  ))}
+    <span>{status.label}</span>
+    <span style={{
+      backgroundColor: selectedStatus === status.label ? 'rgba(255,255,255,0.2)' : '#e9ecef',
+      color: selectedStatus === status.label ? 'white' : '#666',
+      padding: '2px 8px',
+      borderRadius: '12px',
+      fontSize: '12px',
+      fontWeight: '600'
+    }}>
+      {status.count}
+    </span>
+  </div>
+))}
 </div>
                
 {/* Search and Filter Section */}
@@ -301,9 +381,11 @@ return (
   }}
 >
     <option value="All">All Priority</option>
-    <option value="Low">Low</option>
-    <option value="Medium">Medium</option>
-    <option value="High">High</option>
+    {priorities.map(priority => (
+      <option key={priority.priority_id} value={priority.priority_name}>
+        {priority.priority_name}
+      </option>
+    ))}
   </Form.Select>
 
   {/* Priority Level Link - compact */}
@@ -344,55 +426,55 @@ return (
                   </thead>
 
                 <tbody>
-                  {filteredHistory.map((item, index) => (
-                  <tr
-                    key={index}
-                     onClick={() => {
-                      setSelectedWorkOrder(item);
-                      setShowDetailsModal(true);
-                      }}
-                    style={{ cursor: 'pointer' }}
-                  >
+                {filteredHistory.map((item, index) => (
+<tr
+  key={item.work_order_id || index}
+   onClick={() => {
+    setSelectedWorkOrder(item);
+    setShowDetailsModal(true);
+    }}
+  style={{ cursor: 'pointer' }}
+>
 
-                  <td>{item.title}</td>
-                  <td>
-                    <Badge style={{ backgroundColor: item.color }}>
-                      {item.status}
-                    </Badge>
-                  </td>
+<td>{item.title}</td>
+<td>
+  <Badge style={{ backgroundColor: item.color }}>
+    {item.status}
+  </Badge>
+</td>
 
-                  <td>
-                    <Badge
-                     bg=""
-                      style={{
-                        backgroundColor: priorities.find(p => p.label === item.priority)?.color || '#00C417',
-                        color: 'white',
-                        padding: '4px 10px',
-                        fontSize: '0.85rem',
-                        borderRadius: '8px'
-                      }}
-                    >
-                      {item.priority}
-                    </Badge>
-                   </td>
+<td>
+  <Badge
+   bg=""
+    style={{
+      backgroundColor: item.priorityColor,
+      color: 'white',
+      padding: '4px 10px',
+      fontSize: '0.85rem',
+      borderRadius: '8px'
+    }}
+  >
+    {item.priority}
+  </Badge>
+ </td>
 
-              <td>{item.timestamp}</td>
-                <td>
-                  {item.status === 'To Review' ? (
-                    <Button
-                      variant="danger"
-                      size="sm"
-                      onClick={(e) => {
-                      e.stopPropagation(); // ⛔ prevent opening the modal when cancel is clicked
-                       handleCancelRequest(index);
-                        }}
-                    >
-                      Cancel
-                    </Button>
-                      ) : (item.reason)}
-                  </td>
-                    </tr>
-                    ))}
+<td>{item.timestamp}</td>
+  <td>
+    {item.status === 'To Review' ? (
+      <Button
+        variant="danger"
+        size="sm"
+        onClick={(e) => {
+        e.stopPropagation();
+         handleCancelRequest(item);
+          }}
+      >
+        Cancel
+      </Button>
+        ) : (item.reason)}
+    </td>
+      </tr>
+      ))}
 
                   {filteredHistory.length === 0 && (
                     <tr>
@@ -407,22 +489,29 @@ return (
 
                     {/* Floating Action Button */}
                       <Button
-                        style={{
-                            backgroundColor: '#284CFF',
-                            border: 'none',
-                            borderRadius: '50%',
-                            width: '60px',
-                            height: '60px',
-                            position: 'fixed',
-                            bottom: '30px',
-                            right: '30px',
-                            fontSize: '1.5rem',
-                            boxShadow: '0px 4px 10px rgba(0,0,0,0.3)'
-                              }}
-                            onClick={() => setShowWorkOrderModal(true)}
-                      >
-                         +
-                      </Button>
+  style={{
+      backgroundColor: '#284CFF',
+      border: 'none',
+      borderRadius: '50%',
+      width: '60px',
+      height: '60px',
+      position: 'fixed',
+      bottom: '30px',
+      right: '30px',
+      fontSize: '1.5rem',
+      boxShadow: '0px 4px 10px rgba(0,0,0,0.3)'
+        }}
+      onClick={() => setShowWorkOrderModal(true)}
+      disabled={submitting}
+>
+   {submitting ? (
+     <div className="spinner-border spinner-border-sm" role="status">
+       <span className="visually-hidden">Loading...</span>
+     </div>
+   ) : (
+     '+'
+   )}
+</Button>
 
 
                                                {/* Work Order Request Modal */}
@@ -486,19 +575,20 @@ return (
                                 Request Title <span style={{ color: '#dc3545' }}>*</span>
                               </Form.Label>
 
-                             <Form.Control
-                              type="text"
-                              placeholder="Enter a brief title for your request"
-                              value={formData.title}
-                              onChange={e => handleChange('title', e.target.value)}
-                              isInvalid={!!formErrors.title}
-                               style={{
-                                  borderRadius: '8px',
-                                  border: '2px solid #e9ecef',
-                                  padding: '12px 16px',
-                                  fontSize: '14px'
-                                }}
-                              />
+                            <Form.Control
+  type="text"
+  placeholder="Enter a brief title for your request"
+  value={formData.title}
+  onChange={e => handleChange('title', e.target.value)}
+  isInvalid={!!formErrors.title}
+  disabled={submitting}
+   style={{
+      borderRadius: '8px',
+      border: '2px solid #e9ecef',
+      padding: '12px 16px',
+      fontSize: '14px'
+    }}
+  />
 
                       <Form.Control.Feedback type="invalid">
                         {formErrors.title}
@@ -554,21 +644,24 @@ return (
                 }}>
                   Priority Level
                 </Form.Label>
-                <Form.Select
-                  value={formData.priority}
-                  onChange={e => handleChange('priority', e.target.value)}
-                  style={{
-                    borderRadius: '8px',
-                    border: '2px solid #e9ecef',
-                    padding: '12px 16px',
-                    fontSize: '14px'
-                  }}
-                >
-                  <option value="">Select Priority</option>
-                  <option value="Low">Low</option>
-                  <option value="Medium">Medium</option>
-                  <option value="High">High</option>
-                </Form.Select>
+               <Form.Select
+  value={formData.priority}
+  onChange={e => handleChange('priority', e.target.value)}
+  disabled={submitting}
+  style={{
+    borderRadius: '8px',
+    border: '2px solid #e9ecef',
+    padding: '12px 16px',
+    fontSize: '14px'
+  }}
+>
+  {priorities.map(priority => (
+    <option key={priority.priority_id} value={priority.priority_name}>
+      {priority.priority_name}
+    </option>
+  ))}
+</Form.Select>
+
               </Form.Group>
             </Col>
           </Row>
@@ -805,32 +898,40 @@ return (
                     borderRadius: '0 0 12px 12px'
                     }}>
                                 
-                <Button 
-                    variant="outline-secondary" 
-                    onClick={handleCancelModal}
-                      style={{
-                      borderRadius: '8px',
-                      padding: '10px 24px',
-                      fontWeight: '600',
-                      border: '2px solid #6c757d'
-                            }}
-                >
-                Cancel
-                </Button>
+               <Button 
+    variant="outline-secondary" 
+    onClick={handleCancelModal}
+    disabled={submitting}
+      style={{
+      borderRadius: '8px',
+      padding: '10px 24px',
+      fontWeight: '600',
+      border: '2px solid #6c757d'
+            }}
+>
+Cancel
+</Button>
 
                 <Button 
-                  onClick={handleAddWorkOrder}
-                   style={{
-                    backgroundColor: '#284CFF',
-                    border: 'none',
-                    borderRadius: '8px',
-                    padding: '10px 24px',
-                    fontWeight: '600',
-                    boxShadow: '0 2px 8px rgba(40, 76, 255, 0.3)'
-                          }}
-                >
-                Submit Request
-                </Button>
+                onClick={handleAddWorkOrder}
+                disabled={submitting}
+                style={{
+                  backgroundColor: '#284CFF',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '10px 24px',
+                  fontWeight: '600',
+                  boxShadow: '0 2px 8px rgba(40, 76, 255, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                        }}
+              >
+              {submitting && <div className="spinner-border spinner-border-sm" role="status"></div>}
+              {submitting ? 'Submitting...' : 'Submit Request'}
+              </Button>
+
+
               </Modal.Footer>
              </Modal>
             </Col>
@@ -846,28 +947,29 @@ return (
                 <Modal.Title>Priority Levels</Modal.Title>
               </Modal.Header>
 
-              <Modal.Body>
-                <div className="mb-3">
-                  <Badge bg="" style={{ backgroundColor: '#00C417', color: 'white', padding: '8px' }}>
-                    Low
-                  </Badge>
-                    <p className="mb-2">Tasks that can be addressed when time permits.</p>
-                </div>
-
-                <div className="mb-3">
-                 <Badge bg="" style={{ backgroundColor: '#FF7308', color: 'white', padding: '8px' }}>
-                   Medium
-                 </Badge>
-                 <p className="mb-2">Tasks that are important but not immediately critical.</p>
-                </div>
-    
-                <div className="mb-3">
-                  <Badge bg="" style={{ backgroundColor: '#FF0000', color: 'white', padding: '8px' }}>
-                    High
-                  </Badge>
-                  <p>Urgent tasks requiring immediate action.</p>
-                  </div>
-                  </Modal.Body>
+            <Modal.Body>
+  {priorities.map(priority => (
+    <div key={priority.priority_id} className="mb-3">
+      <Badge 
+        bg="" 
+        style={{ 
+          backgroundColor: priority.color_code, 
+          color: 'white', 
+          padding: '8px 12px',
+          fontSize: '14px',
+          marginRight: '10px'
+        }}
+      >
+        {priority.priority_name}
+      </Badge>
+      <p className="mb-2 d-inline">
+        {priority.priority_name === 'Low' && 'Tasks that can be addressed when time permits.'}
+        {priority.priority_name === 'Medium' && 'Tasks that are important but not immediately critical.'}
+        {priority.priority_name === 'High' && 'Urgent tasks requiring immediate action.'}
+      </p>
+    </div>
+  ))}
+</Modal.Body>
 
                   <Modal.Footer>
                     <Button variant="secondary" onClick={() => setShowPriorityModal(false)}>

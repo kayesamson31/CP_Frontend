@@ -82,8 +82,7 @@ const fallbackData = {
       setOriginalData(profileInfo);
 
       // Check if password change is required
-      const needsPasswordChange = userData.user_status === 'pending_activation';
-      setRequirePasswordChange(needsPasswordChange);
+const needsPasswordChange = userData.first_login === true;      setRequirePasswordChange(needsPasswordChange);
 
       // Update localStorage to keep it in sync
       localStorage.setItem('userName', profileInfo.name);
@@ -177,11 +176,25 @@ const currentUser = JSON.parse(stored);
       email: profileData.email.toLowerCase().trim()
     };
 
-    // Add password update if needed
-    if (isChangingPassword) {
-      updateData.password_hash = PasswordUtils.hashPassword(profileData.newPassword);
-      updateData.user_status = 'active'; // Remove pending_activation status
+// Add password update if needed
+if (isChangingPassword) {
+  updateData.password_hash = PasswordUtils.hashPassword(profileData.newPassword);
+  updateData.first_login = false; // Mark as no longer first login
+  
+  // Also update Supabase Auth password if user has auth_uid
+  if (currentUser.authUid) {
+    const { error: authUpdateError } = await supabase.auth.updateUser({
+      password: profileData.newPassword
+    });
+    
+    if (authUpdateError) {
+      console.error('Failed to update Supabase Auth password:', authUpdateError);
+      alert('Failed to update authentication password. Please try again.');
+      setIsUpdating(false);
+      return;
     }
+  }
+}
 
 console.log('Updating user profile for:', currentUser.email);
 

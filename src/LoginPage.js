@@ -165,7 +165,7 @@ const handleSuccessfulLogin = (userData) => {
   }));
 
   // Your existing redirect logic
-  if (userData.user_status === 'pending_activation') {
+if (userData.first_login === true) {
     alert("Welcome! Please change your temporary password to continue.");
     switch (userRole) {
       case "sysadmin": navigate("/dashboard-sysadmin/profile"); return;
@@ -189,9 +189,7 @@ const handleSuccessfulLogin = (userData) => {
     default: navigate("/dashboard-user");
   }
 };
-  const handleGoogleSignIn = () => {
-    alert('Google Sign-In Clicked (Mock only)');
-  };
+
 
   return (
     <Layout>
@@ -206,11 +204,12 @@ const handleSuccessfulLogin = (userData) => {
       }}>
         <form onSubmit={handleLogin} style={{
           background: 'white',
-          padding: '2rem',
+          padding: '3rem',
           borderRadius: '16px',
           boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
           width: '100%',
-          maxWidth: '450px',
+          maxWidth: '550px',
+          minHeight: '350px',
         }}>
         
         <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
@@ -288,43 +287,6 @@ const handleSuccessfulLogin = (userData) => {
           Forgot your password?
         </p>
         
-        <div style={{
-          textAlign: 'center',
-          margin: '1rem 0',
-          color: '#999',
-          fontSize: '0.85rem'
-        }}>
-          â€” or log in with google â€”
-        </div>
-
-        <button
-          type="button"
-          onClick={handleGoogleSignIn}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'white',
-            color: '#555',
-            border: '1px solid #ccc',
-            borderRadius: '8px',
-            padding: '0.65rem',
-            width: '100%',
-            marginBottom: '1.5rem',
-            cursor: 'pointer',
-            transition: '0.2s ease',
-            fontWeight: '500'
-          }}
-          onMouseOver={(e) => e.target.style.background = '#f0f0f0'}
-          onMouseOut={(e) => e.target.style.background = 'white'}
-        >
-          <img
-            src="https://fonts.gstatic.com/s/i/productlogos/googleg/v6/24px.svg"
-            alt="Google"
-            style={{ width: '20px', marginRight: '10px' }}
-          />
-          Sign in with Google
-        </button>
         </form>
       </div>
     </Layout>

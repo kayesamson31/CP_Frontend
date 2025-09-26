@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Col, Modal, Badge } from 'react-bootstrap';
+import { supabase } from '../supabaseClient'; // Adjust path as needed
 import { 
   Calendar as CalendarIcon,
   Clock,
@@ -10,41 +11,103 @@ import {
 } from 'lucide-react';
 
 // API service functions (replace with actual API calls later)
+// Fixed API service function
+// Fixed API service function
 const apiService = {
   // Get all tasks assigned to current personnel
   async fetchTasks() {
-    // TODO: Replace with actual API call
-    // return await fetch('/api/personnel/tasks').then(res => res.json());
-    
-    // Hardcoded example for visualization
-    return [
-      {
-        id: 1,
-        title: "Fix Broken Air Conditioning Unit",
-        description: "AC unit in Room 205 is not cooling properly. Temperature sensor may need replacement.",
-        category: "HVAC",
-        asset: "AC Unit - Room 205",
-        location: "Room 205, 2nd Floor",
-        dueDate: new Date().toISOString(), // Today's date
-        priority: "high",
-        status: "pending",
-        logs: []
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      
+      // Query work_orders with a left join to work_order_details for additional info
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select(`
+          *,
+          work_order_details(*),
+          requester:users!requested_by(full_name, email)
+        `)
+        .eq('assigned_to', userData.user.id)
+        .in('status_id', [1, 2]) // Assuming 1 = Pending, 2 = In Progress - adjust these IDs based on your status table
+        .order('due_date', { ascending: true });
+
+      if (error) {
+        console.error('Supabase error:', error);
+        throw error;
       }
-    ];
+
+      console.log('Raw data from Supabase:', data); // Debug log
+
+      // Transform data to match your component structure
+      return data.map(wo => ({
+        id: wo.work_order_id,
+        title: wo.title,
+        description: wo.description,
+        category: wo.category,
+        asset: wo.asset_id || 'Not specified',
+        location: wo.location,
+        dueDate: wo.due_date,
+        // Use the data from work_order_details if available, otherwise default values
+        priority: wo.work_order_details?.priority_name?.toLowerCase() || 'medium',
+        status: wo.work_order_details?.status_name?.toLowerCase().replace(' ', '-') || 'pending',
+        logs: wo.activity_tracking || []
+      }));
+
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      return [];
+    }
   },
 
-  // Update task status
-  async updateTaskStatus(taskId, status, reason = '', newDueDate = null) {
-    // TODO: Replace with actual API call
-    // const payload = { status, reason, ...(newDueDate && { dueDate: newDueDate }) };
-    // return await fetch(`/api/tasks/${taskId}/status`, {
-    //   method: 'PATCH',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify(payload)
-    // }).then(res => res.json());
-    
-    // For now, simulate API response
-    return { success: true };
+  // Alternative approach - simple query without complex joins
+  async fetchTasksSimple() {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      
+      console.log('Current user ID:', userData.user.id); // Debug log
+      
+      // Simple query without joins to test basic functionality
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select('*')
+        .eq('assigned_to', userData.user.id);
+
+      if (error) {
+        console.error('Supabase error details:', error);
+        throw error;
+      }
+
+      console.log('Raw work_orders data:', data); // Debug log
+      console.log('Number of work orders found:', data?.length || 0);
+
+      if (!data || data.length === 0) {
+        console.log('No work orders found for user');
+        return [];
+      }
+
+      // Transform data with default values
+      const transformedData = data.map(wo => ({
+        id: wo.work_order_id,
+        title: wo.title || 'Untitled Task',
+        description: wo.description || 'No description',
+        category: wo.category || 'General',
+        asset: wo.asset_id || 'Not specified',
+        location: wo.location || 'Not specified',
+        dueDate: wo.due_date,
+        priority: 'medium', // Default for now
+        status: 'pending', // Default for now
+        logs: wo.activity_tracking || []
+      }));
+
+      console.log('Transformed data:', transformedData);
+      return transformedData;
+
+    } catch (error) {
+      console.error('Error fetching tasks:', error);
+      return [];
+    }
   }
 };
 
@@ -85,19 +148,74 @@ const capitalizePriority = (priority) => {
     loadTasks();
   }, []);
 
-  const loadTasks = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const fetchedTasks = await apiService.fetchTasks();
-      setTasks(fetchedTasks);
-    } catch (err) {
-      setError('Failed to load tasks. Please try again.');
-      console.error('Error loading tasks:', err);
-    } finally {
-      setLoading(false);
+const loadTasks = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    console.log('=== DEBUGGING START ===');
+    
+    // Get current user auth ID
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    
+    console.log('Auth user ID:', userData.user.id);
+    
+    // Get user profile to find user_id
+    const { data: userProfile, error: profileError } = await supabase
+      .from('users')
+      .select('user_id, full_name')
+      .eq('auth_uid', userData.user.id)
+      .single();
+    
+    if (profileError) {
+      console.error('Error getting user profile:', profileError);
+      throw profileError;
     }
-  };
+    
+    console.log('User profile:', userProfile);
+    
+    // Get tasks assigned to current user only
+    const { data: allTasks, error: tasksError } = await supabase
+      .from('work_order_details')
+      .select('*')
+      .eq('assigned_to', userProfile.user_id);
+    
+    console.log('All work_order_details:', allTasks);
+    console.log('Tasks query error:', tasksError);
+    
+    if (tasksError) {
+      throw tasksError;
+    }
+    
+    if (allTasks && allTasks.length > 0) {
+      const transformedData = allTasks.map(wo => ({
+        id: wo.work_order_id,
+        title: wo.title || 'Untitled Task',
+        description: wo.description || 'No description',
+        category: wo.category || 'General',
+        asset: wo.asset_code || 'Not specified',
+        location: wo.location || 'Not specified',
+        dueDate: wo.due_date,
+        priority: wo.priority_name?.toLowerCase() || 'medium',
+        status: wo.status_name?.toLowerCase().replace(' ', '-') || 'pending',
+        logs: []
+      }));
+      
+      console.log('Transformed tasks:', transformedData);
+      setTasks(transformedData);
+    } else {
+      console.log('No tasks found for current user');
+      setTasks([]);
+    }
+    
+  } catch (err) {
+    setError('Failed to load tasks. Please try again.');
+    console.error('Error loading tasks:', err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Helpers
   const isSameDay = (d1, d2) => d1.toDateString() === d2.toDateString();
@@ -217,28 +335,28 @@ const capitalizePriority = (priority) => {
     };
   };
 
-  const updateTaskStatus = async (status, requireReason = false, requireDate = false) => {
-    if (!selectedTask) return;
+const updateTaskStatus = async (status, requireReason = false, requireDate = false) => {
+  if (!selectedTask) return;
 
-    if (requireReason && !statusReason.trim()) {
-      alert("Reason is required.");
-      return;
-    }
-    if (requireDate && !newDueDate) {
-      alert("New due date is required.");
-      return;
-    }
+  if (requireReason && !statusReason.trim()) {
+    alert("Reason is required.");
+    return;
+  }
+  if (requireDate && !newDueDate) {
+    alert("New due date is required.");
+    return;
+  }
 
-    try {
-      // Update on backend first
-      await apiService.updateTaskStatus(
-        selectedTask.id, 
-        status, 
-        statusReason, 
-        requireDate ? newDueDate : null
-      );
+  try {
+    const result = await apiService.updateTaskStatus(
+      selectedTask.id, 
+      status, 
+      statusReason, 
+      requireDate ? newDueDate : null
+    );
 
-      // Update local state optimistically
+    if (result.success) {
+      // Update local state
       const updatedTask = addLogLocally(
         selectedTask, 
         status, 
@@ -249,15 +367,17 @@ const capitalizePriority = (priority) => {
       setTasks(tasks.map(t => (t.id === selectedTask.id ? updatedTask : t)));
       closeAllModals();
       
-      // Optional: Reload tasks to ensure sync with backend
-      // await loadTasks();
+      // Reload to sync with backend
+      await loadTasks();
       
-    } catch (err) {
-      alert('Failed to update task status. Please try again.');
-      console.error('Error updating task status:', err);
+    } else {
+      alert('Failed to update task status: ' + result.error);
     }
-  };
-
+  } catch (err) {
+    alert('Failed to update task status. Please try again.');
+    console.error('Error updating task status:', err);
+  }
+};
   // UI components
   const TaskCard = ({ task }) => (
     <div 
