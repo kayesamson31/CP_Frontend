@@ -46,7 +46,7 @@ static async submitWorkOrder(workOrderData) {
       description: workOrderData.description ? workOrderData.description.trim() : '',
       priority_id: priorityData.priority_id,
       status_id: statusData.status_id,
-      asset_id: null, // Always null since wala pang assets uploaded
+      asset_text: workOrderData.asset ? workOrderData.asset.trim() : null, // NEW FIELD
       date_requested: new Date().toISOString(),
       due_date: workOrderData.dateNeeded ? new Date(workOrderData.dateNeeded).toISOString() : null,
       requested_by: currentUser.id,
@@ -56,17 +56,17 @@ static async submitWorkOrder(workOrderData) {
 
     console.log('Submitting work order:', workOrder);
 
-    // Insert work order
-    const { data, error } = await supabase
-      .from('work_orders')
-      .insert(workOrder)
-      .select(`
-        *,
-        priority_levels(priority_name, color_code),
-        statuses(status_name, color_code),
-        users!requested_by(full_name, email)
-      `)
-      .single();
+// Insert work order
+const { data, error } = await supabase
+  .from('work_orders')
+  .insert(workOrder)
+  .select(`
+    *,
+    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+    statuses(status_name, color_code),
+    users!requested_by(full_name, email)
+  `)
+  .single();
 
     if (error) {
       console.error('Supabase insert error:', error);
@@ -97,17 +97,19 @@ static async submitWorkOrder(workOrderData) {
         throw new Error('User not authenticated');
       }
 
-      let query = supabase
-        .from('work_orders')
-        .select(`
-          *,
-          priority_levels(priority_name, color_code),
-          statuses(status_name, color_code),
-          assets(asset_code, location),
-          users!requested_by(full_name, email)
-        `)
-        .eq('requested_by', currentUser.id)
-        .order('date_requested', { ascending: false });
+let query = supabase
+  .from('work_orders')
+  .select(`
+    *,
+    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+    admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+    statuses(status_name, color_code),
+    assets(asset_code, location),
+    users!requested_by(full_name, email),
+    work_order_extensions(*)
+  `)
+  .eq('requested_by', currentUser.id)
+  .order('date_requested', { ascending: false });
 
       // Apply filters
       if (filters.status && filters.status !== 'All') {
@@ -150,59 +152,55 @@ static async submitWorkOrder(workOrderData) {
     }
   }
 
-  // Cancel a work order (only if status is "To Review")
-  static async cancelWorkOrder(workOrderId) {
-    try {
-      const currentUser = this.getCurrentUser();
-      if (!currentUser) {
-        throw new Error('User not authenticated');
-      }
-
-      // Get "Cancelled" status
-      const { data: statusData, error: statusError } = await supabase
-        .from('statuses')
-        .select('status_id')
-        .eq('status_name', 'Cancelled')
-        .eq('status_category', 'work_order')
-        .single();
-
-      if (statusError || !statusData) {
-        throw new Error('Could not find "Cancelled" status');
-      }
-
-      // Update work order status
-      const { data, error } = await supabase
-        .from('work_orders')
-        .update({ 
-          status_id: statusData.status_id,
-          date_resolved: new Date().toISOString()
-        })
-        .eq('work_order_id', workOrderId)
-        .eq('requested_by', currentUser.id)
-        .select(`
-          *,
-          priority_levels(priority_name, color_code),
-          statuses(status_name, color_code)
-        `)
-        .single();
-
-      if (error) throw error;
-
-      // Log the activity
-      await this.logActivity({
-        user_id: currentUser.id,
-        activity_type: 'work_order_cancelled',
-        description: `Cancelled work order: ${data.title}`,
-        ip_address: await this.getClientIP()
-      });
-
-      return { success: true, data };
-
-    } catch (error) {
-      console.error('WorkOrderService.cancelWorkOrder error:', error);
-      return { success: false, error: error.message };
+// Replace your cancelWorkOrder function with this:
+static async cancelWorkOrder(workOrderId) {
+  try {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
     }
+
+    // Get "Cancelled" status
+    const { data: statusData, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'Cancelled')
+      .eq('status_category', 'work_order')
+      .single();
+
+    if (statusError || !statusData) {
+      throw new Error('Could not find "Cancelled" status');
+    }
+
+    // Update work order status - REMOVE the problematic SELECT
+    const { data, error } = await supabase
+      .from('work_orders')
+      .update({ 
+        status_id: statusData.status_id,
+        date_resolved: new Date().toISOString()
+      })
+      .eq('work_order_id', workOrderId)
+      .eq('requested_by', currentUser.id)
+      .select('work_order_id, title') // Only select basic fields
+      .single();
+
+    if (error) throw error;
+
+    // Log the activity
+    await this.logActivity({
+      user_id: currentUser.id,
+      activity_type: 'work_order_cancelled',
+      description: `Cancelled work order: ${data.title}`,
+      ip_address: await this.getClientIP()
+    });
+
+    return { success: true, data };
+
+  } catch (error) {
+    console.error('WorkOrderService.cancelWorkOrder error:', error);
+    return { success: false, error: error.message };
   }
+}
 
   // Get work order details
   static async getWorkOrderDetails(workOrderId) {
@@ -229,50 +227,66 @@ static async submitWorkOrder(workOrderData) {
     }
   }
 
-  // Get status counts for dashboard tabs
-  static async getStatusCounts() {
-    try {
-      const currentUser = this.getCurrentUser();
-      if (!currentUser) {
-        return { success: false, error: 'User not authenticated' };
-      }
-
-      // Get all work order statuses
-      const { data: statuses, error: statusError } = await supabase
-        .from('statuses')
-        .select('status_id, status_name, color_code')
-        .eq('status_category', 'work_order')
-        .eq('is_active', true);
-
-      if (statusError) throw statusError;
-
-      // Count work orders by status for current user
-      const statusCounts = [];
-      
-      for (const status of statuses) {
-        const { data, error } = await supabase
-          .from('work_orders')
-          .select('work_order_id', { count: 'exact' })
-          .eq('requested_by', currentUser.id)
-          .eq('status_id', status.status_id);
-
-        if (!error) {
-          statusCounts.push({
-            label: status.status_name,
-            color: status.color_code,
-            count: data ? data.length : 0,
-            icon: this.getStatusIcon(status.status_name)
-          });
-        }
-      }
-
-      return { success: true, data: statusCounts };
-
-    } catch (error) {
-      console.error('WorkOrderService.getStatusCounts error:', error);
-      return { success: false, error: error.message, data: [] };
+static async getStatusCounts() {
+  console.log('🚀 getStatusCounts method called!');
+  try {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) {
+      return { success: false, error: 'User not authenticated' };
     }
+
+    // Define the EXACT order we want (same as admin)
+    const desiredOrder = ['To Review', 'Pending', 'In Progress', 'Completed', 'Failed', 'Rejected', 'Cancelled'];
+
+    // Get all work order statuses from database first
+    const { data: allStatuses, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id, status_name, color_code')
+      .in('status_category', ['work_order', 'WorkOrder'])
+      .eq('is_active', true);
+
+    if (statusError) {
+      console.error('❌ Error getting statuses:', statusError);
+      throw statusError;
+    }
+
+    // Create a map for easy lookup
+    const statusMap = {};
+    allStatuses.forEach(status => {
+      statusMap[status.status_name] = status;
+    });
+
+    // Build status counts in the desired order
+    const statusCounts = [];
+    
+    for (const statusName of desiredOrder) {
+      const status = statusMap[statusName];
+      if (!status) continue; // Skip if status doesn't exist
+      
+      const { data, error } = await supabase
+        .from('work_orders')
+        .select('work_order_id', { count: 'exact' })
+        .eq('requested_by', currentUser.id)
+        .eq('status_id', status.status_id);
+
+      if (!error) {
+        statusCounts.push({
+          label: status.status_name,
+          color: status.color_code,
+          count: data ? data.length : 0,
+          icon: this.getStatusIcon(status.status_name)
+        });
+      }
+    }
+
+    console.log('✅ Final status counts (ordered):', statusCounts);
+    return { success: true, data: statusCounts };
+
+  } catch (error) {
+    console.error('❌ WorkOrderService.getStatusCounts error:', error);
+    return { success: false, error: error.message, data: [] };
   }
+}
 
   // Helper function to get status icons
   static getStatusIcon(status) {

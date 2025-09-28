@@ -3,7 +3,7 @@ import { Container, Row, Col, Button, Form, Badge, Card, InputGroup, FormControl
 import { WorkOrderService } from '../services/WorkOrderService';
 
 export default function DashboardUser() {
-const [selectedStatus, setSelectedStatus] = useState('All');
+const [selectedStatus, setSelectedStatus] = useState('To Review');
 const [selectedPriority, setSelectedPriority] = useState('All');
 const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
 const [searchTerm, setSearchTerm] = useState(''); 
@@ -18,6 +18,8 @@ const [priorities, setPriorities] = useState([]);
 const [loading, setLoading] = useState(true);
 const [submitting, setSubmitting] = useState(false);
 const [error, setError] = useState('');
+// Add this after your existing state variables
+const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
 
 // Form data state
 const [formData, setFormData] = useState({
@@ -63,6 +65,40 @@ useEffect(() => {
   }
 }, [selectedStatus, selectedPriority, searchTerm]);
 
+// ADD THIS NEW useEffect AFTER THE ABOVE:
+useEffect(() => {
+  let pollInterval;
+  
+  // Faster polling when user is actively viewing "To Review" or recent orders
+  const shouldPollFast = selectedStatus === 'To Review' || selectedStatus === 'Pending';
+  const pollInterval_ms = shouldPollFast ? 15000 : 60000; // 15s for active, 60s for others
+  
+  const pollForUpdates = async () => {
+    if (!loading && document.visibilityState === 'visible') { // Only poll when tab is active
+      setBackgroundRefreshing(true);
+      await loadWorkOrders();
+      setBackgroundRefreshing(false);
+    }
+  };
+  
+  pollInterval = setInterval(pollForUpdates, pollInterval_ms);
+  
+  // Also listen for tab visibility changes
+  const handleVisibilityChange = () => {
+    if (document.visibilityState === 'visible') {
+      // User came back to tab, refresh immediately
+      pollForUpdates();
+    }
+  };
+  
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  return () => {
+    clearInterval(pollInterval);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+  };
+}, [selectedStatus, loading]);
+
 const loadInitialData = async () => {
   setLoading(true);
   try {
@@ -102,23 +138,44 @@ const loadWorkOrders = async () => {
 
   const result = await WorkOrderService.getUserWorkOrders(filters);
   if (result.success) {
-    // Transform data to match existing component structure
-// Transform data to match existing component structure
-const transformedData = result.data.map(wo => ({
-  work_order_id: wo.work_order_id,
-  title: wo.title,
-  category: wo.category,
-  priority: wo.priority_levels?.priority_name || 'Low',
-  location: wo.location || '',     // Just use the location from work order
-  asset: wo.asset || '—',          // Just show dash if no asset specified
-  dateNeeded: wo.due_date ? wo.due_date.split('T')[0] : '',
-  description: wo.description,
-  status: wo.statuses?.status_name || 'To Review',
-  color: wo.statuses?.color_code || '#F0D400',
-  priorityColor: wo.priority_levels?.color_code || '#00C417',
-  timestamp: wo.date_requested ? wo.date_requested.split('T')[0] : '',
-  reason: wo.rejection_reason || '—'
-}));
+
+    const transformedData = result.data.map(wo => {
+  // ADD OVERDUE LOGIC HERE
+  const dueDate = new Date(wo.due_date);
+  const currentDate = new Date();
+  // Set time to start of day for accurate comparison
+  currentDate.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+
+  const statusName = wo.statuses?.status_name || 'To Review';
+  const isOverdue = (statusName === 'Pending' || statusName === 'In Progress') && 
+                   dueDate < currentDate;
+
+return {
+    work_order_id: wo.work_order_id,
+    title: wo.title,
+    category: wo.category,
+    priority: wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'Low',
+    suggestedPriority: wo.priority_levels?.priority_name || 'Low',
+    adminUpdatedPriority: wo.admin_priority_levels?.priority_name || null,
+    location: wo.location || '',
+    asset: wo.asset_text || '-',
+    dateNeeded: wo.due_date ? wo.due_date.split('T')[0] : '',
+    description: wo.description,
+    status: statusName,
+    color: wo.statuses?.color_code || '#F0D400',
+    priorityColor: wo.admin_priority_levels?.color_code || wo.priority_levels?.color_code || '#00C417',
+    timestamp: wo.date_requested ? wo.date_requested.split('T')[0] : '',
+    reason: wo.rejection_reason || '-',
+    failureReason: wo.failure_reason,
+    isOverdue: isOverdue,
+    originalDueDate: wo.original_due_date,
+    extensionCount: wo.extension_count || 0,
+    lastExtensionReason: wo.last_extension_reason,
+    extensionHistory: wo.work_order_extensions || []
+    
+};
+});
     
     setHistoryData(transformedData);
   } else {
@@ -127,7 +184,7 @@ const transformedData = result.data.map(wo => ({
 };
 
 const filteredHistory = historyData.filter(item => {
-const statusMatch = selectedStatus === 'All' || item.status === selectedStatus;
+const statusMatch = item.status === selectedStatus;
 const priorityMatch = selectedPriority === 'All' || item.priority === selectedPriority;
 const searchMatch = searchTerm === '' || 
   item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -268,40 +325,7 @@ return (
   gap: '4px',
   boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
 }}>
-  {/* Add "All" tab first */}
-  <div
-    style={{
-  flex: 1,
-  padding: '12px 16px',
-  textAlign: 'center',
-  cursor: 'pointer',
-  borderRadius: '25px',
-  transition: 'all 0.3s ease',
-  backgroundColor: selectedStatus === 'All' ? '#284CFF' : '#ffffff',
-  color: selectedStatus === 'All' ? 'white' : '#495057',
-  fontSize: '14px',
-  fontWeight: selectedStatus === 'All' ? '700' : '500',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: '8px',
-  border: selectedStatus === 'All' ? '2px solid #284CFF' : '0.2px solid #ECEBF0',
-  boxShadow: selectedStatus === 'All' ? '0 4px 12px rgba(40, 76, 255, 0.2)' : '0 2px 4px rgba(0,0,0,0.05)'
-}}
-    onClick={() => setSelectedStatus('All')}
-  >
-    <span>All</span>
-    <span style={{
-      backgroundColor: selectedStatus === 'All' ? 'rgba(255,255,255,0.2)' : '#EFEAE9FF',
-      color: selectedStatus === 'All' ? 'white' : '#666',
-      padding: '2px 8px',
-      borderRadius: '12px',
-      fontSize: '12px',
-      fontWeight: '600'
-    }}>
-      {historyData.length}
-    </span>
-  </div>
+
 
 {statusCounts.map((status) => (
   <div
@@ -401,7 +425,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     }}
     onClick={() => setShowPriorityModal(true)}
   >
-    Priority Level
+  Priority Level
   </span>
 </div>
 
@@ -410,9 +434,31 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 {/* History Section */}
 <Card className="shadow-sm">
   <Card.Body>
-    <div className="mb-3">
-      <h5 style={{color: '#284386' }}>History</h5>
+   {/* REPLACE your existing History header <div> with this: */}
+<div className="mb-3 d-flex justify-content-between align-items-center">
+  <h5 style={{color: '#284386' }}>History</h5>
+  
+  {/* Background refresh indicator */}
+  {backgroundRefreshing && (
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '8px',
+      color: '#6c757d',
+      fontSize: '13px'
+    }}>
+      <div className="spinner-border spinner-border-sm" style={{ width: '14px', height: '14px' }}></div>
+      <span>Checking for updates...</span>
     </div>
+  )}
+  
+  {/* Last updated timestamp */}
+  {!backgroundRefreshing && (
+    <small style={{ color: '#6c757d' }}>
+      Last updated: {new Date().toLocaleTimeString()}
+    </small>
+  )}
+</div>
                     
                 <table className="table table-hover align-middle mb-0 ">
                   <thead style={{ backgroundColor: '#284C9A', color: 'white' }}>
@@ -433,7 +479,11 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     setSelectedWorkOrder(item);
     setShowDetailsModal(true);
     }}
-  style={{ cursor: 'pointer' }}
+  style={{ 
+    cursor: 'pointer',
+    backgroundColor: item.isOverdue ? '#fff5f5' : 'inherit',
+    border: item.isOverdue ? '2px solid rgba(220, 53, 69, 0.2)' : 'inherit'
+  }}
 >
 
 <td>{item.title}</td>
@@ -443,36 +493,98 @@ color: selectedStatus === status.label ? 'white' : '#495057'
   </Badge>
 </td>
 
+
 <td>
-  <Badge
-   bg=""
-    style={{
-      backgroundColor: item.priorityColor,
-      color: 'white',
-      padding: '4px 10px',
-      fontSize: '0.85rem',
-      borderRadius: '8px'
-    }}
-  >
-    {item.priority}
-  </Badge>
- </td>
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+    {/* Current Priority Badge */}
+    <Badge
+      bg=""
+      style={{
+        backgroundColor: item.priorityColor,
+        color: 'white',
+        padding: '4px 10px',
+        fontSize: '0.85rem',
+        borderRadius: '8px'
+      }}
+    >
+      {item.priority}
+    </Badge>
+    
+    {/* Admin Updated Indicator */}
+    {item.adminUpdatedPriority && (
+      <div style={{ 
+        fontSize: '11px', 
+        color: '#0066cc', 
+        fontWeight: '600',
+        marginTop: '2px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '3px'
+      }}>
+        <i className="bi bi-shield-check"></i>
+        Admin Updated
+        {item.suggestedPriority !== item.adminUpdatedPriority && (
+          <span style={{ color: '#666', fontSize: '10px' }}>
+            (was {item.suggestedPriority})
+          </span>
+        )}
+      </div>
+    )}
+    
+      {/* Extension Indicator*/}
+{item.extensionCount > 0 && (
+  <div style={{ 
+    fontSize: '11px', 
+    color: '#fd7e14', 
+    fontWeight: '600',
+    marginTop: '2px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px'
+  }}>
+    <i className="bi bi-calendar-plus"></i>
+    Extended {item.extensionCount}x
+  </div>
+)}
+
+    {/* Overdue Indicator - MOVED INSIDE */}
+    {item.isOverdue && (
+      <div style={{ 
+        fontSize: '11px', 
+        color: '#dc3545', 
+        fontWeight: '700',
+        marginTop: '2px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '3px',
+        animation: 'pulse 2s infinite'
+      }}>
+        <i className="bi bi-exclamation-triangle-fill"></i>
+        OVERDUE
+      </div>
+    )}
+  </div>
+</td>
 
 <td>{item.timestamp}</td>
-  <td>
-    {item.status === 'To Review' ? (
-      <Button
-        variant="danger"
-        size="sm"
-        onClick={(e) => {
+<td>
+  {item.status === 'To Review' ? (
+    <Button
+      variant="danger"
+      size="sm"
+      onClick={(e) => {
         e.stopPropagation();
-         handleCancelRequest(item);
-          }}
-      >
-        Cancel
-      </Button>
-        ) : (item.reason)}
-    </td>
+        handleCancelRequest(item);
+      }}
+    >
+      Cancel
+    </Button>
+  ) : (
+    item.status === 'Failed' && item.failureReason 
+      ? item.failureReason 
+      : item.reason
+  )}
+</td>
       </tr>
       ))}
 
@@ -642,7 +754,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
                   color: '#495057', 
                   marginBottom: '8px' 
                 }}>
-                  Priority Level
+                  Suggested Priority Level
                 </Form.Label>
                <Form.Select
   value={formData.priority}
@@ -994,6 +1106,66 @@ Cancel
                     <div style={{ marginBottom: '15px' }}>
                       <p><strong>Title:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.title}</span></p>
                         </div>
+                          {/* OVERDUE WARNING  */}
+    {selectedWorkOrder.isOverdue && (
+      <div style={{ 
+        marginBottom: '15px',
+        padding: '12px',
+        backgroundColor: '#fff5f5',
+        border: '2px solid #dc3545',
+        borderRadius: '8px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+      }}>
+        <i className="bi bi-exclamation-triangle-fill" style={{ color: '#dc3545', fontSize: '16px' }}></i>
+        <div>
+          <strong style={{ color: '#dc3545' }}>This request is overdue!</strong><br />
+          <small style={{ color: '#666' }}>Due date was: {selectedWorkOrder.dateNeeded}</small>
+        </div>
+      </div>
+    )}
+    {/* Extension History Display - ADD THIS */}
+{selectedWorkOrder.extensionHistory?.length > 0 && (
+  <div style={{ marginBottom: '15px' }}>
+    <p><strong>Extension History:</strong></p>
+    <div style={{
+      backgroundColor: '#fff3cd',
+      border: '1px solid #ffeaa7',
+      borderRadius: '8px',
+      padding: '12px',
+      marginTop: '8px'
+    }}>
+      <div style={{ marginBottom: '8px' }}>
+        <strong>Total Extensions: {selectedWorkOrder.extensionCount}</strong>
+        {selectedWorkOrder.originalDueDate && (
+          <span style={{ fontSize: '12px', color: '#666', marginLeft: '8px' }}>
+            (Original due: {selectedWorkOrder.originalDueDate.split('T')[0]})
+          </span>
+        )}
+      </div>
+      {selectedWorkOrder.extensionHistory.map((ext, i) => (
+        <div key={i} style={{
+          backgroundColor: 'white',
+          border: '1px solid #e9ecef',
+          borderRadius: '4px',
+          padding: '8px',
+          marginBottom: '8px',
+          fontSize: '13px'
+        }}>
+          <div><strong>From:</strong> {ext.old_due_date.split('T')[0]} → <strong>To:</strong> {ext.new_due_date.split('T')[0]}</div>
+          <div><strong>Reason:</strong> {ext.extension_reason}</div>
+          <div style={{ color: '#666', fontSize: '12px' }}>
+            Extended on: {new Date(ext.extension_date).toLocaleDateString()}
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+
+  
                       <div style={{ marginBottom: '15px' }}>
                       <p><strong>Category:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.category || '—'}</span></p>
                         </div>

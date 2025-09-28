@@ -15,101 +15,112 @@ import {
 // Fixed API service function
 const apiService = {
   // Get all tasks assigned to current personnel
-  async fetchTasks() {
-    try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      
-      // Query work_orders with a left join to work_order_details for additional info
-      const { data, error } = await supabase
-        .from('work_orders')
-        .select(`
-          *,
-          work_order_details(*),
-          requester:users!requested_by(full_name, email)
-        `)
-        .eq('assigned_to', userData.user.id)
-        .in('status_id', [1, 2]) // Assuming 1 = Pending, 2 = In Progress - adjust these IDs based on your status table
-        .order('due_date', { ascending: true });
 
-      if (error) {
-        console.error('Supabase error:', error);
-        throw error;
-      }
+async updateTaskStatus(taskId, status, reason, newDate = null) {
+  try {
+    // Get current user for extension tracking
+    const { data: userData } = await supabase.auth.getUser();
+    const { data: userProfile } = await supabase
+      .from('users')
+      .select('user_id')
+      .eq('auth_uid', userData.user.id)
+      .single();
 
-      console.log('Raw data from Supabase:', data); // Debug log
-
-      // Transform data to match your component structure
-      return data.map(wo => ({
-        id: wo.work_order_id,
-        title: wo.title,
-        description: wo.description,
-        category: wo.category,
-        asset: wo.asset_id || 'Not specified',
-        location: wo.location,
-        dueDate: wo.due_date,
-        // Use the data from work_order_details if available, otherwise default values
-        priority: wo.work_order_details?.priority_name?.toLowerCase() || 'medium',
-        status: wo.work_order_details?.status_name?.toLowerCase().replace(' ', '-') || 'pending',
-        logs: wo.activity_tracking || []
-      }));
-
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-      return [];
+    // Correct status_id values based on your database
+    let statusId;
+    switch(status) {
+      case 'in-progress':
+        statusId = 2;
+        break;
+      case 'completed':
+        statusId = 3;
+        break;
+      case 'failed':
+        statusId = 11;
+        break;
+      default:
+        statusId = 1;
     }
-  },
 
-  // Alternative approach - simple query without complex joins
-  async fetchTasksSimple() {
-    try {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-      
-      console.log('Current user ID:', userData.user.id); // Debug log
-      
-      // Simple query without joins to test basic functionality
-      const { data, error } = await supabase
+    // Handle extension logic
+    if (newDate && status === 'in-progress') {
+      // Get current work order data
+      const { data: currentWO } = await supabase
         .from('work_orders')
-        .select('*')
-        .eq('assigned_to', userData.user.id);
+        .select('due_date, original_due_date, extension_count')
+        .eq('work_order_id', taskId)
+        .single();
 
-      if (error) {
-        console.error('Supabase error details:', error);
-        throw error;
-      }
+      // Insert extension history
+      await supabase
+        .from('work_order_extensions')
+        .insert({
+          work_order_id: taskId,
+          old_due_date: currentWO.due_date,
+          new_due_date: newDate,
+          extension_reason: reason,
+          extended_by: userProfile.user_id
+        });
 
-      console.log('Raw work_orders data:', data); // Debug log
-      console.log('Number of work orders found:', data?.length || 0);
+      // Update work_orders with extension data
+      const workOrderUpdate = {
+        status_id: statusId,
+        due_date: newDate,
+        original_due_date: currentWO.original_due_date || currentWO.due_date,
+        extension_count: (currentWO.extension_count || 0) + 1,
+        last_extension_date: new Date().toISOString(),
+        last_extension_reason: reason,
+        extended_by: userProfile.user_id
+      };
 
-      if (!data || data.length === 0) {
-        console.log('No work orders found for user');
-        return [];
-      }
+      const { data: workOrderData, error: workOrderError } = await supabase
+        .from('work_orders')
+        .update(workOrderUpdate)
+        .eq('work_order_id', taskId)
+        .select();
 
-      // Transform data with default values
-      const transformedData = data.map(wo => ({
-        id: wo.work_order_id,
-        title: wo.title || 'Untitled Task',
-        description: wo.description || 'No description',
-        category: wo.category || 'General',
-        asset: wo.asset_id || 'Not specified',
-        location: wo.location || 'Not specified',
-        dueDate: wo.due_date,
-        priority: 'medium', // Default for now
-        status: 'pending', // Default for now
-        logs: wo.activity_tracking || []
-      }));
-
-      console.log('Transformed data:', transformedData);
-      return transformedData;
-
-    } catch (error) {
-      console.error('Error fetching tasks:', error);
-      return [];
+      if (workOrderError) throw workOrderError;
+      return { success: true, data: workOrderData?.[0] };
     }
+
+    // Regular status update (not extension)
+    const workOrderUpdate = {
+      status_id: statusId,
+      ...(status === 'completed' || status === 'failed' ? { date_resolved: new Date().toISOString() } : {}),
+      ...(status === 'failed' && reason ? { failure_reason: reason } : {})
+    };
+
+    const { data: workOrderData, error: workOrderError } = await supabase
+      .from('work_orders')
+      .update(workOrderUpdate)
+      .eq('work_order_id', taskId)
+      .select();
+
+    if (workOrderError) throw workOrderError;
+
+    // Optional work_order_details update wrapped in try-catch
+    try {
+      const detailsUpdate = {
+        status_id: statusId
+      };
+
+      await supabase
+        .from('work_order_details')
+        .update(detailsUpdate)
+        .eq('work_order_id', taskId);
+    } catch (detailsErr) {
+      console.warn('Work order details update failed, but continuing...');
+    }
+
+    return { success: true, data: workOrderData?.[0] || workOrderData };
+  } catch (error) {
+    console.error('Error updating task status:', error);
+    return { success: false, error: error.message };
   }
+}
 };
+
+
 
 export default function DashboardPersonnel() {
   const [currentDate, setCurrentDate] = useState(new Date());  
@@ -152,60 +163,94 @@ const loadTasks = async () => {
   try {
     setLoading(true);
     setError(null);
-    
-    console.log('=== DEBUGGING START ===');
-    
+        
     // Get current user auth ID
     const { data: userData, error: userError } = await supabase.auth.getUser();
     if (userError) throw userError;
-    
-    console.log('Auth user ID:', userData.user.id);
-    
+        
     // Get user profile to find user_id
     const { data: userProfile, error: profileError } = await supabase
       .from('users')
       .select('user_id, full_name')
       .eq('auth_uid', userData.user.id)
       .single();
-    
+      
     if (profileError) {
       console.error('Error getting user profile:', profileError);
       throw profileError;
     }
-    
-    console.log('User profile:', userProfile);
-    
-    // Get tasks assigned to current user only
-    const { data: allTasks, error: tasksError } = await supabase
-      .from('work_order_details')
-      .select('*')
-      .eq('assigned_to', userProfile.user_id);
-    
-    console.log('All work_order_details:', allTasks);
-    console.log('Tasks query error:', tasksError);
-    
-    if (tasksError) {
-      throw tasksError;
+
+
+// Get work orders with proper relationships INCLUDING extension data
+const { data: workOrders, error: workOrdersError } = await supabase
+  .from('work_orders')
+  .select(`
+    *,
+    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+    admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+    statuses(status_name, color_code),
+    work_order_extensions(*)
+  `)
+  .eq('assigned_to', userProfile.user_id);
+
+    if (workOrdersError) {
+      console.error('Error fetching work orders:', workOrdersError);
+      throw workOrdersError;
     }
     
-    if (allTasks && allTasks.length > 0) {
-      const transformedData = allTasks.map(wo => ({
-        id: wo.work_order_id,
-        title: wo.title || 'Untitled Task',
-        description: wo.description || 'No description',
-        category: wo.category || 'General',
-        asset: wo.asset_code || 'Not specified',
-        location: wo.location || 'Not specified',
-        dueDate: wo.due_date,
-        priority: wo.priority_name?.toLowerCase() || 'medium',
-        status: wo.status_name?.toLowerCase().replace(' ', '-') || 'pending',
-        logs: []
-      }));
-      
-      console.log('Transformed tasks:', transformedData);
+    if (workOrders && workOrders.length > 0) {
+      // Transform data
+      const transformedData = workOrders.map(wo => {
+        // Map status_id to status name properly
+        let statusName = 'pending';
+        switch(wo.status_id) {
+          case 1:
+            statusName = 'pending';
+            break;
+          case 2:
+            statusName = 'in-progress';
+            break;
+          case 3:
+            statusName = 'completed';
+            break;
+          case 11:
+            statusName = 'failed';
+            break;
+          default:
+            statusName = 'pending';
+        }
+          // ADD OVERDUE LOGIC HERE
+  const dueDate = new Date(wo.due_date);
+  const currentDate = new Date();
+    // Set time to start of day for accurate comparison
+  currentDate.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+
+  const isOverdue = (statusName === 'pending' || statusName === 'in-progress') && 
+                   dueDate < currentDate;
+
+      return {
+  id: wo.work_order_id,
+  title: wo.title || 'Untitled Task',
+  description: wo.description || 'No description',
+  category: wo.category || 'General',
+  asset: wo.asset_text || 'Not specified',
+  location: wo.location || 'Not specified',
+  dueDate: wo.due_date,
+  originalDueDate: wo.original_due_date,
+  priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
+  status: statusName,
+  isOverdue: isOverdue,
+  failureReason: wo.failure_reason,
+  extensionCount: wo.extension_count || 0,
+  lastExtensionReason: wo.last_extension_reason,
+  extensionHistory: wo.work_order_extensions || [],
+  logs: []
+};
+      });
+            
       setTasks(transformedData);
     } else {
-      console.log('No tasks found for current user');
       setTasks([]);
     }
     
@@ -251,10 +296,6 @@ const loadTasks = async () => {
     (t.status === 'pending' || t.status === 'in-progress')
   ));
 
-  const getUpcomingTasks = () => sortTasks(tasks.filter(t => 
-    new Date(t.dueDate) > new Date() && 
-    (t.status === 'pending' || t.status === 'in-progress')
-  ));
 
   const getCompletedTasks = () => sortTasks(tasks.filter(t => 
     t.status === 'completed' || t.status === 'failed'
@@ -302,23 +343,27 @@ const loadTasks = async () => {
     }, 150);
   };
 
-  const handleDateClick = (date) => {
-    // Use local date instead of ISO to avoid timezone issues
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const dateString = `${year}-${month}-${day}`;
+const handleDateClick = (date) => {
+  // Use local date instead of ISO to avoid timezone issues
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  const dateString = `${year}-${month}-${day}`;
+  
+  const tasksOnDate = tasks.filter(task => {
+    const taskDate = new Date(task.dueDate);
+    const taskDateString = `${taskDate.getFullYear()}-${(taskDate.getMonth() + 1).toString().padStart(2, '0')}-${taskDate.getDate().toString().padStart(2, '0')}`;
     
-    const tasksOnDate = tasks.filter(task => {
-      const taskDate = new Date(task.dueDate);
-      const taskDateString = `${taskDate.getFullYear()}-${(taskDate.getMonth() + 1).toString().padStart(2, '0')}-${taskDate.getDate().toString().padStart(2, '0')}`;
-      return taskDateString === dateString;
-    });
+    // ADD THIS LINE - Filter out completed and failed tasks
+    const isActiveTask = task.status === 'pending' || task.status === 'in-progress';
     
-    setSelectedEvents(tasksOnDate);
-    setSelectedDate(date);
-    setShowCalendarModal(true);
-  };
+    return taskDateString === dateString && isActiveTask;
+  });
+  
+  setSelectedEvents(tasksOnDate);
+  setSelectedDate(date);
+  setShowCalendarModal(true);
+};
 
   const addLogLocally = (task, status, reason, newDate = null) => {
     const log = {
@@ -378,34 +423,34 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
     console.error('Error updating task status:', err);
   }
 };
-  // UI components
-  const TaskCard = ({ task }) => (
-    <div 
-      style={{
-        padding: '16px',
-        marginBottom: '12px',
-        backgroundColor: '#f8f9fa',
-        borderRadius: '8px',
-        border: '1px solid #e9ecef',
-        transition: 'background-color 0.2s ease, transform 0.1s ease',
-        height: '110px',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'flex-start',
-        cursor: 'pointer'
-      }}
-      onClick={() => handleTaskClick(task)}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = '#e9ecef';
-        e.currentTarget.style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = '#f8f9fa';
-        e.currentTarget.style.transform = 'translateY(0)';
-      }}
-    >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-        <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
+const TaskCard = ({ task }) => (
+  <div 
+    style={{
+      padding: '16px',
+      marginBottom: '12px',
+      backgroundColor: task.isOverdue ? '#fff5f5' : '#f8f9fa',
+      borderRadius: '8px',
+      border: task.isOverdue ? '2px solid #dc3545' : '1px solid #e9ecef',
+      transition: 'background-color 0.2s ease, transform 0.1s ease',
+      height: '110px',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'flex-start',
+      cursor: 'pointer'
+    }}
+    onClick={() => handleTaskClick(task)}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.backgroundColor = task.isOverdue ? '#fed7d7' : '#e9ecef';
+      e.currentTarget.style.transform = 'translateY(-1px)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.backgroundColor = task.isOverdue ? '#fff5f5' : '#f8f9fa';
+      e.currentTarget.style.transform = 'translateY(0)';
+    }}
+  >
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+      <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
         <Badge bg={
           task.priority === 'high' ? 'danger' : 
           task.priority === 'medium' ? 'warning' : 
@@ -413,10 +458,16 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
         } style={{ fontSize: '10px' }}>
           {capitalizePriority(task.priority)}
         </Badge>
+        {task.isOverdue && (
+          <Badge bg="danger" style={{ fontSize: '9px', animation: 'pulse 2s infinite' }}>
+            OVERDUE
+          </Badge>
+        )}
       </div>
-      <div style={{ color: '#6c757d', fontSize: '13px' }}>{task.description}</div>
     </div>
-  );
+    <div style={{ color: '#6c757d', fontSize: '13px' }}>{task.description}</div>
+  </div>
+);
 
   // Empty state component
   const EmptyState = ({ message }) => (
@@ -466,11 +517,12 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
         const isToday = today.getDate() === day && 
                        today.getMonth() === currentDate.getMonth() && 
                        today.getFullYear() === currentDate.getFullYear();
-        
+        const hasOverdueTask = tasksOnDay.some(task => task.isOverdue);
+
         days.push(
           <div 
             key={day} 
-            className={`calendar-day ${isToday ? 'today' : ''} ${tasksOnDay.length > 0 ? 'has-events' : ''}`}
+           className={`calendar-day ${isToday ? 'today' : ''} ${tasksOnDay.length > 0 ? 'has-events' : ''} ${hasOverdueTask ? 'has-overdue' : ''}`}
             onClick={() => handleDateClick(new Date(currentDate.getFullYear(), currentDate.getMonth(), day))}
           >
             <span className="day-number">{day}</span>
@@ -480,11 +532,12 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
                   <div 
                     key={index} 
                     className={`event-dot ${
+                      task.isOverdue ? 'overdue-priority' :
                       task.priority === 'high' ? 'high-priority' : 
                       task.priority === 'medium' ? 'medium-priority' : 
                       'low-priority'
                     }`}
-                    title={task.title}
+                    title={`${task.title} ${task.isOverdue ? '(OVERDUE)' : ''}`}
                   ></div>
                 ))}
                 {tasksOnDay.length > 3 && (
@@ -584,6 +637,15 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
           .calendar-day.today.has-events {
             background: #e1f5fe;
           }
+            .calendar-day.has-overdue {
+  background: #ffebee;
+  border: 2px solid rgba(220, 53, 69, 0.3);
+}
+
+.calendar-day.today.has-overdue {
+  background: #ffcdd2;
+  border: 2px solid rgba(220, 53, 69, 0.5);
+}
           
           .day-number {
             font-weight: 500;
@@ -616,7 +678,17 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
           .event-dot.low-priority {
             background: #28a745;
           }
-          
+          .event-dot.overdue-priority {
+  background: #dc3545;
+  box-shadow: 0 0 8px rgba(220, 53, 69, 0.8);
+  animation: pulse-overdue 2s infinite;
+}
+
+@keyframes pulse-overdue {
+  0% { box-shadow: 0 0 8px rgba(220, 53, 69, 0.8); }
+  50% { box-shadow: 0 0 15px rgba(220, 53, 69, 1); }
+  100% { box-shadow: 0 0 8px rgba(220, 53, 69, 0.8); }
+}
           .event-more {
             font-size: 10px;
             color: #6c757d;
@@ -652,29 +724,32 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
     );
   };
 
-  // Styles same as admin
-  const cardStyle = {
-    backgroundColor: 'white',
-    borderRadius: '12px',
-    padding: '24px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-    marginBottom: '20px',
-    border: '1px solid rgba(0,0,0,0.06)',
-    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-    minHeight: '120px'
-  };
+ 
+const cardStyle = {
+  backgroundColor: 'white',
+  borderRadius: '12px',
+  padding: '24px',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+  marginBottom: '20px',
+  border: '1px solid rgba(0,0,0,0.06)',
+  transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+  minHeight: '500px', // Increase minimum height to match calendar
+  display: 'flex',      // Add flex display
+  flexDirection: 'column' // Add flex direction
+};
 
-  const calendarCardStyle = {
-    ...cardStyle,
-    minHeight: '500px'
-  };
+const calendarCardStyle = {
+  ...cardStyle,
+  minHeight: '500px'
+};
 
-  const twoColumnGrid = {
-    display: 'grid',
-    gridTemplateColumns: '73% 26%',
-    gap: '20px',
-    marginBottom: '30px'
-  };
+const twoColumnGrid = {
+  display: 'grid',
+  gridTemplateColumns: '73% 26%',
+  gap: '20px',
+  marginBottom: '30px',
+  alignItems: 'start' // Add this to align items to start
+};
 
   const itemCardStyle = {
     padding: '16px',
@@ -762,113 +837,166 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
                 {/* Tab Content */}
                 {!showHistory ? (
                   <>
-                    {/* Today's Tasks */}
-                    <div style={{ marginBottom: '20px' }}>
-                      <h6 style={{ margin: 0, fontWeight: 'bold', marginBottom: '15px', display: 'flex', alignItems: 'center' }}>
-                        <Clock size={16} style={{ marginRight: '8px', color: '#28a745' }} />
-                        Today's Tasks
-                      </h6>
-                      <div>
-                        {getTodayTasks().length === 0 ? (
-                          <EmptyState message="No tasks scheduled for today" />
-                        ) : (
-                          getTodayTasks().map((task, index) => (
-                            <div 
-                              key={index} 
-                              style={{...itemCardStyle, height: 'auto', minHeight: '80px', cursor: 'pointer'}}
-                              onClick={() => handleTaskClick(task)}
-                            >
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                                <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
-                                <Badge bg={
-                                  task.priority === 'high' ? 'danger' : 
-                                  task.priority === 'medium' ? 'warning' : 
-                                  'success'
-                                } style={{ fontSize: '10px' }}>
-                                  {capitalizePriority(task.priority)}
-                                </Badge>
-                              </div>
-                              <div style={{ color: '#6c757d', fontSize: '13px', marginBottom: '4px' }}>
-                                {task.description}
-                              </div>
-                              <div style={{ color: '#6c757d', fontSize: '13px', display: 'flex', alignItems: 'center' }}>
-                                <MapPin size={12} style={{ marginRight: '4px' }} />
-                                {task.location}
-                              </div>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Upcoming Tasks */}
-                    <div>
-                      <h6 style={{ margin: 0, fontWeight: 'bold', marginBottom: '15px', display: 'flex', alignItems: 'center' }}>
-                        <CalendarDays size={16} style={{ marginRight: '8px', color: '#0d6efd' }} />
-                        Upcoming Tasks
-                      </h6>
-                      <div>
-                        {getUpcomingTasks().length === 0 ? (
-                          <EmptyState message="No upcoming tasks assigned" />
-                        ) : (
-                          getUpcomingTasks().slice(0, 3).map(task => (
-                            <TaskCard key={task.id} task={task} />
-                          ))
-                        )}
-                      </div>
-                    </div>
+{/* Today's Tasks - Now Scrollable */}
+<div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+  <h6 style={{ 
+    margin: 0, 
+    fontWeight: 'bold', 
+    marginBottom: '15px', 
+    display: 'flex', 
+    alignItems: 'center',
+    flexShrink: 0  // Prevent header from shrinking
+  }}>
+    <Clock size={16} style={{ marginRight: '8px', color: '#28a745' }} />
+    Today's Tasks
+  </h6>
+  
+  {/* Scrollable container */}
+  <div style={{
+    flex: 1, // Take remaining space
+    overflowY: 'auto',
+    maxHeight: '630px', // Set maximum height
+    paddingRight: '8px' // Add padding for scrollbar
+  }}>
+    {getTodayTasks().length === 0 ? (
+      <EmptyState message="No tasks for today" />
+    ) : (
+      getTodayTasks().map((task, index) => (
+        <div 
+          key={index} 
+          style={{
+            padding: '16px',
+            marginBottom: '12px',
+            backgroundColor: task.isOverdue ? '#fff5f5' : '#f8f9fa',
+            borderRadius: '8px',
+            border: task.isOverdue ? '2px solid #dc3545' : '1px solid #e9ecef',
+            transition: 'background-color 0.2s ease, transform 0.1s ease',
+            height: 'auto', 
+            minHeight: '80px', 
+            cursor: 'pointer',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'flex-start'
+          }}
+          onClick={() => handleTaskClick(task)}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = task.isOverdue ? '#fed7d7' : '#e9ecef';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = task.isOverdue ? '#fff5f5' : '#f8f9fa';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
+        >
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'flex-start', 
+            marginBottom: '8px' 
+          }}>
+            <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'flex-end', 
+              gap: '4px' 
+            }}>
+              <Badge bg={
+                task.priority === 'high' ? 'danger' : 
+                task.priority === 'medium' ? 'warning' : 
+                'success'
+              } style={{ fontSize: '10px' }}>
+                {capitalizePriority(task.priority)}
+              </Badge>
+              {task.isOverdue && (
+                <Badge bg="danger" style={{ fontSize: '9px' }}>
+                  OVERDUE
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div style={{ 
+            color: '#6c757d', 
+            fontSize: '13px', 
+            marginBottom: '4px' 
+          }}>
+            {task.description}
+          </div>
+          <div style={{ 
+            color: '#6c757d', 
+            fontSize: '13px', 
+            display: 'flex', 
+            alignItems: 'center' 
+          }}>
+            <MapPin size={12} style={{ marginRight: '4px' }} />
+            {task.location}
+          </div>
+        </div>
+      ))
+    )}
+  </div>
+</div>
                   </>
                 ) : (
-                  <div>
-                    <h6 style={{ margin: 0, fontWeight: 'bold', marginBottom: '15px', display: 'flex', alignItems: 'center' }}>
+                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                    <h6 style={{ margin: 0, fontWeight: 'bold', marginBottom: '15px', display: 'flex', alignItems: 'center', flexShrink: 0  }}>
                       <AlertTriangle size={16} style={{ marginRight: '8px', color: '#fd7e14' }} />
                       Task History
                     </h6>
-                    <div>
-                      {getCompletedTasks().map(task => (
-  <div key={task.id}
-    style={{
-      padding: '16px',
-      marginBottom: '12px',
-      backgroundColor: '#f8f9fa',
-      borderRadius: '8px',
-      border: '1px solid #e9ecef',
-      transition: 'background-color 0.2s ease, transform 0.1s ease',
-      height: '110px',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'flex-start',
-      cursor: 'pointer'
-    }}
-    onClick={() => handleTaskClick(task)}
-    onMouseEnter={(e) => {
-      e.currentTarget.style.backgroundColor = '#e9ecef';
-      e.currentTarget.style.transform = 'translateY(-1px)';
-    }}
-    onMouseLeave={(e) => {
-      e.currentTarget.style.backgroundColor = '#f8f9fa';
-      e.currentTarget.style.transform = 'translateY(0)';
-    }}
-  >
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-      <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-        <Badge bg={
-          task.priority === 'high' ? 'danger' : 
-          task.priority === 'medium' ? 'warning' : 
-          'success'
-        } style={{ fontSize: '10px' }}>
-          {capitalizePriority(task.priority)}
-        </Badge>
-        <Badge bg={task.status === 'completed' ? 'success' : 'danger'} style={{ fontSize: '9px' }}>
-          {task.status === 'completed' ? '✓ Completed' : '✗ Failed'}
-        </Badge>
-      </div>
-    </div>
-    <div style={{ color: '#6c757d', fontSize: '13px' }}>{task.description}</div>
-  </div>
-))}
-                    </div>
+                   <div style={{
+  flex: 1, 
+  overflowY: 'auto',
+  maxHeight: '630px', 
+  paddingRight: '8px'
+}}>
+  {getCompletedTasks().length === 0 ? (
+    <EmptyState message="No completed tasks yet" />
+  ) : (
+    getCompletedTasks().map(task => (
+                        <div key={task.id}
+                          style={{
+                            padding: '16px',
+                            marginBottom: '12px',
+                            backgroundColor: '#f8f9fa',
+                            borderRadius: '8px',
+                            border: '1px solid #e9ecef',
+                            transition: 'background-color 0.2s ease, transform 0.1s ease',
+                            height: '110px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'flex-start',
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => handleTaskClick(task)}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.backgroundColor = '#e9ecef';
+                            e.currentTarget.style.transform = 'translateY(-1px)';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.backgroundColor = '#f8f9fa';
+                            e.currentTarget.style.transform = 'translateY(0)';
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                            <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
+                              <Badge bg={
+                                task.priority === 'high' ? 'danger' : 
+                                task.priority === 'medium' ? 'warning' : 
+                                'success'
+                              } style={{ fontSize: '10px' }}>
+                                {capitalizePriority(task.priority)}
+                              </Badge>
+                              <Badge bg={task.status === 'completed' ? 'success' : 'danger'} style={{ fontSize: '9px' }}>
+                                {task.status === 'completed' ? '✓ Completed' : '✗ Failed'}
+                              </Badge>
+                            </div>
+                          </div>
+                          <div style={{ color: '#6c757d', fontSize: '13px' }}>{task.description}</div>
+                        </div>
+                      ))
+  )}
+</div>
                   </div>
                 )}
               </div>
@@ -955,6 +1083,21 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
                     </div>
                   </div>
 
+                      {/* OVERDUE WARNING HERE */}
+{selectedTask.isOverdue && (
+  <div className="row mb-3">
+    <div className="col-12">
+      <div className="alert alert-danger d-flex align-items-center" role="alert">
+        <AlertTriangle size={20} className="me-2" />
+        <div>
+          <strong>Task is Overdue!</strong><br />
+          <small>Due date was: {new Date(selectedTask.dueDate).toLocaleDateString()}</small>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
                   {/* Request Field */}
                   <div className="mb-3">
                     <label className="form-label">Request:</label>
@@ -991,6 +1134,16 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
                     <textarea className="form-control" rows="4" value={selectedTask.description} readOnly />
                   </div>
 
+                      {/* Failure Reason Display */}
+                    {selectedTask.status === 'failed' && selectedTask.failureReason && (
+                      <div className="mb-3">
+                        <label className="form-label fw-bold text-danger">Failure Reason:</label>
+                        <div className="alert alert-danger" role="alert">
+                          {selectedTask.failureReason}
+                        </div>
+                      </div>
+                    )}
+
                   {/* Activity Log */}
                   {selectedTask.logs?.length > 0 && (
                     <div className="mt-4">
@@ -1004,6 +1157,22 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
                       ))}
                     </div>
                   )}
+                  {/* Extension History */}
+                    {selectedTask.extensionHistory?.length > 0 && (
+                      <div className="mt-4">
+                        <h6>Extension History</h6>
+                        {selectedTask.extensionHistory.map((ext, i) => (
+                          <div key={i} className="border p-2 mb-2 bg-warning bg-opacity-10 rounded">
+                            <small><b>Extended</b> - {ext.extension_reason}</small><br />
+                            <small className="text-info">
+                              From: {new Date(ext.old_due_date).toLocaleDateString()} → 
+                              To: {new Date(ext.new_due_date).toLocaleDateString()}
+                            </small><br />
+                            <small className="text-muted">{new Date(ext.extension_date).toLocaleString()}</small>
+                          </div>
+                        ))}
+                      </div>
+)}
 
                   {/* Update Tasks Section */}
                   {(selectedTask.status === 'pending' || selectedTask.status === 'in-progress') && (

@@ -1,6 +1,7 @@
 // src/dashboards/AdminNav/AssetManagement.js
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
+import { assetService } from '../../services/assetService';
 import {
   Container,
   Row,
@@ -20,20 +21,12 @@ export default function AssetManagement() {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+const [categories, setCategories] = useState([]);
   // Add these state variables for task management
 const [tasks, setTasks] = useState([]);
-const [personnel] = useState([
-  { id: "PER-001", name: "Juan Dela Cruz", department: "Maintenance", email: "juan.delacruz@company.com" },
-  { id: "PER-002", name: "Maria Santos", department: "Engineering", email: "maria.santos@company.com" },
-  { id: "PER-003", name: "Pedro Garcia", department: "Operations", email: "pedro.garcia@company.com" },
-  { id: "PER-004", name: "Ana Reyes", department: "Admin", email: "ana.reyes@company.com" },
-  { id: "PER-005", name: "Roberto Cruz", department: "IT", email: "roberto.cruz@company.com" },
-  { id: "PER-006", name: "Lisa Fernandez", department: "Facilities", email: "lisa.fernandez@company.com" }
-]);
+const [personnel, setPersonnel] = useState([]);
 
 const [previousAsset, setPreviousAsset] = useState(null);
-
 const [predefinedTasks] = useState([
   'Check-up / Inspection',
   'Cleaning',
@@ -44,6 +37,14 @@ const [predefinedTasks] = useState([
   'Replacement of Parts',
   'Safety Compliance Check'
 ]);
+const fetchCategories = async () => {
+  try {
+    const data = await assetService.fetchAssetCategories();
+    setCategories(data);
+  } catch (err) {
+    console.error('Error fetching categories:', err);
+  }
+};
 
 // Add Asset Modal states
 const [showAddAssetModal, setShowAddAssetModal] = useState(false);
@@ -95,15 +96,6 @@ const [newTask, setNewTask] = useState({
   status: 'pending'
 });
 
-  // Personnel list for assignment
-  const personnelList = [
-    { id: "PER-001", name: "Juan Dela Cruz" },
-    { id: "PER-002", name: "Maria Santos" },
-    { id: "PER-003", name: "Pedro Garcia" },
-    { id: "PER-004", name: "Ana Reyes" },
-    { id: "PER-005", name: "Roberto Cruz" },
-    { id: "PER-006", name: "Lisa Fernandez" }
-  ];
 
   // Helper function to get maintenance status
   const getMaintenanceStatus = (schedule) => {
@@ -124,184 +116,7 @@ const [newTask, setNewTask] = useState({
   };
 
   // Sample hardcoded data for visualization with maintenance schedules
-  const sampleAssets = [
-    {
-      id: "AST-001",
-      name: "Main Building HVAC System",
-      category: "HVAC Equipment",
-      location: "Main Building - Ground Floor",
-      status: "Operational",
-      lastMaintenance: "2024-08-15",
-      task: "Regular cleaning and filter replacement",
-      acquisitionDate: "2023-05-15",
-      nextMaintenance: "2024-09-15",
-      maintenanceHistory: [
-        { date: "2024-08-15", task: "Filter replacement and system cleaning", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-07-10", task: "Coolant level check and refill", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-06-20", task: "Routine inspection", assigned: "Juan Dela Cruz", status: "completed" }
-      ],
-     incidentReports: [
-  {
-    id: "INC-001",
-    type: "Equipment Malfunction",
-    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
-    severity: "Low",
-    reportedBy: "Juan Dela Cruz",
-    reportedAt: "2024-08-20T10:30:00Z",
-    status: "Open"
-  }
-]
-    },
-    {
-      id: "AST-002",
-      name: "Security Camera System - Block A",
-      category: "Safety Equipment",
-      location: "Block A - All Floors",
-      status: "Under Maintenance",
-      lastMaintenance: "2024-08-18",
-      acquisitionDate: "2023-05-15",
-      nextMaintenance: "2024-09-16",
-      task: "Camera lens cleaning and software update",
-      maintenanceSchedule: {
-        taskDescription: "Camera 3 lens replacement and system calibration",
-        assignedPersonnel: "PER-002",
-        assignedPersonnelName: "Maria Santos",
-        scheduledDateTime: "2024-09-05T09:00:00Z",
-        dueDateTime: "2024-09-05T17:00:00Z",
-        status: "in progress",
-        createdBy: "Admin",
-        createdAt: "2024-09-04T10:00:00Z",
-        startedAt: "2024-09-05T09:15:00Z",
-        completedAt: null,
-        comments: "Started lens replacement. Waiting for calibration tools."
-      },
-      maintenanceHistory: [
-        { date: "2024-08-18", task: "Camera 3 lens replacement due to scratches", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-07-25", task: "Software update and system calibration", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-07-01", task: "Monthly inspection and cleaning", assigned: "Juan Dela Cruz", status: "completed" }
-      ],
-      incidentReports: [
-  {
-    id: "INC-001",
-    type: "Equipment Malfunction",
-    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
-    severity: "Low",
-    reportedBy: "Juan Dela Cruz",
-    reportedAt: "2024-08-20T10:30:00Z",
-    status: "Open"
-  }
-]
-    },
-    {
-      id: "AST-003",
-      name: "Garden Sprinkler System",
-      category: "Groundskeeping Tools",
-      location: "Front Garden & Courtyard",
-      status: "Operational",
-      lastMaintenance: "2024-08-10",
-      acquisitionDate: "2023-05-15",
-      nextMaintenance: "2024-09-15",
-      task: "Nozzle cleaning and water pressure check",
-      maintenanceHistory: [
-        { date: "2024-08-10", task: "Nozzle cleaning and water pressure adjustment", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-07-15", task: "Timer system calibration", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-06-30", task: "Seasonal maintenance check", assigned: "Juan Dela Cruz", status: "completed" }
-      ],
-      incidentReports: []
-    },
-    {
-      id: "AST-004",
-      name: "Conference Room Tables (Set A)",
-      category: "Carpentry/Structural Assets",
-      location: "Conference Room A",
-      status: "Operational",
-      lastMaintenance: "2024-08-12",
-      acquisitionDate: "2023-05-15",
-      nextMaintenance: "2024-09-15",
-      task: "Surface polishing and hardware check",
-      maintenanceHistory: [
-        { date: "2024-08-12", task: "Wood polish application and hardware tightening", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-07-05", task: "Scratch repair on table surface", assigned: "Juan Dela Cruz", status: "completed" }
-      ],
-    incidentReports: [
-  {
-    id: "INC-001",
-    type: "Equipment Malfunction",
-    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
-    severity: "Low",
-    reportedBy: "Juan Dela Cruz",
-    reportedAt: "2024-08-20T10:30:00Z",
-    status: "Open"
-  }
-]
-    },
-    {
-      id: "AST-005",
-      name: "Backup Generator Unit 1",
-      category: "Electrical Equipment",
-      location: "Generator Room",
-      status: "Retired",
-      lastMaintenance: "2024-05-30",
-      acquisitionDate: "2023-05-15",
-      nextMaintenance: null,
-      task: "Final inspection before retirement",
-      maintenanceHistory: [
-        { date: "2024-05-30", task: "Final inspection and documentation", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-04-20", task: "Engine oil change and battery check", assigned: "Juan Dela Cruz", status: "completed" },
-        { date: "2024-03-15", task: "Load testing and fuel system check", assigned: "Juan Dela Cruz", status: "completed" }
-      ],
-      incidentReports: [
-  {
-    id: "INC-001",
-    type: "Equipment Malfunction",
-    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
-    severity: "Low",
-    reportedBy: "Juan Dela Cruz",
-    reportedAt: "2024-08-20T10:30:00Z",
-    status: "Open"
-  }
-]
-    },
-    {
-      id: "AST-006",
-      name: "Floor Cleaning Equipment",
-      category: "Miscellaneous / General Facilities ",
-      location: "Janitor's Storage Room",
-      status: "Under Maintenance",
-      lastMaintenance: "2024-08-16",
-      acquisitionDate: "2023-05-15",
-      nextMaintenance: "2024-09-15",
-      task: "Motor repair and brush replacement",
-      maintenanceSchedule: {
-        taskDescription: "Motor replacement and complete overhaul",
-        assignedPersonnel: "PER-006",
-        assignedPersonnelName: "Lisa Fernandez",
-        scheduledDateTime: "2024-09-04T08:00:00Z",
-        dueDateTime: "2024-09-04T16:00:00Z",
-        status: "overdue",
-        createdBy: "Admin",
-        createdAt: "2024-09-03T15:00:00Z",
-        startedAt: null,
-        completedAt: null,
-        comments: null
-      },
-      maintenanceHistory: [
-        { date: "2024-08-16", task: "Motor diagnostic and repair attempt", assigned: "Juan Dela Cruz", status: "failed" },
-        { date: "2024-07-20", task: "Routine cleaning and lubrication", assigned: "Juan Dela Cruz", status: "completed" }
-      ],
-      incidentReports: [
-  {
-    id: "INC-001",
-    type: "Equipment Malfunction",
-    description: "System is running smoothly after recent maintenance. Temperature control is optimal.",
-    severity: "Low",
-    reportedBy: "Juan Dela Cruz",
-    reportedAt: "2024-08-20T10:30:00Z",
-    status: "Open"
-  }
-]
-    }
-  ];
+
 const handleViewIncidentDetails = (incident) => {
   setPreviousAsset(selectedAsset); // Store the current asset
   setSelectedIncident(incident);
@@ -405,32 +220,32 @@ const handleSubmitIncidentTask = async () => {
   }
 };
 
-  // Mock function to simulate API call - replace with actual API call later
-  const fetchAssets = async () => {
-    try {
-      setLoading(true);
-      
-      // TODO: Replace this with actual API call
-      // const response = await fetch('/api/assets');
-      // const data = await response.json();
-      // setAssets(data);
-      
-      // For now, simulate loading and return sample data for visualization
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-      setAssets(sampleAssets); // Using sample data for visualization
-      
-    } catch (err) {
-      setError('Failed to load assets');
-      console.error('Error fetching assets:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchAssets = async () => {
+  try {
+    setLoading(true);
+    const data = await assetService.fetchAssets();
+    setAssets(data);
+  } catch (err) {
+    setError('Failed to load assets');
+    console.error('Error fetching assets:', err);
+  } finally {
+    setLoading(false);
+  }
+};
+const fetchPersonnel = async () => {
+  try {
+    const data = await assetService.fetchUsers();
+    setPersonnel(data);
+  } catch (err) {
+    console.error('Error fetching personnel:', err);
+  }
+};
 
-  // Load assets on component mount
-  useEffect(() => {
-    fetchAssets();
-  }, []);
+useEffect(() => {
+  fetchAssets();
+  fetchPersonnel();
+  fetchCategories();
+}, []);
 
   // State for editing
   const [search, setSearch] = useState("");
@@ -449,74 +264,39 @@ const handleSubmitIncidentTask = async () => {
       (categoryFilter === "" || asset.category === categoryFilter)
   );
 
-  // Handle asset update
-  const handleUpdateAsset = async () => {
-    if (editingAsset) {
-      try {
-        // TODO: Replace with actual API call
-        // await fetch(`/api/assets/${editingAsset.id}`, {
-        //   method: 'PUT',
-        //   headers: { 'Content-Type': 'application/json' },
-        //   body: JSON.stringify(editingAsset)
-        // });
-
-        // For now, update local state
-        const updatedAssets = assets.map(asset => 
-          asset.id === editingAsset.id ? editingAsset : asset
-        );
-        setAssets(updatedAssets);
-        
-        setIsEditing(false);
-        setSelectedAsset(editingAsset);
-        setEditingAsset(null);
-        
-        // Success message
-        alert('Asset updated successfully!');
-      } catch (err) {
-        console.error('Error updating asset:', err);
-        alert('Failed to update asset. Please try again.');
-      }
+const handleUpdateAsset = async () => {
+  if (editingAsset) {
+    try {
+      const updatedAsset = await assetService.updateAsset(editingAsset.id, editingAsset);
+      
+      const updatedAssets = assets.map(asset => 
+        asset.id === editingAsset.id ? updatedAsset : asset
+      );
+      setAssets(updatedAssets);
+      
+      setIsEditing(false);
+      setSelectedAsset(updatedAsset);
+      setEditingAsset(null);
+      
+      alert('Asset updated successfully!');
+    } catch (err) {
+      console.error('Error updating asset:', err);
+      alert('Failed to update asset. Please try again.');
     }
-  };
+  }
+};
   
 // Handle next maintenance scheduling
 const handleScheduleNextMaintenance = async () => {
   if (nextMaintenanceSchedule.scheduledDate && nextMaintenanceSchedule.assigneeId) {
     try {
-      // Get personnel name
-      const assignedPersonnel = personnel.find(p => p.id === nextMaintenanceSchedule.assigneeId);
+      await assetService.scheduleMaintenanceTask(nextMaintenanceSchedule);
       
-      // Create the scheduled maintenance object
-      const scheduledMaintenance = {
-        date: nextMaintenanceSchedule.scheduledDate,
-        time: nextMaintenanceSchedule.scheduledTime || '09:00',
-        assignedPersonnel: assignedPersonnel?.name,
-        repeat: nextMaintenanceSchedule.repeat,
-        createdAt: new Date().toISOString()
-      };
-      
-      // Update the asset with next maintenance schedule
-      const updatedAssets = assets.map(asset => 
-        asset.id === nextMaintenanceSchedule.assetId 
-          ? { 
-              ...asset, 
-              nextMaintenance: nextMaintenanceSchedule.scheduledDate,
-              nextMaintenanceTime: nextMaintenanceSchedule.scheduledTime || '09:00',
-              nextMaintenanceRepeat: nextMaintenanceSchedule.repeat,
-              nextMaintenanceAssigned: assignedPersonnel?.name
-            }
-          : asset
-      );
-      setAssets(updatedAssets);
-      
-      // Update selected asset if it's the same one
-      if (selectedAsset && selectedAsset.id === nextMaintenanceSchedule.assetId) {
-        const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
-        setSelectedAsset(updatedSelectedAsset);
-      }
+      // Refresh assets to get updated data
+      await fetchAssets();
       
       setShowMaintenanceScheduleModal(false);
-      alert(`Next maintenance scheduled successfully! ${nextMaintenanceSchedule.repeat !== 'none' ? `Will repeat ${nextMaintenanceSchedule.repeat}.` : ''}`);
+      alert('Next maintenance scheduled successfully!');
       
       // Reset form
       setNextMaintenanceSchedule({
@@ -540,21 +320,14 @@ const handleScheduleNextMaintenance = async () => {
 const handleAddAsset = async () => {
   if (newAsset.name && newAsset.category && newAsset.location) {
     try {
-      const asset = {
-        ...newAsset,
-        id: `AST-${String(assets.length + 1).padStart(3, '0')}`,
-        lastMaintenance: null,
-        maintenanceHistory: [],
-        incidentReports: []
-      };
-      
+      const asset = await assetService.addAsset(newAsset);
       setAssets(prevAssets => [...prevAssets, asset]);
       setShowAddAssetModal(false);
       
       // Reset form
       setNewAsset({
         name: '',
-        category: 'Facilities & Building Infra',
+        category: 'HVAC Equipment',
         location: '',
         status: 'Operational',
         acquisitionDate: '',
@@ -708,45 +481,10 @@ const handleExportReport = () => {
 const handleCreateTask = async () => {
   if (newTask.title && newTask.assetId && newTask.assigneeId) {
     try {
-      const task = {
-        ...newTask,
-        id: `TSK-${String(tasks.length + 1).padStart(3, '0')}`,
-        createdAt: new Date().toISOString(),
-        status: 'pending'
-      };
+      await assetService.createMaintenanceTask(newTask);
       
-      // Add task to tasks array
-      setTasks(prevTasks => [...prevTasks, task]);
-      
-      // Get personnel name
-      const assignedPersonnel = personnel.find(p => p.id === newTask.assigneeId);
-      
-      // Create maintenance schedule object
-      const maintenanceSchedule = {
-        taskDescription: newTask.title,
-        assignedPersonnel: newTask.assigneeId,
-        assignedPersonnelName: assignedPersonnel?.name,
-        scheduledDateTime: `${newTask.dueDate}T${newTask.dueTime || '09:00:00'}`,
-        dueDateTime: `${newTask.dueDate}T${newTask.dueTime || '17:00:00'}`,
-        status: 'pending',
-        createdBy: 'Admin',
-        createdAt: new Date().toISOString(),
-        startedAt: null,
-        completedAt: null,
-        comments: newTask.description || null
-      };
-      
-      // Update asset with maintenance schedule and status
-      const updatedAssets = assets.map(asset => 
-        asset.id === newTask.assetId 
-          ? { 
-              ...asset, 
-              status: "Under Maintenance",
-              maintenanceSchedule: maintenanceSchedule
-            }
-          : asset
-      );
-      setAssets(updatedAssets);
+      // Refresh assets to get updated status
+      await fetchAssets();
       
       // Reset form
       setNewTask({
@@ -762,7 +500,7 @@ const handleCreateTask = async () => {
       });
       
       setShowTaskModal(false);
-      alert('Task assigned successfully! Asset status updated to Under Maintenance.');
+      alert('Task assigned successfully!');
       
     } catch (err) {
       console.error('Error creating task:', err);
@@ -891,21 +629,18 @@ const handleCreateTask = async () => {
       <Col md={6}>
         <Form.Group>
           <Form.Label>Category *</Form.Label>
-          <Form.Select
-            value={newAsset.category}
-            onChange={(e) => setNewAsset({...newAsset, category: e.target.value})}
-            required
-          >
-            <option value="">All Categories</option>
-            <option value="HVAC Equipment">HVAC Equipment</option>
-              <option value="Electrical Equipment">Electrical Equipment</option>
-              <option value="Plumbing Fixtures">Plumbing Fixtures</option>
-              <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
-              <option value="Office Equipment">Office Equipment</option>
-              <option value="Safety Equipment">Safety Equipment</option>
-              <option value="Groundskeeping Tools">Groundskeeping Tools</option>
-              <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
-          </Form.Select>
+<Form.Select
+  value={newAsset.category}
+  onChange={(e) => setNewAsset({...newAsset, category: e.target.value})}
+  required
+>
+  <option value="">Select Category</option>
+  {categories.map(cat => (
+    <option key={cat.category_id} value={cat.category_name}>
+      {cat.category_name}
+    </option>
+  ))}
+</Form.Select>
         </Form.Group>
       </Col>
       <Col md={6}>
@@ -1035,12 +770,6 @@ const handleCreateTask = async () => {
 </div>
         </div>
 
-        {/* Sample Data Notice */}
-        <Alert variant="info" className="mb-3">
-          <strong>Admin Panel:</strong> You can view and edit asset details. 
-          Sample data is currently displayed for demonstration purposes.
-        </Alert>
-
         {/* Search & Filter Section */}
         <Row className="mb-3">
           <Col md={4}>
@@ -1063,20 +792,17 @@ const handleCreateTask = async () => {
             </Form.Select>
           </Col>
           <Col md={3}>
-            <Form.Select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="">All Categories</option>
-              <option value="HVAC Equipment">HVAC Equipment</option>
-              <option value="Electrical Equipment">Electrical Equipment</option>
-              <option value="Plumbing Fixtures">Plumbing Fixtures</option>
-              <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
-              <option value="Office Equipment">Office Equipment</option>
-              <option value="Safety Equipment">Safety Equipment</option>
-              <option value="Groundskeeping Tools">Groundskeeping Tools</option>
-              <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
-            </Form.Select>
+           <Form.Select
+  value={categoryFilter}
+  onChange={(e) => setCategoryFilter(e.target.value)}
+>
+  <option value="">All Categories</option>
+  {categories.map(cat => (
+    <option key={cat.category_id} value={cat.category_name}>
+      {cat.category_name}
+    </option>
+  ))}
+</Form.Select>
           </Col>
         </Row>
 
@@ -1286,21 +1012,18 @@ const handleCreateTask = async () => {
                         <div className="col-md-6">
                           <Form.Group>
                             <Form.Label>Category *</Form.Label>
-                            <Form.Select
-                              value={editingAsset.category}
-                              onChange={(e) => setEditingAsset({...editingAsset, category: e.target.value})}
-                              required
-                            >
-                              <option value="">All Categories</option>
-                              <option value="HVAC Equipment">HVAC Equipment</option>
-                              <option value="Electrical Equipment">Electrical Equipment</option>
-                              <option value="Plumbing Fixtures">Plumbing Fixtures</option>
-                              <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
-                              <option value="Office Equipment">Office Equipment</option>
-                              <option value="Safety Equipment">Safety Equipment</option>
-                              <option value="Groundskeeping Tools">Groundskeeping Tools</option>
-                              <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
-                            </Form.Select>
+                        <Form.Select
+  value={editingAsset.category}
+  onChange={(e) => setEditingAsset({...editingAsset, category: e.target.value})}
+  required
+>
+  <option value="">Select Category</option>
+  {categories.map(cat => (
+    <option key={cat.category_id} value={cat.category_name}>
+      {cat.category_name}
+    </option>
+  ))}
+</Form.Select>
                           </Form.Group>
                         </div>
                         <div className="col-md-6">

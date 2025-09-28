@@ -41,29 +41,56 @@ const { data, error } = await supabase
     *,
     users!requested_by(full_name, email),
     statuses(status_name, color_code),
-    priority_levels(priority_name, color_code),
-    assigned_user:users!assigned_to(full_name, email)
+    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+    admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+    assigned_user:users!assigned_to(full_name, email),
+    work_order_extensions(*)
   `)
   .order('date_requested', { ascending: false });
-    if (error) throw error;
-
+  
+  if (error) throw error;
     // Transform data to match your component structure
-const transformedOrders = data.map(wo => ({
-  id: `WO-${wo.work_order_id}`,
-  requester: wo.users?.full_name || 'Unknown', // Temporarily hardcode since we're not joining users yet
-  category: wo.category,
-  location: wo.location,
-  status: wo.statuses?.status_name || 'To Review',// Temporarily hardcode since we're not joining statuses yet
- priority: wo.priority_levels?.priority_name || 'Low',
-suggestedPriority: wo.priority_levels?.priority_name || 'Low',
-  requestDate: wo.date_requested,
-  dueDate: wo.due_date,
-  description: wo.title,
-  detailedDescription: wo.description,
-  assetEquipment: wo.asset || 'Not specified',
-  work_order_id: wo.work_order_id,
-  assignedTo: wo.assigned_user?.full_name || null,
-}));
+// Transform data to match your component structure
+const transformedOrders = data.map(wo => {
+  // ADD OVERDUE LOGIC HERE
+  const dueDate = new Date(wo.due_date);
+  const currentDate = new Date();
+  // Set time to start of day for accurate comparison
+  currentDate.setHours(0, 0, 0, 0);
+  dueDate.setHours(0, 0, 0, 0);
+
+  const statusName = wo.statuses?.status_name || 'To Review';
+  const isOverdue = (statusName === 'Pending' || statusName === 'In Progress') && 
+                   dueDate < currentDate;
+
+  return {
+    id: `WO-${wo.work_order_id}`,
+    requester: wo.users?.full_name || 'Unknown',
+    category: wo.category,
+    location: wo.location,
+    status: statusName,
+    priority: wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'Low',
+    suggestedPriority: wo.priority_levels?.priority_name || 'Low',
+    adminUpdatedPriority: wo.admin_priority_levels?.priority_name || null,
+    requestDate: wo.date_requested,
+    dueDate: wo.due_date,
+    description: wo.title,
+    detailedDescription: wo.description,
+    assetEquipment: wo.asset_text || 'Not specified',
+    work_order_id: wo.work_order_id,
+    assignedTo: wo.assigned_user?.full_name || null,
+    failureReason: wo.failure_reason,
+    priority_id: wo.priority_id,
+    admin_priority_id: wo.admin_priority_id,
+    isOverdue: isOverdue,
+    originalDueDate: wo.original_due_date,
+    extensionCount: wo.extension_count || 0,
+    lastExtensionReason: wo.last_extension_reason,
+    extensionHistory: wo.work_order_extensions || []  
+    
+  };
+});
+
 
     setWorkOrders(transformedOrders);
 
@@ -140,7 +167,7 @@ const fetchCategories = async () => {
   ];
 
   const filteredOrders = workOrders.filter(order => {
-    const matchesTab = order.status === activeTab;
+     const matchesTab = order.status === activeTab;
     const matchesSearch = order.id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.requester?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.description?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -181,14 +208,33 @@ const confirmAssignment = async () => {
 
     if (statusError) throw statusError;
 
+    // Prepare update object
+    const updateData = { 
+      status_id: statusData.status_id,
+      assigned_to: parseInt(assignedPersonnel),
+      date_assigned: new Date().toISOString()
+    };
+
+    // If admin selected a priority, get the priority_id and add to update
+    if (adminPriority) {
+      const { data: priorityData, error: priorityError } = await supabase
+        .from('priority_levels')
+        .select('priority_id')
+        .eq('priority_name', adminPriority)
+        .single();
+
+      if (priorityError) {
+        console.error('Error fetching priority:', priorityError);
+        throw new Error('Failed to update priority level');
+      }
+
+      updateData.admin_priority_id = priorityData.priority_id;
+    }
+
     // Update work order
     const { error: updateError } = await supabase
       .from('work_orders')
-      .update({ 
-        status_id: statusData.status_id,
-        assigned_to: parseInt(assignedPersonnel), // Convert to integer since assigned_to expects user_id
-        date_assigned: new Date().toISOString()
-      })
+      .update(updateData)
       .eq('work_order_id', selectedOrder.work_order_id);
 
     if (updateError) throw updateError;
@@ -204,7 +250,7 @@ const confirmAssignment = async () => {
 
   } catch (err) {
     console.error('Error assigning personnel:', err);
-    setError('Failed to assign personnel.');
+    setError('Failed to assign personnel: ' + err.message);
   } finally {
     setLoading(false);
   }
@@ -274,15 +320,14 @@ const confirmRejection = async () => {
     );
   };
 
-  const getPriorityBadge = (priority) => {
-    const priorityColors = {
-      'High': 'text-danger',
-      'Medium': 'text-warning',
-      'Low': 'text-success'
-    };
-    
-    return <span className={priorityColors[priority]} style={{ fontSize: '0.85rem' }}>● {priority}</span>;
+const getPriorityBadge = (priority) => {
+  const priorityColors = {
+    'High': 'text-danger',
+    'Medium': 'text-warning', 
+    'Low': 'text-success'
   };
+  return <span className={priorityColors[priority] || 'text-muted'} style={{ fontSize: '0.85rem' }}>● {priority}</span>;
+};
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';
@@ -446,7 +491,13 @@ const confirmRejection = async () => {
                 
                 <tbody>
                   {filteredOrders.map(order => (
-                    <tr key={order.id} >
+                    <tr 
+                  key={order.id} 
+                  style={{
+                    backgroundColor: order.isOverdue ? '#fff5f5' : 'inherit',
+                    border: order.isOverdue ? '2px solid rgba(220, 53, 69, 0.2)' : 'inherit'
+                  }}
+                >
                       <td className="fw-bold text-dark" style={{ fontSize: '1rem', fontFamily: 'monospace' }}>
                         {order.id || '-'}
                       </td>
@@ -454,7 +505,21 @@ const confirmRejection = async () => {
                       <td><span className="text-muted fw-medium">{order.category || '-'}</span></td>
                       <td>{order.location || '-'}</td>
                       <td>{getStatusBadge(order.status)}</td>
-                      <td>{getPriorityBadge(order.priority)}</td>
+                     <td>
+  <div className="d-flex align-items-center gap-2">
+    {getPriorityBadge(order.priority)}
+    {order.isOverdue && (
+      <span className="badge bg-danger" style={{ fontSize: '0.7rem', animation: 'pulse 2s infinite' }}>
+        OVERDUE
+      </span>
+    )}
+    {order.extensionCount > 0 && (
+      <span className="badge bg-warning" style={{ fontSize: '0.7rem' }}>
+        EXTENDED {order.extensionCount}x
+      </span>
+    )}
+  </div>
+</td>
                       <td>{formatDate(order.requestDate)}</td>
                       
                       {activeTab !== 'To Review' && <td>{order.assignedTo || '-'}</td>}
@@ -553,6 +618,24 @@ const confirmRejection = async () => {
                     </div>
                   </div>
 
+                 {/* Overdue Warning - Add this section */}
+{selectedOrder.isOverdue && (
+  <div className="mb-4">
+    <div className="alert alert-danger d-flex align-items-center" role="alert">
+      <i className="bi bi-exclamation-triangle-fill me-2"></i>
+      <div>
+        <strong>This work order is overdue!</strong><br />
+        <small>
+          {selectedOrder.extensionCount > 0 
+            ? `Extended due date was: ${formatDate(selectedOrder.dueDate)} (Originally: ${formatDate(selectedOrder.originalDueDate)})`
+            : `Due date was: ${formatDate(selectedOrder.dueDate)}`
+          }
+        </small>
+      </div>
+    </div>
+  </div>
+)}
+
                 {/* Extended Due Date - Only show for In Progress orders with extended dates */}
 {selectedOrder.status === 'In Progress' && selectedOrder.extendedDueDate && (
   <div className="mb-4">
@@ -632,15 +715,55 @@ const confirmRejection = async () => {
                     </div>
                   )}
 
-                  {/* Failure Reason - Only show for failed orders */}
-                  {selectedOrder.status === 'Failed' && selectedOrder.failureReason && (
-                    <div className="mb-4">
-                      <label className="form-label fw-bold text-muted small">Reason for Failure:</label>
-                      <div className="p-3 bg-danger-subtle rounded border border-danger-subtle">
-                        <p className="mb-0 text-danger">{selectedOrder.failureReason}</p>
-                      </div>
-                    </div>
-                  )}
+                 {/* Failure Reason - Only show for failed orders */}
+{selectedOrder.status === 'Failed' && selectedOrder.failureReason && (
+  <div className="mb-4">
+    <label className="form-label fw-bold text-muted small">Reason for Failure:</label>
+    <div className="p-3 bg-danger-subtle rounded border border-danger-subtle">
+      <p className="mb-0 text-danger">{selectedOrder.failureReason}</p>
+    </div>
+  </div>
+)}
+{/* Extension History Display */}
+{selectedOrder.extensionHistory?.length > 0 && (
+  <div className="mb-4">
+    <label className="form-label fw-bold text-muted small">Extension History:</label>
+    <div className="p-3 bg-warning-subtle rounded border border-warning-subtle">
+      <div className="mb-2">
+        <strong className="text-warning">
+          Total Extensions: {selectedOrder.extensionCount} 
+          {selectedOrder.extensionCount > 0 && (
+            <span className="ms-2 small">
+              (Original due: {formatDate(selectedOrder.originalDueDate)})
+            </span>
+          )}
+        </strong>
+      </div>
+      {selectedOrder.extensionHistory.map((ext, i) => (
+        <div key={i} className="border p-2 mb-2 bg-white rounded">
+          <div className="row">
+            <div className="col-6">
+              <small className="text-muted fw-bold">From:</small>
+              <div>{formatDate(ext.old_due_date)}</div>
+            </div>
+            <div className="col-6">
+              <small className="text-muted fw-bold">To:</small>
+              <div>{formatDate(ext.new_due_date)}</div>
+            </div>
+          </div>
+          <div className="mt-1">
+            <small className="text-muted fw-bold">Reason:</small>
+            <div className="small">{ext.extension_reason}</div>
+          </div>
+          <div className="mt-1">
+            <small className="text-muted">Extended on: {new Date(ext.extension_date).toLocaleDateString()}</small>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
 
                   {/* Admin Priority Control */}
                   {selectedOrder.status === 'To Review' && (
