@@ -1,7 +1,7 @@
 // src/components/UserManagement.js
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
-
+import { supabase } from '../../supabaseClient';
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -18,36 +18,27 @@ export default function UserManagement() {
   const [error, setError] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const roles = ['Standard User', 'Personnel'];
+  const [roles, setRoles] = useState([]);
 
-  // Sample hardcoded data - 4 different examples
-  const sampleUsers = [
-    {
-      id: 1,
-      name: 'Juan Dela Cruz',
-      email: 'juan.delacruz@company.com',
-      role: 'Standard User',
-      status: 'Active',
-      dateCreated: '2024-01-15T08:30:00Z'
-    },
-    {
-      id: 2,
-      name: 'Maria Santos',
-      email: 'maria.santos@company.com',
-      role: 'Personnel',
-      status: 'Active',
-      dateCreated: '2024-02-20T10:15:00Z'
-    },
-   
-    {
-      id: 4,
-      name: 'Ana Reyes',
-      email: 'ana.reyes@company.com',
-      role: 'Personnel',
-      status: 'Active',
-      dateCreated: '2024-03-05T09:20:00Z'
-    }
-  ];
+  const fetchRoles = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('roles')
+      .select('role_name')
+      .in('role_id', [3, 4]) // Only Personnel (3) and Standard User (4)
+      .order('role_id', { ascending: true });
+    
+    if (error) throw error;
+    
+    setRoles(data.map(role => role.role_name));
+    
+  } catch (err) {
+    console.error('Error fetching roles:', err);
+    // Fallback to default roles
+    setRoles(['Personnel', 'Standard User']);
+  }
+};
+ 
 
   // Form state for adding new user
   const [newUser, setNewUser] = useState({
@@ -57,38 +48,48 @@ export default function UserManagement() {
     status: 'Active'
   });
 
-  // API Functions - Ready for backend integration
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/users', {
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // });
-      // 
-      // if (!response.ok) {
-      //   throw new Error('Failed to fetch users');
-      // }
-      // 
-      // const data = await response.json();
-      // setUsers(data.users || []);
-      
-      // For now, simulate API call with sample data
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-      setUsers(sampleUsers); // Use sample data instead of empty array
-      
-    } catch (err) {
-      setError(err.message);
-      console.error('Error fetching users:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+ const fetchUsers = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        user_id,
+        username,
+        full_name,
+        email,
+        role_id,
+        user_status,
+        date_created,
+        roles (role_name)
+      `)
+      .in('role_id', [3, 4]) // Only fetch Personnel and Standard User
+      .order('date_created', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Transform data to match your UI format
+    const transformedUsers = data.map(user => ({
+      id: user.user_id,
+      name: user.full_name,
+      email: user.email,
+      role: user.roles.role_name,
+      roleId: user.role_id,
+      status: user.user_status === 'active' ? 'Active' : 'Inactive',
+      dateCreated: user.date_created
+    }));
+    
+    setUsers(transformedUsers);
+    
+  } catch (err) {
+    setError(err.message);
+    console.error('Error fetching users:', err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const createUser = async (userData) => {
     try {
@@ -268,10 +269,10 @@ export default function UserManagement() {
     }
   };
 
-  // Initialize data on component mount
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+useEffect(() => {
+  fetchUsers();
+  fetchRoles();
+}, []);
 
   // Filter users based on search and filters
   useEffect(() => {

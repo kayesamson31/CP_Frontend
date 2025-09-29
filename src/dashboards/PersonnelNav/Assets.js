@@ -1,6 +1,7 @@
 // src/dashboards/PersonnelNav/Assets.js
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
+import { assetService } from '../../services/assetService';
 import {
   Container,
   Row,
@@ -17,7 +18,7 @@ export default function Assets() {
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-
+  const [categories, setCategories] = useState([]);
   // Sample hardcoded data for visualization
   const sampleAssets = [
     {
@@ -169,31 +170,32 @@ export default function Assets() {
   ];
 
   // Mock function to simulate API call - replace with actual API call later
-  const fetchAssets = async () => {
-    try {
-      setLoading(true);
-      
-      // TODO: Replace this with actual API call
-      // const response = await fetch('/api/assets');
-      // const data = await response.json();
-      // setAssets(data);
-      
-      // For now, simulate loading and return sample data for visualization
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-      setAssets(sampleAssets); // Using sample data for visualization
-      
-    } catch (err) {
-      setError('Failed to load assets');
-      console.error('Error fetching assets:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchAssets = async () => {
+  try {
+    setLoading(true);
+    const data = await assetService.fetchAssets();
+    setAssets(data);
+  } catch (err) {
+    setError('Failed to load assets');
+    console.error('Error fetching assets:', err);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  // Load assets on component mount
-  useEffect(() => {
-    fetchAssets();
-  }, []);
+const fetchCategories = async () => {
+  try {
+    const data = await assetService.fetchAssetCategories();
+    setCategories(data);
+  } catch (err) {
+    console.error('Error fetching categories:', err);
+  }
+};
+
+useEffect(() => {
+  fetchAssets();
+  fetchCategories();
+}, []);
 
   const [showIncidentModal, setShowIncidentModal] = useState(false);
 const [incidentForm, setIncidentForm] = useState({
@@ -303,11 +305,6 @@ const handleCancelIncident = () => {
       <Container fluid>
         <h3>Asset Management</h3>
 
-        {/* Sample Data Notice */}
-        <Alert variant="info" className="mb-3">
-          <strong>Note:</strong> Currently showing sample data for visualization purposes. 
-          This will be replaced with real data from the backend API.
-        </Alert>
 
         {/* Search & Filter Section - Updated with Status dropdown */}
         <Row className="mb-3">
@@ -331,20 +328,17 @@ const handleCancelIncident = () => {
             </Form.Select>
           </Col>
           <Col md={3}>
-           <Form.Select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-          >
-            <option value="">All Categories</option>
-            <option value="HVAC Equipment">HVAC Equipment</option>
-            <option value="Electrical Equipment">Electrical Equipment</option>
-            <option value="Plumbing Fixtures">Plumbing Fixtures</option>
-            <option value="Carpentry/Structural Assets">Carpentry/Structural Assets</option>
-            <option value="Office Equipment">Office Equipment</option>
-            <option value="Safety Equipment">Safety Equipment</option>
-            <option value="Groundskeeping Tools">Groundskeeping Tools</option>
-            <option value="Miscellaneous / General Facilities">Miscellaneous / General Facilities</option>
-          </Form.Select>
+          <Form.Select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+        >
+          <option value="">All Categories</option>
+          {categories.map(cat => (
+            <option key={cat.category_id} value={cat.category_name}>
+              {cat.category_name}
+            </option>
+          ))}
+        </Form.Select>
           </Col>
         </Row>
 

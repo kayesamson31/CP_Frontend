@@ -141,28 +141,107 @@ async getCurrentUserOrganization() {
 
   // Fetch users for personnel assignments
   async fetchUsers() {
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('user_id, username, full_name, email')
-        .eq('user_status', 'active')
-        .order('full_name', { ascending: true });
+  try {
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, username, full_name, email, role_id')
+      .eq('user_status', 'active')
+      .eq('role_id', 3) // Personnel role only
+      .order('full_name', { ascending: true });
 
-      if (error) throw error;
-      
-      // Map to match component expected format
-      return data.map(user => ({
-        id: user.user_id.toString(),
-        name: user.full_name,
-        department: 'General', // You might want to add department to users table
-        email: user.email
-      }));
-    } catch (error) {
-      console.error('Error fetching users:', error);
+    if (error) {
+      console.error('Error fetching personnel:', error);
       throw error;
     }
-  },
-
+    
+    console.log('Fetched personnel:', data);
+    
+    return data.map(user => ({
+      id: user.user_id.toString(),
+      name: user.full_name,
+      department: 'General',
+      email: user.email
+    }));
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    throw error;
+  }
+},
+// Fetch tasks assigned to current user
+async fetchMyTasks() {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: currentUser } = await supabase
+      .from('users')
+      .select('user_id')
+      .eq('auth_uid', user.id)
+      .single();
+    
+    if (!currentUser) throw new Error('User not found');
+    
+    // Fetch maintenance tasks assigned to this user
+    const { data: tasks, error } = await supabase
+      .from('maintenance_tasks')
+      .select(`
+        task_id,
+        task_name,
+        description,
+        due_date,
+        date_created,
+        date_completed,
+        remarks,
+        status_id,
+        priority_id,
+        work_order_id,
+        statuses(status_name, color_code),
+        priority_levels(priority_name, color_code),
+        work_orders(
+          work_order_id,
+          title,
+          description,
+          location,
+          category,
+          asset_id,
+          assets(asset_name, asset_code, location)
+        )
+      `)
+      .eq('assigned_to', currentUser.user_id)
+      .order('due_date', { ascending: true });
+    
+    if (error) throw error;
+    
+    return tasks.map(task => ({
+      id: task.task_id,
+      taskId: task.task_id,
+      title: task.task_name,
+      description: task.description,
+      dueDate: task.due_date,
+      dateCreated: task.date_created,
+      dateCompleted: task.date_completed,
+      remarks: task.remarks,
+      status: task.statuses?.status_name || 'Pending',
+      statusColor: task.statuses?.color_code,
+      priority: task.priority_levels?.priority_name || 'Medium',
+      priorityColor: task.priority_levels?.color_code,
+      workOrderId: task.work_order_id,
+      workOrder: task.work_orders ? {
+        id: task.work_orders.work_order_id,
+        title: task.work_orders.title,
+        description: task.work_orders.description,
+        location: task.work_orders.location,
+        category: task.work_orders.category,
+        asset: task.work_orders.assets ? {
+          id: task.work_orders.assets.asset_code,
+          name: task.work_orders.assets.asset_name,
+          location: task.work_orders.assets.location
+        } : null
+      } : null
+    }));
+  } catch (error) {
+    console.error('Error fetching my tasks:', error);
+    throw error;
+  }
+},
   // Add new asset
   async addAsset(assetData) {
     try {
@@ -281,44 +360,116 @@ async getCurrentUserOrganization() {
   },
 
   // Create maintenance task
-  async createMaintenanceTask(taskData) {
-    try {
-      // Generate task code
-      const taskCode = `TSK-${Date.now()}`;
-      
-      const { data, error } = await supabase
-        .from('maintenance_tasks')
-        .insert([{
-          task_code: taskCode,
-          asset_id: await this.getAssetId(taskData.assetId), // Convert asset_code to asset_id
-          assigned_user_id: parseInt(taskData.assigneeId),
-          title: taskData.title,
-          description: taskData.description,
-          priority: taskData.priority,
-          due_date: taskData.dueDate,
-          due_time: taskData.dueTime,
-          task_type: taskData.taskType || 'maintenance',
-          created_by: 'Admin'
-        }])
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      // Update asset status to "Under Maintenance"
-      await supabase
-        .from('assets')
-        .update({ 
-          asset_status: 'maintenance'
-        })
-        .eq('asset_code', taskData.assetId);
-
-      return data;
-    } catch (error) {
-      console.error('Error creating maintenance task:', error);
-      throw error;
+async createMaintenanceTask(taskData) {
+  try {
+    console.log('Creating task with data:', taskData);
+    
+    // Get asset_id from asset_code
+    const { data: assetData, error: assetError } = await supabase
+      .from('assets')
+      .select('asset_id, asset_name, location')
+      .eq('asset_code', taskData.assetId)
+      .single();
+    
+    if (assetError) {
+      console.error('Error finding asset:', assetError);
+      throw new Error('Asset not found');
     }
-  },
+    
+    console.log('Found asset:', assetData);
+    
+    // Get current user ID for requested_by
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data: currentUser } = await supabase
+      .from('users')
+      .select('user_id')
+      .eq('auth_uid', user.id)
+      .single();
+    
+    if (!currentUser) {
+      throw new Error('Current user not found');
+    }
+    
+    console.log('Current user:', currentUser.user_id);
+    
+    // Map priority: low=1, medium=2, high=3
+    const priorityMap = {
+      'low': 1,
+      'medium': 2,
+      'high': 3
+    };
+    
+    // Create work order first
+    const workOrderInsert = {
+      title: `Maintenance: ${taskData.title}`,
+      description: taskData.description || `Scheduled maintenance task for ${assetData.asset_name}`,
+      priority_id: priorityMap[taskData.priority] || 2,
+      status_id: 2, // "In Progress" status
+      asset_id: assetData.asset_id,
+      requested_by: currentUser.user_id,
+      assigned_to: parseInt(taskData.assigneeId),
+      category: 'Maintenance',
+      location: assetData.location,
+      due_date: taskData.dueDate
+    };
+    
+    console.log('Creating work order:', workOrderInsert);
+    
+    const { data: workOrder, error: workOrderError } = await supabase
+      .from('work_orders')
+      .insert([workOrderInsert])
+      .select('work_order_id')
+      .single();
+    
+    if (workOrderError) {
+      console.error('Work order creation error:', workOrderError);
+      throw workOrderError;
+    }
+    
+    console.log('Work order created with ID:', workOrder.work_order_id);
+    
+    // Now create the maintenance task with status_id
+    const taskInsert = {
+      task_name: taskData.title,
+      description: taskData.description || '',
+      priority_id: priorityMap[taskData.priority] || 2,
+      status_id: 1, // Add this! Assuming 1 = Pending for tasks
+      work_order_id: workOrder.work_order_id,
+      due_date: taskData.dueDate,
+      assigned_to: parseInt(taskData.assigneeId)
+    };
+    
+    console.log('Creating maintenance task:', taskInsert);
+    
+    const { data: taskResult, error: taskError } = await supabase
+      .from('maintenance_tasks')
+      .insert([taskInsert])
+      .select()
+      .single();
+
+    if (taskError) {
+      console.error('Task insertion error:', taskError);
+      throw taskError;
+    }
+    
+    console.log('Task created successfully:', taskResult);
+
+    // Update asset status to "maintenance"
+    const { error: updateError } = await supabase
+      .from('assets')
+      .update({ asset_status: 'maintenance' })
+      .eq('asset_code', taskData.assetId);
+
+    if (updateError) {
+      console.error('Asset update error:', updateError);
+    }
+
+    return taskResult;
+  } catch (error) {
+    console.error('Error creating maintenance task:', error);
+    throw error;
+  }
+},
 
   // Helper to get asset_id from asset_code
   async getAssetId(assetCode) {

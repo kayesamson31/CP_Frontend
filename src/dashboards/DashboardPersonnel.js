@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Col, Modal, Badge } from 'react-bootstrap';
-import { supabase } from '../supabaseClient'; // Adjust path as needed
+import { assetService } from '../services/assetService'; 
+import { supabase } from '../supabaseClient'; 
 import { 
   Calendar as CalendarIcon,
   Clock,
@@ -11,36 +12,56 @@ import {
 } from 'lucide-react';
 
 // API service functions (replace with actual API calls later)
-// Fixed API service function
-// Fixed API service function
 const apiService = {
-  // Get all tasks assigned to current personnel
+  async updateTaskStatus(taskId, taskType, status, reason, newDate = null) {
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      const { data: userProfile } = await supabase
+        .from('users')
+        .select('user_id')
+        .eq('auth_uid', userData.user.id)
+        .single();
 
-async updateTaskStatus(taskId, status, reason, newDate = null) {
-  try {
-    // Get current user for extension tracking
-    const { data: userData } = await supabase.auth.getUser();
-    const { data: userProfile } = await supabase
-      .from('users')
-      .select('user_id')
-      .eq('auth_uid', userData.user.id)
-      .single();
+      let statusId;
+      switch(status) {
+        case 'in-progress': statusId = 2; break;
+        case 'completed': statusId = 3; break;
+        case 'failed': statusId = 11; break;
+        default: statusId = 1;
+      }
 
-    // Correct status_id values based on your database
-    let statusId;
-    switch(status) {
-      case 'in-progress':
-        statusId = 2;
-        break;
-      case 'completed':
-        statusId = 3;
-        break;
-      case 'failed':
-        statusId = 11;
-        break;
-      default:
-        statusId = 1;
-    }
+       // Handle maintenance_task updates
+      if (taskType === 'maintenance_task') {
+        const updateData = {
+          status_id: statusId,
+          ...(status === 'completed' && { date_completed: new Date().toISOString() }),
+          ...(reason && { remarks: reason })
+        };
+
+        const { data, error } = await supabase
+          .from('maintenance_tasks')
+          .update(updateData)
+          .eq('task_id', taskId)
+          .select();
+
+        if (error) throw error;
+
+        // Also update the related work_order status
+        const { data: taskData } = await supabase
+          .from('maintenance_tasks')
+          .select('work_order_id')
+          .eq('task_id', taskId)
+          .single();
+
+        if (taskData?.work_order_id) {
+          await supabase
+            .from('work_orders')
+            .update({ status_id: statusId })
+            .eq('work_order_id', taskData.work_order_id);
+        }
+
+        return { success: true, data: data?.[0] };
+      }
 
     // Handle extension logic
     if (newDate && status === 'in-progress') {
@@ -180,79 +201,116 @@ const loadTasks = async () => {
       throw profileError;
     }
 
+    // Fetch both work orders AND maintenance tasks
+    const [workOrders, maintenanceTasks] = await Promise.all([
+      // Work orders query
+      supabase
+        .from('work_orders')
+        .select(`
+          *,
+          priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+          admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+          statuses(status_name, color_code),
+          work_order_extensions(*)
+        `)
+        .eq('assigned_to', userProfile.user_id),
+      
+      // Maintenance tasks query using assetService
+      assetService.fetchMyTasks()
+    ]);
 
-// Get work orders with proper relationships INCLUDING extension data
-const { data: workOrders, error: workOrdersError } = await supabase
-  .from('work_orders')
-  .select(`
-    *,
-    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
-    admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
-    statuses(status_name, color_code),
-    work_order_extensions(*)
-  `)
-  .eq('assigned_to', userProfile.user_id);
-
-    if (workOrdersError) {
-      console.error('Error fetching work orders:', workOrdersError);
-      throw workOrdersError;
+    if (workOrders.error) {
+      console.error('Error fetching work orders:', workOrders.error);
+      throw workOrders.error;
     }
-    
-    if (workOrders && workOrders.length > 0) {
-      // Transform data
-      const transformedData = workOrders.map(wo => {
-        // Map status_id to status name properly
+
+    const allTasks = [];
+
+    // Transform work orders
+    if (workOrders.data && workOrders.data.length > 0) {
+      const transformedWorkOrders = workOrders.data.map(wo => {
         let statusName = 'pending';
         switch(wo.status_id) {
-          case 1:
-            statusName = 'pending';
-            break;
-          case 2:
-            statusName = 'in-progress';
-            break;
-          case 3:
-            statusName = 'completed';
-            break;
-          case 11:
-            statusName = 'failed';
-            break;
-          default:
-            statusName = 'pending';
+          case 1: statusName = 'pending'; break;
+          case 2: statusName = 'in-progress'; break;
+          case 3: statusName = 'completed'; break;
+          case 11: statusName = 'failed'; break;
+          default: statusName = 'pending';
         }
-          // ADD OVERDUE LOGIC HERE
-  const dueDate = new Date(wo.due_date);
-  const currentDate = new Date();
-    // Set time to start of day for accurate comparison
-  currentDate.setHours(0, 0, 0, 0);
-  dueDate.setHours(0, 0, 0, 0);
 
-  const isOverdue = (statusName === 'pending' || statusName === 'in-progress') && 
-                   dueDate < currentDate;
+        const dueDate = new Date(wo.due_date);
+        const currentDate = new Date();
+        currentDate.setHours(0, 0, 0, 0);
+        dueDate.setHours(0, 0, 0, 0);
 
-      return {
-  id: wo.work_order_id,
-  title: wo.title || 'Untitled Task',
-  description: wo.description || 'No description',
-  category: wo.category || 'General',
-  asset: wo.asset_text || 'Not specified',
-  location: wo.location || 'Not specified',
-  dueDate: wo.due_date,
-  originalDueDate: wo.original_due_date,
-  priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
-  status: statusName,
-  isOverdue: isOverdue,
-  failureReason: wo.failure_reason,
-  extensionCount: wo.extension_count || 0,
-  lastExtensionReason: wo.last_extension_reason,
-  extensionHistory: wo.work_order_extensions || [],
-  logs: []
-};
+        const isOverdue = (statusName === 'pending' || statusName === 'in-progress') && 
+                         dueDate < currentDate;
+
+        return {
+          id: wo.work_order_id,
+          type: 'work_order', // Add type identifier
+          title: wo.title || 'Untitled Task',
+          description: wo.description || 'No description',
+          category: wo.category || 'General',
+          asset: wo.asset_text || 'Not specified',
+          location: wo.location || 'Not specified',
+          dueDate: wo.due_date,
+          originalDueDate: wo.original_due_date,
+          priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
+          status: statusName,
+          isOverdue: isOverdue,
+          failureReason: wo.failure_reason,
+          extensionCount: wo.extension_count || 0,
+          lastExtensionReason: wo.last_extension_reason,
+          extensionHistory: wo.work_order_extensions || [],
+          logs: []
+        };
       });
-            
-      setTasks(transformedData);
-    } else {
-      setTasks([]);
+      allTasks.push(...transformedWorkOrders);
     }
+
+    // Transform maintenance tasks
+    if (maintenanceTasks && maintenanceTasks.length > 0) {
+      const transformedMaintenanceTasks = maintenanceTasks.map(task => {
+        const dueDate = new Date(task.dueDate);
+        const currentDate = new Date();
+        currentDate.setHours(0, 0, 0, 0);
+        dueDate.setHours(0, 0, 0, 0);
+
+        const statusName = task.status.toLowerCase().replace(' ', '-');
+        const isOverdue = (statusName === 'pending' || statusName === 'in-progress') && 
+                         dueDate < currentDate;
+
+        return {
+          id: task.taskId,
+          type: 'maintenance_task', // Add type identifier
+          title: task.title,
+          description: task.description || 'No description',
+          category: task.workOrder?.category || 'Maintenance',
+          asset: task.workOrder?.asset?.name || 'Not specified',
+          location: task.workOrder?.location || task.workOrder?.asset?.location || 'Not specified',
+          dueDate: task.dueDate,
+          originalDueDate: null,
+          priority: task.priority.toLowerCase(),
+          status: statusName,
+          isOverdue: isOverdue,
+          failureReason: null,
+          extensionCount: 0,
+          lastExtensionReason: null,
+          extensionHistory: [],
+          logs: [],
+          // Keep maintenance task specific data
+          workOrderId: task.workOrderId,
+          remarks: task.remarks
+        };
+      });
+      allTasks.push(...transformedMaintenanceTasks);
+    }
+
+    // Sort all tasks by due date
+    allTasks.sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+    
+    setTasks(allTasks);
     
   } catch (err) {
     setError('Failed to load tasks. Please try again.');
@@ -394,27 +452,24 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
 
   try {
     const result = await apiService.updateTaskStatus(
-      selectedTask.id, 
-      status, 
-      statusReason, 
+      selectedTask.id,
+      selectedTask.type, // Add this - pass the task type
+      status,
+      statusReason,
       requireDate ? newDueDate : null
     );
 
     if (result.success) {
-      // Update local state
       const updatedTask = addLogLocally(
-        selectedTask, 
-        status, 
-        statusReason, 
+        selectedTask,
+        status,
+        statusReason,
         requireDate ? newDueDate : null
       );
 
       setTasks(tasks.map(t => (t.id === selectedTask.id ? updatedTask : t)));
       closeAllModals();
-      
-      // Reload to sync with backend
       await loadTasks();
-      
     } else {
       alert('Failed to update task status: ' + result.error);
     }
@@ -423,6 +478,7 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
     console.error('Error updating task status:', err);
   }
 };
+
 const TaskCard = ({ task }) => (
   <div 
     style={{

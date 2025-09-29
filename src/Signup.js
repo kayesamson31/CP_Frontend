@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import Layout from './Layout';
 import { supabase } from './supabaseClient';
 
+//  SignUpPage component para gumawa ng bagong Organization Account
 function SignUpPage() {
-  const navigate = useNavigate();
-  
+const navigate = useNavigate(); // Para makapag-redirect sa ibang page
+
+ // State kung saan nakatago lahat ng organization info na tina-type ng user
   const [orgInfo, setOrgInfo] = useState({
     orgName: '',
     orgType: '',
@@ -16,21 +18,27 @@ function SignUpPage() {
     contactEmail: '',
   });
 
+  // State para sa checkbox (terms agreement)
   const [agreed, setAgreed] = useState(false);
+   // State para mag-store ng error messages
   const [errors, setErrors] = useState({});
+   // State para ipakita na “loading” habang nagsa-submit
   const [loading, setLoading] = useState(false);
+   // State para sa error galing server (Supabase)
   const [serverError, setServerError] = useState('');
 
+   //  Function na ina-update ang orgInfo habang nagta-type ang user
   const handleChange = (e) => {
     const { name, value } = e.target;
     setOrgInfo((prev) => ({ ...prev, [name]: value }));
     
-    // Clear error when user starts typing
+     // Kung may error dati sa field na ito, tanggalin kapag may bagong input
     if (errors[name]) {
       setErrors((prev) => ({ ...prev, [name]: '' }));
     }
   };
 
+    // Function para i-check kung kompleto at tama ang form bago i-submit
   const validateForm = () => {
     const newErrors = {};
     
@@ -44,13 +52,14 @@ function SignUpPage() {
     if (!agreed) newErrors.agreement = 'Please agree to the Terms and Privacy Policy';
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    return Object.keys(newErrors).length === 0;   // Kung walang laman = valid form
   };
 
+    // Function na nagha-handle ng form submission
 const handleSubmit = async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // Para hindi mag-refresh ang page
   
-  // 1ï¸âƒ£ VALIDATE FIRST
+    //Validate muna bago i-send sa Supabase
   if (!validateForm()) return;
   
   setLoading(true);
@@ -58,7 +67,9 @@ const handleSubmit = async (e) => {
   setErrors({}); // Clear previous errors
 
   try {
-    // 2ï¸âƒ£ Create Supabase Auth user WITHOUT PASSWORD (email confirmation flow)
+   // Step 2: Gumawa ng bagong user sa Supabase Auth
+      // Note: Gumagamit ng temporary password (hindi gagamitin) 
+      // dahil email confirmation flow ang tunay na login process
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: orgInfo.contactEmail,
       password: 'temporary-password-123', // Required by Supabase, but won't be used
@@ -79,7 +90,7 @@ const handleSubmit = async (e) => {
         }
       }
     });
-
+        // Kung may error (halimbawa duplicate email)
     if (authError) {
       console.log("Auth error details:", authError);
       
@@ -94,11 +105,12 @@ const handleSubmit = async (e) => {
 
     console.log("Signup success:", authData);
 
-    // 3ï¸âƒ£ User is automatically confirmed, redirect to setup wizard
+   // Kapag successful, redirect sa setup wizard
     console.log("User created successfully:", authData.user);
     navigate("/setup-wizard");
     
-  } catch (err) {
+  // Kung may ibang error (network o system)
+  } catch (err) {   
     console.error("Registration error:", err.message);
     setServerError(err.message);
   } finally {
@@ -106,6 +118,7 @@ const handleSubmit = async (e) => {
   }
 };
 
+//List of organization types para sa dropdown
   const organizationTypes = [
     'School / Educational Institution',
     'Office / Corporate',
@@ -282,6 +295,8 @@ const handleSubmit = async (e) => {
     lineHeight: '1.3'
   };
 
+   // Styles (design only, pang-UI)
+  // containerStyle, cardStyle, headerStyle... etc.
   return (
     <Layout>
       <div style={containerStyle}>
@@ -294,7 +309,7 @@ const handleSubmit = async (e) => {
             </p>
           </div>
 
-    {/* Ã°Å¸Å¡Â¨ Server error alert here */}
+    {/*Server error alert here */}
     {serverError && (
       <div style={{ 
         background: '#fee2e2', 
@@ -309,6 +324,7 @@ const handleSubmit = async (e) => {
       </div>
     )}
 
+       {/* Form kung saan nilalagay org details */}
           <form onSubmit={handleSubmit}>
             {/* Organization Details Section */}
             <div style={sectionStyle}>
@@ -485,8 +501,6 @@ const handleSubmit = async (e) => {
 >
   {loading ? "Creating Account..." : "Create Organization Account"}
 </button>
-
-
             <p style={footerTextStyle}>
               After registration, you'll be redirected to your System Admin Dashboard
               <br />to complete your organization setup and manage users.

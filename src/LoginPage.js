@@ -1,3 +1,4 @@
+// Import React hooks and other dependencies
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom'; 
 import Layout from './Layout';
@@ -6,22 +7,27 @@ import { supabase } from './supabaseClient';
 import { PasswordUtils } from './utils/PasswordUtils';
 
 function LoginPage() {
+  // State for input fields
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+ // Navigation hook to redirect user after login
   const navigate = useNavigate();
+
+ // Main login handler
 const handleLogin = async (e) => {
-  e.preventDefault();
+  e.preventDefault(); // Prevent page reload on form submit
 
   try {
     console.log('Starting login for:', email.toLowerCase());
 
-    // Get user from database first
+    //Check if user exists in database
     const { data: userData, error: userError } = await supabase
       .from("users")
       .select("*")
       .eq("email", email.toLowerCase())
       .single();
 
+      // If no user found, stop here
     if (userError || !userData) {
       console.log('User not found in database:', userError);
       alert("Invalid email or password");
@@ -38,7 +44,8 @@ const handleLogin = async (e) => {
         email: email.toLowerCase(),
         password: password,
       });
-
+      
+      // Step 3: If no auth_uid, verify password from database hash
       if (authError) {
         console.log('Supabase Auth failed:', authError);
         alert("Invalid email or password");
@@ -61,7 +68,7 @@ const handleLogin = async (e) => {
 
     console.log('Database password verified, creating Supabase Auth account...');
 
-    // Create Supabase Auth account
+    // If verified, create a Supabase Auth account for user
     const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
       email: email.toLowerCase(),
       password: password,
@@ -98,7 +105,7 @@ const handleLogin = async (e) => {
           return;
         }
       }
-      
+       // If already exists, try logging in instead
       alert("Failed to create authentication account. Please contact support.");
       return;
     }

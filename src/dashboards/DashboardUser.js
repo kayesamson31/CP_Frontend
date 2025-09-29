@@ -29,7 +29,6 @@ const [formData, setFormData] = useState({
   location: '',
   asset: '',
   description: '',
-  attachment: null,
   dateNeeded: ''
 });
 
@@ -169,7 +168,6 @@ return {
     reason: wo.rejection_reason || '-',
     failureReason: wo.failure_reason,
     isOverdue: isOverdue,
-    originalDueDate: wo.original_due_date,
     extensionCount: wo.extension_count || 0,
     lastExtensionReason: wo.last_extension_reason,
     extensionHistory: wo.work_order_extensions || []
@@ -219,7 +217,6 @@ const handleAddWorkOrder = async () => {
         location: '',
         asset: '',
         description: '',
-        attachment: null,
         dateNeeded: ''
       });
       setFormErrors({});
@@ -267,7 +264,6 @@ const handleCancelModal = () => {
   location: '',
   asset: '',
   description: '',
-  attachment: null,
   dateNeeded: ''
             });
   setFormErrors({});
@@ -495,8 +491,8 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 
 
 <td>
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-    {/* Current Priority Badge */}
+  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+    {/* Priority Badge - Main element */}
     <Badge
       bg=""
       style={{
@@ -510,57 +506,50 @@ color: selectedStatus === status.label ? 'white' : '#495057'
       {item.priority}
     </Badge>
     
-    {/* Admin Updated Indicator */}
-    {item.adminUpdatedPriority && (
+    {/* Compact Indicators Row - All in one line */}
+    {(item.adminUpdatedPriority || item.extensionCount > 0 || item.isOverdue) && (
       <div style={{ 
-        fontSize: '11px', 
-        color: '#0066cc', 
-        fontWeight: '600',
-        marginTop: '2px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '3px'
+        display: 'flex', 
+        gap: '6px', 
+        fontSize: '10px',
+        flexWrap: 'wrap',
+        alignItems: 'center'
       }}>
-        <i className="bi bi-shield-check"></i>
-        Admin Updated
-        {item.suggestedPriority !== item.adminUpdatedPriority && (
-          <span style={{ color: '#666', fontSize: '10px' }}>
-            (was {item.suggestedPriority})
+        {item.adminUpdatedPriority && (
+          <span style={{ 
+            color: '#0066cc', 
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2px'
+          }}>
+            <i className="bi bi-shield-check"></i> Admin
           </span>
         )}
-      </div>
-    )}
-    
-      {/* Extension Indicator*/}
-{item.extensionCount > 0 && (
-  <div style={{ 
-    fontSize: '11px', 
-    color: '#fd7e14', 
-    fontWeight: '600',
-    marginTop: '2px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '3px'
-  }}>
-    <i className="bi bi-calendar-plus"></i>
-    Extended {item.extensionCount}x
-  </div>
-)}
-
-    {/* Overdue Indicator - MOVED INSIDE */}
-    {item.isOverdue && (
-      <div style={{ 
-        fontSize: '11px', 
-        color: '#dc3545', 
-        fontWeight: '700',
-        marginTop: '2px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '3px',
-        animation: 'pulse 2s infinite'
-      }}>
-        <i className="bi bi-exclamation-triangle-fill"></i>
-        OVERDUE
+        
+        {item.extensionCount > 0 && (
+          <span style={{ 
+            color: '#fd7e14', 
+            fontWeight: '600',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2px'
+          }}>
+            <i className="bi bi-calendar-plus"></i> {item.extensionCount}x
+          </span>
+        )}
+        
+        {item.isOverdue && (
+          <span style={{ 
+            color: '#dc3545', 
+            fontWeight: '700',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '2px'
+          }}>
+            <i className="bi bi-exclamation-triangle-fill"></i> OVERDUE
+          </span>
+        )}
       </div>
     )}
   </div>
@@ -895,81 +884,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
           </Form.Group>
 
           <Row>
-          <Col md={6}>
-          <Form.Group className="mb-3">
-            <Form.Label style={{ 
-              fontWeight: '600', 
-              color: '#495057', 
-              marginBottom: '8px' 
-            }}>
-              Attachments
-            </Form.Label>
-            <div style={{
-              border: '2px dashed #dee2e6',
-              borderRadius: '8px',
-              padding: '20px',
-              textAlign: 'center',
-              backgroundColor: '#f8f9fa',
-              cursor: 'pointer',
-              transition: 'border-color 0.3s ease',
-              position: 'relative'
-            }}
-            onMouseEnter={(e) => e.target.style.borderColor = '#284CFF'}
-            onMouseLeave={(e) => e.target.style.borderColor = '#dee2e6'}
-            >
-            <div style={{ color: '#6c757d', fontSize: '14px' }}>
-              <div style={{ fontSize: '24px', marginBottom: '8px' }}>📁</div>
-               {formData.attachment ? (
-                <div>
-                  <div style={{ color: '#28a745', fontWeight: '600', marginBottom: '4px' }}>
-                    ✅ {formData.attachment.length} file(s) selected
-                    </div>
-                    <div style={{ fontSize: '12px' }}>
-                    {Array.from(formData.attachment).map(file => file.name).join(', ')}
-                    </div>
-                  </div>
-                  ) : (
-                  <div>
-                   Click to upload or drag files here
-                   <br />
-                   <small>JPG, PNG, PDF up to 10MB</small>
-                  </div>
-                  )}
-              </div>
-
-              <Form.Control 
-               type="file" 
-               multiple 
-               onChange={(e) => handleChange('attachment', e.target.files)}
-               style={{ 
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  opacity: 0,
-                  width: '100%',
-                  height: '100%',
-                  cursor: 'pointer'
-                }}
-               />
-            </div>
-
-            {formData.attachment && formData.attachment.length > 0 && (
-             <div style={{ marginTop: '10px' }}>
-              <small style={{ color: '#6c757d', fontWeight: '600' }}>Selected Files:</small>
-              <ul style={{ margin: '5px 0', paddingLeft: '20px', fontSize: '12px' }}>
-                {Array.from(formData.attachment).map((file, index) => (
-                 <li key={index} style={{ color: '#495057', marginBottom: '2px' }}>
-                   {file.name} ({(file.size / 1024).toFixed(1)} KB)
-                </li>
-                  ))}
-              </ul>
-              </div>
-               )}
-          </Form.Group>
-        </Col>
-
-
-            <Col md={6}>
+            <Col md={12}>
               <Form.Group className="mb-3">
                 <Form.Label style={{ 
                   fontWeight: '600', 
@@ -1103,10 +1018,9 @@ Cancel
                   <Modal.Body>
                    {selectedWorkOrder ? (
                     <div style={{ padding: '20px' }}>
-                    <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Title:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.title}</span></p>
-                        </div>
-                          {/* OVERDUE WARNING  */}
+
+
+                                                {/* OVERDUE WARNING  */}
     {selectedWorkOrder.isOverdue && (
       <div style={{ 
         marginBottom: '15px',
@@ -1125,7 +1039,70 @@ Cancel
         </div>
       </div>
     )}
-    {/* Extension History Display - ADD THIS */}
+
+     {/* ADMIN PRIORITY UPDATE BANNER*/}
+  {selectedWorkOrder.adminUpdatedPriority && (
+    <div style={{ 
+      marginBottom: '15px',
+      padding: '12px',
+      backgroundColor: '#e7f3ff',
+      border: '2px solid #0066cc',
+      borderRadius: '8px',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '8px'
+    }}>
+      <i className="bi bi-shield-check" style={{ color: '#0066cc', fontSize: '16px' }}></i>
+      <div>
+        <strong style={{ color: '#0066cc' }}>Priority updated by admin</strong><br />
+        <small style={{ color: '#666' }}>
+          Changed from <strong>{selectedWorkOrder.suggestedPriority}</strong> to <strong>{selectedWorkOrder.adminUpdatedPriority}</strong>
+        </small>
+      </div>
+    </div>
+  )}
+                    <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Title:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.title}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Category:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.category || '—'}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Location:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.location || '—'}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Asset:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.asset || '—'}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Priority:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.priority}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Date Needed:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.dateNeeded || '—'}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Status:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.status}</span></p>
+                        </div>
+                      <div style={{ marginBottom: '15px' }}>
+                      <p><strong>Description:</strong></p>
+                      <span
+                        style={{
+                          display: 'block',
+                          maxWidth: '100%',
+                          wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
+                          backgroundColor: '#f9f9f9',
+                          padding: '10px',
+                          borderRadius: '5px',
+                          fontSize: '14px',
+                          color: '#333',
+                          boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)'
+                        }}
+                      >
+                    
+                       {selectedWorkOrder.description || '—'}
+                      </span>
+                     </div>
+                      {/* Extension History Display - ADD THIS */}
 {selectedWorkOrder.extensionHistory?.length > 0 && (
   <div style={{ marginBottom: '15px' }}>
     <p><strong>Extension History:</strong></p>
@@ -1155,56 +1132,11 @@ Cancel
         }}>
           <div><strong>From:</strong> {ext.old_due_date.split('T')[0]} → <strong>To:</strong> {ext.new_due_date.split('T')[0]}</div>
           <div><strong>Reason:</strong> {ext.extension_reason}</div>
-          <div style={{ color: '#666', fontSize: '12px' }}>
-            Extended on: {new Date(ext.extension_date).toLocaleDateString()}
-          </div>
         </div>
       ))}
     </div>
   </div>
 )}
-
-
-  
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Category:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.category || '—'}</span></p>
-                        </div>
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Location:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.location || '—'}</span></p>
-                        </div>
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Asset:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.asset || '—'}</span></p>
-                        </div>
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Priority:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.priority}</span></p>
-                        </div>
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Date Needed:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.dateNeeded || '—'}</span></p>
-                        </div>
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Status:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.status}</span></p>
-                        </div>
-                      <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Description:</strong></p>
-                      
-                      <span
-                        style={{
-                          display: 'block',
-                          maxWidth: '100%',
-                          wordBreak: 'break-word',
-                          whiteSpace: 'pre-wrap',
-                          backgroundColor: '#f9f9f9',
-                          padding: '10px',
-                          borderRadius: '5px',
-                          fontSize: '14px',
-                          color: '#333',
-                          boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)'
-                        }}
-                      >
-                    
-                       {selectedWorkOrder.description || '—'}
-                      </span>
-                     </div>
                     </div>
                   ) : (
                     <p>No details available.</p>

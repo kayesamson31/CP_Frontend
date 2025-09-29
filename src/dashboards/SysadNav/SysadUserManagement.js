@@ -1,7 +1,7 @@
 // src/components/SystemAdminUserManagement.js
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
-
+import { supabase } from '../../supabaseClient';
 export default function SysAdUserManagement() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -11,12 +11,8 @@ export default function SysAdUserManagement() {
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [showActivityModal, setShowActivityModal] = useState(false);
-  const [showCredentialsModal, setShowCredentialsModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [deletingUser, setDeletingUser] = useState(null);
-  const [viewingActivityUser, setViewingActivityUser] = useState(null);
-  const [resettingCredentialsUser, setResettingCredentialsUser] = useState(null);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -25,82 +21,29 @@ export default function SysAdUserManagement() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [activeTab, setActiveTab] = useState('edit');
   // Enhanced roles for System Administrator
-  const roles = ['System Administrator', 'Admin Official', 'Personnel', 'Standard User'];
+const [roles, setRoles] = useState([]);
 
-  // Sample data with enhanced user types and activity logs
-  const sampleUsers = [
-    {
-      id: 1,
-      name: 'Juan Dela Cruz',
-      email: 'juan.delacruz@company.com',
-      role: 'Standard User',
-      status: 'Active',
-      dateCreated: '2024-01-15T08:30:00Z',
-      lastLogin: '2024-03-10T14:30:00Z',
-      loginCount: 45,
-      reportsDownloaded: 8,
-      accountChanges: 2
-    },
-    {
-      id: 2,
-      name: 'Maria Santos',
-      email: 'maria.santos@company.com',
-      role: 'Personnel',
-      status: 'Active',
-      dateCreated: '2024-02-20T10:15:00Z',
-      lastLogin: '2024-03-12T09:20:00Z',
-      loginCount: 78,
-      reportsDownloaded: 25,
-      accountChanges: 1
-    },
-    {
-      id: 3,
-      name: 'Roberto Garcia',
-      email: 'roberto.garcia@company.com',
-      role: 'Admin Official',
-      status: 'Inactive',
-      dateCreated: '2024-01-10T14:45:00Z',
-      lastLogin: '2024-02-28T16:00:00Z',
-      loginCount: 120,
-      reportsDownloaded: 89,
-      accountChanges: 5
-    },
-    {
-      id: 4,
-      name: 'Ana Reyes',
-      email: 'ana.reyes@company.com',
-      role: 'Personnel',
-      status: 'Active',
-      dateCreated: '2024-03-05T09:20:00Z',
-      lastLogin: '2024-03-11T11:45:00Z',
-      loginCount: 32,
-      reportsDownloaded: 12,
-      accountChanges: 0
-    },
-    {
-      id: 5,
-      name: 'System Admin',
-      email: 'sysadmin@company.com',
-      role: 'System Administrator',
-      status: 'Active',
-      dateCreated: '2024-01-01T00:00:00Z',
-      lastLogin: '2024-03-12T08:00:00Z',
-      loginCount: 200,
-      reportsDownloaded: 150,
-      accountChanges: 15
-    }
-  ];
+// Add this new function after fetchUsers
+const fetchRoles = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('roles')
+      .select('role_name')
+      .order('role_id', { ascending: true });
+    
+    if (error) throw error;
+    
+    setRoles(data.map(role => role.role_name));
+    
+  } catch (err) {
+    console.error('Error fetching roles:', err);
+    // Fallback to default roles
+    setRoles(['System Admin', 'Admin Official', 'Personnel', 'Standard User']);
+  }
+};
 
-  // Sample activity logs
-  const sampleActivityLogs = {
-    1: [
-      { date: '2024-03-12T10:30:00Z', action: 'Login', ip: '192.168.1.100', device: 'Chrome/Windows' },
-      { date: '2024-03-11T09:15:00Z', action: 'Downloaded Report', ip: '192.168.1.100', device: 'Chrome/Windows' },
-      { date: '2024-03-10T14:30:00Z', action: 'Login', ip: '192.168.1.100', device: 'Chrome/Windows' },
-      { date: '2024-03-09T08:45:00Z', action: 'Profile Updated', ip: '192.168.1.100', device: 'Chrome/Windows' },
-      { date: '2024-03-08T16:20:00Z', action: 'Password Changed', ip: '192.168.1.100', device: 'Chrome/Windows' }
-    ]
-  };
+ 
+
 
   // Form state for adding new user
   const [newUser, setNewUser] = useState({
@@ -110,56 +53,77 @@ export default function SysAdUserManagement() {
     status: 'Active'
   });
 
-  // Enhanced API Functions with System Admin capabilities
-  const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      // TODO: Replace with actual API call for System Admin
-      // const response = await fetch('/api/sysadmin/users', {
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   }
-      // });
-      
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setUsers(sampleUsers);
-      
-    } catch (err) {
-      setError(err.message);
-      console.error('Error fetching users:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
+const fetchUsers = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select(`
+        user_id,
+        username,
+        full_name,
+        email,
+        role_id,
+        user_status,
+        date_created,
+        roles (role_name)
+      `)
+      .order('date_created', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Transform data to match your UI format
+    const transformedUsers = data.map(user => ({
+      id: user.user_id,
+      name: user.full_name,
+      email: user.email,
+      role: user.roles.role_name,
+      roleId: user.role_id,
+      status: user.user_status === 'active' ? 'Active' : 'Inactive',
+      dateCreated: user.date_created,
+    }));
+    
+    setUsers(transformedUsers);
+    
+  } catch (err) {
+    setError(err.message);
+    console.error('Error fetching users:', err);
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const createUser = async (userData) => {
-    try {
-      setLoading(true);
-      
-      // TODO: Replace with actual API call
-      const newUserWithId = {
-        ...userData,
-        id: Date.now(),
-        dateCreated: new Date().toISOString(),
-        lastLogin: null,
-        loginCount: 0,
-        reportsDownloaded: 0,
-        accountChanges: 0
-      };
-      setUsers(prevUsers => [...prevUsers, newUserWithId]);
-      alert('User created successfully! Welcome email sent with login credentials.');
-      
-    } catch (err) {
-      setError(err.message);
-      console.error('Error creating user:', err);
-      alert('Error creating user: ' + err.message);
-    } finally {
-      setLoading(false);
+const createUser = async (userData) => {
+  try {
+    setLoading(true);
+    
+    const response = await fetch('/api/sysadmin/users', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(userData)
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to create user');
     }
-  };
+    
+    const newUser = await response.json();
+    setUsers(prevUsers => [...prevUsers, newUser]);
+    alert('User created successfully! Welcome email sent with login credentials.');
+    
+  } catch (err) {
+    setError(err.message);
+    console.error('Error creating user:', err);
+    alert('Error creating user: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const updateUser = async (userId, userData) => {
     try {
@@ -201,26 +165,6 @@ export default function SysAdUserManagement() {
     }
   };
 
-  const resetUserCredentials = async (userId) => {
-    try {
-      setLoading(true);
-      
-      // TODO: Replace with actual API call
-      const tempPassword = 'TempPass' + Math.random().toString(36).slice(-6);
-      
-      // Simulate credential reset
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      alert(`Credentials reset successfully!\n\nTemporary Password: ${tempPassword}\n\nUser will be required to change password on next login.\nReset email sent to user.`);
-      
-    } catch (err) {
-      setError(err.message);
-      console.error('Error resetting credentials:', err);
-      alert('Error resetting credentials: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const bulkCreateUsers = async (usersData) => {
     try {
@@ -271,10 +215,10 @@ export default function SysAdUserManagement() {
     }
   };
 
-  // Initialize data on component mount
-  useEffect(() => {
-    fetchUsers();
-  }, []);
+ useEffect(() => {
+  fetchUsers();
+  fetchRoles();
+}, []);
 
   // Filter users based on search and filters
   useEffect(() => {
@@ -318,15 +262,6 @@ export default function SysAdUserManagement() {
     
   };
 
-  const handleViewActivityFromModal = (user) => {
-  setViewingActivityUser(user);
-  setActiveTab('activity');
-};
-
-const handleResetCredentialsFromModal = (user) => {
-  setResettingCredentialsUser(user);
-  setActiveTab('credentials');
-};
 
 const handleDeleteUserFromModal = (user) => {
   setDeletingUser(user);
@@ -362,24 +297,6 @@ const handleDeleteUserFromModal = (user) => {
     setDeletingUser(null);
   };
 
-  const handleViewActivity = (user) => {
-    setViewingActivityUser(user);
-    setShowActivityModal(true);
-  };
-
-  const handleResetCredentials = (user) => {
-    setResettingCredentialsUser(user);
-    setShowCredentialsModal(true);
-  };
-
-  const confirmResetCredentials = async () => {
-    if (!resettingCredentialsUser) return;
-    
-    await resetUserCredentials(resettingCredentialsUser.id);
-    
-    setShowCredentialsModal(false);
-    setResettingCredentialsUser(null);
-  };
 
   const handleManualEntry = () => {
     setShowAddUserModal(true);
@@ -812,24 +729,7 @@ const handleDeleteUserFromModal = (user) => {
             >
               Edit Details
             </button>
-            <button
-              className={`nav-link ${activeTab === 'activity' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('activity');
-                handleViewActivityFromModal(editingUser);
-              }}
-            >
-              Activity History
-            </button>
-            <button
-              className={`nav-link ${activeTab === 'credentials' ? 'active' : ''}`}
-              onClick={() => {
-                setActiveTab('credentials');
-                handleResetCredentialsFromModal(editingUser);
-              }}
-            >
-              Reset Credentials
-            </button>
+          
             <button
               className={`nav-link ${activeTab === 'delete' ? 'active text-danger' : ''}`}
               onClick={() => {
@@ -916,127 +816,7 @@ const handleDeleteUserFromModal = (user) => {
               </div>
             )}
             
-            {/* Activity History Tab */}
-            {activeTab === 'activity' && (
-              <div className="tab-pane fade show active">
-                {/* User Summary */}
-                <div className="row mb-4">
-                  <div className="col-md-3">
-                    <div className="card border-primary">
-                      <div className="card-body text-center py-2">
-                        <div className="h5 mb-1 text-primary">{editingUser.loginCount || 0}</div>
-                        <small className="text-muted">Total Logins</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="card border-success">
-                      <div className="card-body text-center py-2">
-                        <div className="h5 mb-1 text-success">{editingUser.reportsDownloaded || 0}</div>
-                        <small className="text-muted">Reports</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="card border-warning">
-                      <div className="card-body text-center py-2">
-                        <div className="h5 mb-1 text-warning">{editingUser.accountChanges || 0}</div>
-                        <small className="text-muted">Changes</small>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="card border-info">
-                      <div className="card-body text-center py-2">
-                        <div className="h6 mb-1 text-info">{editingUser.lastLogin ? new Date(editingUser.lastLogin).toLocaleDateString() : 'Never'}</div>
-                        <small className="text-muted">Last Login</small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Activity Timeline */}
-                <h6>Recent Activity</h6>
-                <div className="border rounded" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                  {sampleActivityLogs[editingUser.id] ? (
-                    <div className="list-group list-group-flush">
-                      {sampleActivityLogs[editingUser.id].map((log, index) => (
-                        <div key={index} className="list-group-item border-0 py-3">
-                          <div className="d-flex align-items-start">
-                            <div className={`rounded-circle me-3 d-flex align-items-center justify-content-center ${
-                              log.action.includes('Login') ? 'bg-primary' :
-                              log.action.includes('Report') ? 'bg-success' :
-                              log.action.includes('Password') ? 'bg-warning' : 'bg-info'
-                            }`} style={{ width: '8px', height: '8px', marginTop: '6px' }}></div>
-                            <div className="flex-grow-1">
-                              <div className="d-flex justify-content-between align-items-start">
-                                <div>
-                                  <h6 className="mb-1">{log.action}</h6>
-                                  <p className="text-muted mb-1">
-                                    <small>IP: {log.ip} • {log.device}</small>
-                                  </p>
-                                </div>
-                                <small className="text-muted">
-                                  {new Date(log.date).toLocaleString()}
-                                </small>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-4 text-muted">
-                      <h6>No activity logs found</h6>
-                      <p>This user has no recorded activity yet.</p>
-                    </div>
-                  )}
-                </div>
-                <div className="mt-3">
-                  <button
-                    type="button"
-                    className="btn btn-outline-primary"
-                    onClick={() => alert('Full activity export would download detailed logs')}
-                  >
-                    Export Full Logs
-                  </button>
-                </div>
-              </div>
-            )}
-            
-            {/* Reset Credentials Tab */}
-            {activeTab === 'credentials' && (
-              <div className="tab-pane fade show active">
-                <div className="bg-light p-3 rounded mb-3">
-                  <h6>User Information:</h6>
-                  <ul className="mb-0">
-                    <li><strong>Name:</strong> {editingUser.name}</li>
-                    <li><strong>Email:</strong> {editingUser.email}</li>
-                    <li><strong>Role:</strong> {editingUser.role}</li>
-                  </ul>
-                </div>
-                
-                <div className="alert alert-warning">
-                  <h6 className="alert-heading">What will happen:</h6>
-                  <ul className="mb-0">
-                    <li>A new temporary password will be generated</li>
-                    <li>Reset email will be sent to user's email address</li>
-                    <li>User will be required to change password on next login</li>
-                    <li>All existing sessions will be invalidated</li>
-                    <li>User will need to login again with new credentials</li>
-                  </ul>
-                </div>
-                
-                <button
-                  type="button"
-                  className="btn btn-warning"
-                  onClick={() => confirmResetCredentials()}
-                  disabled={loading}
-                >
-                  {loading ? 'Resetting...' : 'Reset Credentials'}
-                </button>
-              </div>
-            )}
+          
             
             {/* Delete User Tab */}
             {activeTab === 'delete' && (
