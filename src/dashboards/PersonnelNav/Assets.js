@@ -11,6 +11,7 @@ import {
   Table,
   Modal,
   Alert,
+  Badge,
 } from "react-bootstrap";
 
 export default function Assets() {
@@ -413,179 +414,194 @@ const handleCancelIncident = () => {
             </p>
           </Alert>
         )}
-
-        {/* Detailed Asset Modal - Keep existing modal code */}
+{/* Detailed Asset Modal */}
         <Modal
           show={!!selectedAsset}
           onHide={() => setSelectedAsset(null)}
-          size="lg"
+          size="xl"
         >
           {selectedAsset && (
             <>
               <Modal.Header closeButton>
-                <Modal.Title>{selectedAsset.name} Details</Modal.Title>
+                <Modal.Title>Asset Details</Modal.Title>
               </Modal.Header>
               <Modal.Body>
-                <h5>{selectedAsset.name}</h5>
+                <Row>
+                  {/* Left Column - Asset Information */}
+                  <Col lg={8}>
+                  {/* Status Badge and Report Button */}
+<div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+  <span className={`badge ${
+    selectedAsset.status === 'Operational' ? 'bg-success' :
+    selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}>
+    {selectedAsset.status}
+  </span>
+  <Button 
+    variant="outline-danger"
+    size="sm"
+    onClick={() => {
+      setIncidentAsset(selectedAsset);
+      setSelectedAsset(null);
+      setTimeout(() => {
+        setShowIncidentModal(true);
+      }, 100);
+    }}
+  >
+    Report Incident
+  </Button>
+</div>
 
-                {/* Asset Info - Two Column */}
-                <Row className="mb-4">
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label><strong>ID:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.id}readOnly />
-                    </Form.Group>
+                    {/* Asset Info - Two Column Grid */}
+                    <div className="row g-3">
+                      <div className="col-md-6">
+                        <Form.Group>
+                          <Form.Label><strong>Asset Name/Code:</strong></Form.Label>
+                          <Form.Control type="text" value={selectedAsset.name} readOnly />
+                        </Form.Group>
+                      </div>
+                      <div className="col-md-6">
+                        <Form.Group>
+                          <Form.Label><strong>Category:</strong></Form.Label>
+                          <Form.Control type="text" value={selectedAsset.category} readOnly />
+                        </Form.Group>
+                      </div>
+                      <div className="col-md-6">
+                        <Form.Group>
+                          <Form.Label><strong>Acquisition Date:</strong></Form.Label>
+                          <Form.Control type="text" value={selectedAsset.acquisitionDate} readOnly />
+                        </Form.Group>
+                      </div>
+                      <div className="col-md-6">
+                        <Form.Group>
+                          <Form.Label><strong>Location:</strong></Form.Label>
+                          <Form.Control type="text" value={selectedAsset.location} readOnly />
+                        </Form.Group>
+                      </div>
+                      <div className="col-md-12">
+                        <Form.Group>
+                          <Form.Label><strong>Next Maintenance:</strong></Form.Label>
+                          <Form.Control 
+                            type="text" 
+                            value={selectedAsset.nextMaintenance || 'Not scheduled'} 
+                            readOnly 
+                          />
+                          {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
+                            <Form.Text className="text-muted d-block mt-1">
+                              <i className="fas fa-repeat me-1"></i>
+                              Repeats: {selectedAsset.nextMaintenanceRepeat}
+                            </Form.Text>
+                          )}
+                        </Form.Group>
+                      </div>
+                    </div>
+
+                    {/* Maintenance History with border-top spacing */}
+                    <div className="mt-4 pt-3 border-top">
+                      <h6 className="mb-3">
+                        <i className="fas fa-history me-2"></i>
+                        Maintenance History
+                      </h6>
+                      <Table bordered size="sm" className="mt-2">
+                        <thead>
+                          <tr>
+                            <th>Date</th>
+                            <th>Tasks</th>
+                            <th>Assigned</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedAsset.maintenanceHistory?.length > 0 ? (
+                            selectedAsset.maintenanceHistory.map((entry, idx) => (
+                              <tr key={idx}>
+                                <td>{entry.date}</td>
+                                <td>{entry.task}</td>
+                                <td>{entry.Assigned}</td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="3" className="text-center text-muted">
+                                No maintenance history available
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </Table>
+                    </div>
                   </Col>
-                  <Col md={6}>
-                    <Form.Group>
-                      <Form.Label><strong>Status:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.status} readOnly />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6} className="mt-3">
-                    <Form.Group>
-                      <Form.Label><strong>Location:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.location} readOnly />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6} className="mt-3">
-                    <Form.Group>
-                      <Form.Label><strong>Category:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.category} readOnly />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6} className="mt-3">
-                    <Form.Group>
-                      <Form.Label><strong>Category:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.category} readOnly />
-                    </Form.Group>
-                  </Col>
-                  <Col md={6} className="mt-3">
-                    <Form.Group>
-                      <Form.Label><strong>Acquisition Date:</strong></Form.Label>
-                      <Form.Control type="text" value={selectedAsset.acquisitionDate} readOnly />
-                    </Form.Group>
+
+                  {/* Right Column - Incident Reports Panel */}
+                  <Col lg={4}>
+                    <div className="h-100 border-start ps-4">
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="mb-0">
+                      Incident Reports
+                    </h6>
+                    {selectedAsset.incidentHistory?.length > 0 && (
+                      <Badge bg="danger">{selectedAsset.incidentHistory.length}</Badge>
+                    )}
+                  </div>
+                      
+                      <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                        {selectedAsset.incidentHistory?.length > 0 ? (
+                          selectedAsset.incidentHistory.map((incident, index) => (
+                            <div key={index} className="mb-3 p-3 border rounded shadow-sm bg-white">
+                              <div className="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                  <strong className="text-danger">{incident.reportedBy}</strong>
+                                  <div>
+                                    <small className="text-muted">
+                                      {new Date(incident.reportedAt).toLocaleDateString()}
+                                    </small>
+                                  </div>
+                                </div>
+                                <div className="text-end">
+                                  <Badge bg={incident.status === 'Open' ? 'danger' : 'secondary'}>
+                                    {incident.status}
+                                  </Badge>
+                                </div>
+                              </div>
+                              
+                              <div className="mb-2">
+                                <span className="fw-bold">{incident.type}</span>
+                                <span className={`badge ms-2 ${
+                                  incident.severity === 'High' ? 'bg-danger' :
+                                  incident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
+                                }`}>
+                                  {incident.severity}
+                                </span>
+                              </div>
+                              
+                              <p className="small mb-0 text-muted">
+                                {incident.description.length > 80 
+                                  ? `${incident.description.substring(0, 80)}...` 
+                                  : incident.description
+                                }
+                              </p>
+                            </div>
+                          ))
+                       ) : (
+                      <div className="text-center text-muted py-4">
+                        <p className="mb-0">No incident reports</p>
+                        <small>All clear!</small>
+                      </div>
+                        )}
+                      </div>
+                    </div>
                   </Col>
                 </Row>
-
-                {/* Maintenance History */}
-                <div className="mb-4">
-                  <h6>Maintenance History</h6>
-                  <Table bordered size="sm" className="mt-2">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Tasks</th>
-                        <th>Assigned</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedAsset.maintenanceHistory?.length > 0 ? (
-                        selectedAsset.maintenanceHistory.map((entry, idx) => (
-                          <tr key={idx}>
-                            <td>{entry.date}</td>
-                            <td>{entry.task}</td>
-                            <td>{entry.Assigned}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="3" className="text-center text-muted">
-                            No maintenance history available
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </Table>
-                </div>
-
-              {/* Next Maintenance - ADD THIS ENTIRE SECTION */}
-<div className="mb-4">
-  <h6>Next Maintenance</h6>
-  <div className="p-3" style={{ backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #dee2e6' }}>
-    <Row>
-      <Col md={6}>
-        <strong>Scheduled Date:</strong>
-        <div className="mt-1">{selectedAsset.nextMaintenance || "Not scheduled"}</div>
-      </Col>
-      <Col md={6}>
-        <strong>Status:</strong>
-        <div className="mt-1">
-          <span className={`badge ${
-            selectedAsset.nextMaintenance && new Date(selectedAsset.nextMaintenance) < new Date()
-              ? 'bg-danger' 
-              : selectedAsset.nextMaintenance && new Date(selectedAsset.nextMaintenance) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-              ? 'bg-warning'
-              : 'bg-success'
-          }`}>
-            {selectedAsset.nextMaintenance 
-              ? new Date(selectedAsset.nextMaintenance) < new Date()
-                ? 'Overdue'
-                : new Date(selectedAsset.nextMaintenance) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-                ? 'Due Soon'
-                : 'Scheduled'
-              : 'Not Scheduled'
-            }
-          </span>
-        </div>
-      </Col>
-    </Row>
-  </div>
-</div>
-
-               {/* Incident History */}
-<div>
-  <div className="d-flex justify-content-between align-items-center mb-3">
-    <h6>Incident History</h6>
-    <Button 
-      size="sm" 
-      variant="outline-danger"
-      onClick={() => {
-        setIncidentAsset(selectedAsset);  // Store the asset data
-        setSelectedAsset(null);           // Close asset details modal
-        setTimeout(() => {
-          setShowIncidentModal(true);     // Open incident modal
-        }, 100);
-      }}
-    >
-      Report Incident
-    </Button>
-  </div>
-  
-  {selectedAsset.incidentHistory?.length > 0 ? (
-    selectedAsset.incidentHistory.map((incident, index) => (
-      <div key={index} className="border rounded p-3 mb-3">
-        <div className="d-flex justify-content-between align-items-start mb-2">
-          <div>
-            <strong>{incident.type}</strong>
-            <span className={`badge ms-2 ${
-              incident.severity === 'High' ? 'bg-danger' :
-              incident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
-            }`}>
-              {incident.severity}
-            </span>
-          </div>
-          <small className="text-muted">{incident.id}</small>
-        </div>
-        <p className="mb-2">{incident.description}</p>
-        <div className="d-flex justify-content-between">
-          <small className="text-muted">
-            Reported by: {incident.reportedBy}
-          </small>
-          <small className="text-muted">
-            {new Date(incident.reportedAt).toLocaleString()}
-          </small>
-        </div>
-      </div>
-    ))
-  ) : (
-    <p className="text-muted">No incidents reported yet.</p>
-  )}
-</div>
               </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setSelectedAsset(null)}>
+                  Close
+                </Button>
+              </Modal.Footer>
             </>
           )}
         </Modal>
+      
 {/* Incident Report Modal */}
 <Modal
   show={showIncidentModal}

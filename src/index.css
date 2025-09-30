@@ -1,5 +1,16 @@
+/* 
+  Import ko dito ang Bootstrap Icons para magamit ko agad yung mga built-in icons
+  tulad ng mga gamit sa buttons, navigation, at iba pa.
+*/
 @import "bootstrap-icons/font/bootstrap-icons.css";
 @import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
+
+/* 
+  Ito yung pinaka-global style ng body ng buong web app.
+  - Tinanggal ko yung default margin ng browser para clean ang layout.
+  - Nilagay ko yung common font families para mas consistent ang text across devices.
+  - Naglagay ako ng font-smoothing (WebKit at Mozilla) para mas readable at smooth yung fonts.
+*/
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',

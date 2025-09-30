@@ -1,15 +1,26 @@
-// src/services/WorkOrderService.js
+// Ginawa ko itong service class para ihiwalay ang business logic ng work orders
+// mula sa mismong UI components. Sa ganitong paraan, mas malinis at reusable ang code.
+// Lahat ng interaction sa Supabase (database) na related sa work orders, dito ko nilagay.
+
+
 import { supabase } from '../supabaseClient';
 
 export class WorkOrderService {
-  // Get current user from localStorage
+ // Kinuha ko yung current user mula sa localStorage
+  // kasi kailangan ko malaman kung sino yung gumagawa ng action
+  // tulad ng pag-submit o pag-cancel ng work order.
+
   static getCurrentUser() {
     const userData = localStorage.getItem('currentUser');
     return userData ? JSON.parse(userData) : null;
   }
 
- // Updated submitWorkOrder method - simplified version
-// Updated submitWorkOrder method - simplified version
+ // Ito yung method na nagha-handle ng paggawa ng bagong work order.
+  // Sinimplify ko siya para mas madaling maintindihan.
+  // 1. Kinuha ko muna yung current user (dapat naka-login).
+  // 2. Kinuha ko yung default status na "To Review" at priority level (default Low).
+  // 3. Inayos ko yung work order data bago i-insert sa database.
+  // 4. Nag-log ako ng activity para may record ng ginawa.
 static async submitWorkOrder(workOrderData) {
   try {
     const currentUser = this.getCurrentUser();
@@ -88,8 +99,9 @@ const { data, error } = await supabase
     return { success: false, error: error.message };
   }
 }
-
-  // Get work orders for current user
+// Ito naman ay para makuha ng user ang lahat ng work orders niya.
+  // Naglagay ako ng filters para pwedeng hanapin by status, priority, or keyword.
+  // Ginamit ko ang Supabase queries para mas flexible.
   static async getUserWorkOrders(filters = {}) {
     try {
       const currentUser = this.getCurrentUser();
@@ -152,7 +164,10 @@ let query = supabase
     }
   }
 
-// Replace your cancelWorkOrder function with this:
+  // Dito ko nilagay ang pag-cancel ng work order.
+  // Kapag kinansel ng user ang request niya, papalitan ko yung status
+  // ng "Cancelled" at ise-save ko rin yung date_resolved.
+  // Nag-log din ako ng activity para may trace ng action.
 static async cancelWorkOrder(workOrderId) {
   try {
     const currentUser = this.getCurrentUser();
@@ -172,7 +187,6 @@ static async cancelWorkOrder(workOrderId) {
       throw new Error('Could not find "Cancelled" status');
     }
 
-    // Update work order status - REMOVE the problematic SELECT
     const { data, error } = await supabase
       .from('work_orders')
       .update({ 
@@ -202,7 +216,8 @@ static async cancelWorkOrder(workOrderId) {
   }
 }
 
-  // Get work order details
+  // Ito yung method para makuha ang buong detalye ng isang work order.
+  // Kinuha ko rin ang related priority, status, asset, at user info.
   static async getWorkOrderDetails(workOrderId) {
     try {
       const { data, error } = await supabase
@@ -227,6 +242,10 @@ static async cancelWorkOrder(workOrderId) {
     }
   }
 
+  // Ginawa ko itong function para makuha ang bilang ng work orders per status
+  // (To Review, Pending, In Progress, Completed, etc.).
+  // Inayos ko rin yung order ng display para pareho sa admin view.
+
 static async getStatusCounts() {
   console.log('🚀 getStatusCounts method called!');
   try {
@@ -235,10 +254,8 @@ static async getStatusCounts() {
       return { success: false, error: 'User not authenticated' };
     }
 
-    // Define the EXACT order we want (same as admin)
     const desiredOrder = ['To Review', 'Pending', 'In Progress', 'Completed', 'Failed', 'Rejected', 'Cancelled'];
 
-    // Get all work order statuses from database first
     const { data: allStatuses, error: statusError } = await supabase
       .from('statuses')
       .select('status_id, status_name, color_code')
@@ -288,7 +305,8 @@ static async getStatusCounts() {
   }
 }
 
-  // Helper function to get status icons
+ // Dito ko nilagay ang icons per status (pang-UI purposes).
+  // Halimbawa, kapag "Completed" → check icon, kapag "Pending" → clock icon.
   static getStatusIcon(status) {
     switch (status) {
       case 'To Review': return 'bi bi-eye';
@@ -302,7 +320,8 @@ static async getStatusCounts() {
     }
   }
 
-  // Get priority levels
+  // Ginawa ko itong function para makuha lahat ng priority levels.
+  // Importante ito para kapag gumawa ng work order, may dropdown ng priority.
   static async getPriorityLevels() {
     try {
       const { data, error } = await supabase
@@ -320,7 +339,8 @@ static async getStatusCounts() {
     }
   }
 
-  // Log activity
+// Activity logger – ginawa ko ito para lahat ng ginawa ng user
+  // (like create, cancel, etc.) may record sa "activity_tracking" table.
   static async logActivity(activityData) {
     try {
       const { error } = await supabase
@@ -335,7 +355,9 @@ static async getStatusCounts() {
     }
   }
 
-  // Get client IP (simplified for demo)
+    // Simple function para makuha ang IP address ng client.
+  // Nilagay ko ito kasi gusto kong malaman kung saan galing yung request
+  // (pang-audit trail).
   static async getClientIP() {
     try {
       const response = await fetch('https://api.ipify.org?format=json');

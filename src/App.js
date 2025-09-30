@@ -1,14 +1,18 @@
-// src/App.jsx
+// Una, ini-import ko lahat ng kailangan kong dependencies at components.
+// Kasama dito ang React, React Router (pang-routing ng mga pages),
+// EmailService (pang-email notification), at iba’t ibang dashboard pages
+// para sa iba’t ibang user roles (standard, personnel, admin, sysadmin).
+
 import React, { useEffect } from 'react';
 import { EmailService } from './utils/EmailService';
 import PrivateRoute from './PrivateRoute'; 
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-//public
+// Public pages (hindi kailangan ng login para ma-access)
 import LandingPage from './LandingPage';
 import SidebarLayout from './Layouts/SidebarLayout';
 import LoginPage from './LoginPage';
 import Signup from './Signup';
-//shared pages
+// Shared pages (pwede sa lahat ng roles pero may access restriction)
 import Profile from './dashboards/UserNav/Profile';
 import Notification from './dashboards/UserNav/Notification';
 //Nav of each Users.
@@ -34,7 +38,9 @@ import UserManagement from './dashboards/AdminNav/UserManagement';
 import AssetManagement from './dashboards/AdminNav/AssetManagement';
 
 function App() {
-    // Add this useEffect for EmailJS initialization
+   // Ginamit ko ang useEffect para i-initialize ang EmailJS service
+  // sa tuwing maglo-load ang app. Para dito ko mache-check kung tama
+  // ang mga environment variables (service ID, template ID, public key).
   useEffect(() => {
     console.log('Initializing EmailJS...');
     
@@ -50,7 +56,8 @@ function App() {
       });
     }
     
-    // Optional: Test the configuration in development
+    // Ginawa ko ring optional test mode para sa development,
+    // para macheck agad kung gumagana ang EmailJS configuration.
     if (process.env.NODE_ENV === 'development') {
       EmailService.testConfiguration().then(result => {
         if (result.success) {
@@ -63,17 +70,19 @@ function App() {
     }
   }, []); 
   return (
+     // Ginamit ko ang BrowserRouter (Router) para sa navigation system ng buong app.
+    // Lahat ng pages ay dinefine ko sa loob ng <Routes> at <Route>.
     <Router>
       <Routes>
-        {/* Public Pages */}
+         {/* PUBLIC ROUTES (kahit hindi naka-login) */}
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<Signup />} />
-        
-        {/* ADD THIS: Standalone Setup Wizard (no authentication required) */}
         <Route path="/setup-wizard" element={<SetupWizard />} />
 
-        {/* Standard User*/}
+        {/* STANDARD USER ROUTES */}
+        {/* Gumamit ako ng PrivateRoute para masigurado na
+            only "standard" role ang makaka-access sa mga routes na ito */}
         <Route 
         path="/dashboard-user" 
         element={
@@ -101,10 +110,7 @@ function App() {
   } 
 />
 
-       {/*  <Route path="/dashboard-user/VehicleRequest" element={<VehicleRequest/>} /> */}
-       {/*  <Route path="/dashboard-user/FacilityRequest" element={<FacilityRequest/>} /> */ }
-
-        {/* Personnel*/}
+  
       {/* Personnel - Change to separate routes */}
        <Route 
         path="/dashboard-personnel" 

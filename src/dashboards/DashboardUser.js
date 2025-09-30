@@ -1,27 +1,32 @@
+// Import ko lahat ng kakailanganin kong components at services
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Form, Badge, Card, InputGroup, FormControl, Modal } from 'react-bootstrap';
 import { WorkOrderService } from '../services/WorkOrderService';
-
+// Ito ang mismong Dashboard component ng user
 export default function DashboardUser() {
+  // States para sa filters (status at priority)
+  // Nilagay ko default na "To Review" para fresh work orders agad ang makikita ng user  
 const [selectedStatus, setSelectedStatus] = useState('To Review');
 const [selectedPriority, setSelectedPriority] = useState('All');
+ // States para sa modals
 const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
 const [searchTerm, setSearchTerm] = useState(''); 
 const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
 const [showDetailsModal, setShowDetailsModal] = useState(false);
 const [showPriorityModal, setShowPriorityModal] = useState(false);
 
-// State for data from Supabase
+  // States para sa data at errors
 const [historyData, setHistoryData] = useState([]);
 const [statusCounts, setStatusCounts] = useState([]);
 const [priorities, setPriorities] = useState([]);
 const [loading, setLoading] = useState(true);
 const [submitting, setSubmitting] = useState(false);
 const [error, setError] = useState('');
-// Add this after your existing state variables
+
+ // Para sa background refresh indicator (nagche-check kung may bagong work orders)
 const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
 
-// Form data state
+ // State ng form para sa bagong Work Order
 const [formData, setFormData] = useState({
   title: '',
   category: '',
@@ -31,14 +36,15 @@ const [formData, setFormData] = useState({
   description: '',
   dateNeeded: ''
 });
-
 const [formErrors, setFormErrors] = useState({});
 
+  // Function na ginagamit ko para i-handle ang pag-update ng form fields
+  // Kapag may error, nililinis ko agad para di mag-stick
 const handleChange = (field, value) => {
   setFormData(prev => ({ ...prev, [field]: value }));
   setFormErrors(prev => ({ ...prev, [field]: '' }));
 };
-
+ // Function para mag-assign ng icons depende sa status
 const getStatusIcon = (status) => {
   switch (status) {
     case 'To Review': return 'bi bi-eye';
@@ -52,19 +58,23 @@ const getStatusIcon = (status) => {
   }
 };
 
-// Load data on component mount
+// Initial load ng data (priorities, status counts, work orders)
 useEffect(() => {
   loadInitialData();
 }, []);
 
-// Reload work orders when filters change
+ //  Every time magbago yung filters, nire-reload ko yung work orders
 useEffect(() => {
   if (!loading) {
     loadWorkOrders();
   }
 }, [selectedStatus, selectedPriority, searchTerm]);
 
-// ADD THIS NEW useEffect AFTER THE ABOVE:
+
+
+ //  Ito ang medyo complex: Polling mechanism
+  // Gusto kong mag-refresh ng data automatically kada ilang seconds
+  // Depende kung anong tab ang tinitingnan (faster if "To Review" or "Pending")
 useEffect(() => {
   let pollInterval;
   
@@ -82,7 +92,7 @@ useEffect(() => {
   
   pollInterval = setInterval(pollForUpdates, pollInterval_ms);
   
-  // Also listen for tab visibility changes
+  // Gumamit din ako ng event listener para kapag binalikan ng user yung tab, mag-refresh agad
   const handleVisibilityChange = () => {
     if (document.visibilityState === 'visible') {
       // User came back to tab, refresh immediately
@@ -98,6 +108,7 @@ useEffect(() => {
   };
 }, [selectedStatus, loading]);
 
+  //Initial load function
 const loadInitialData = async () => {
   setLoading(true);
   try {
@@ -121,6 +132,7 @@ const loadInitialData = async () => {
   }
 };
 
+// Load status counts (para sa tabs)
 const loadStatusCounts = async () => {
   const result = await WorkOrderService.getStatusCounts();
   if (result.success) {
@@ -128,6 +140,9 @@ const loadStatusCounts = async () => {
   }
 };
 
+  // Load work orders
+  // Medyo mahaba kasi kailangan ko i-transform yung data para madali siyang gamitin
+  // Naglagay din ako ng overdue logic dito (kung lumampas na ang due date pero "Pending" o "In Progress" pa rin)
 const loadWorkOrders = async () => {
   const filters = {
     status: selectedStatus,
@@ -138,8 +153,7 @@ const loadWorkOrders = async () => {
   const result = await WorkOrderService.getUserWorkOrders(filters);
   if (result.success) {
 
-    const transformedData = result.data.map(wo => {
-  // ADD OVERDUE LOGIC HERE
+  const transformedData = result.data.map(wo => {
   const dueDate = new Date(wo.due_date);
   const currentDate = new Date();
   // Set time to start of day for accurate comparison
@@ -303,7 +317,6 @@ return (
             >       
 
 {/* Status Cards */}
-
  <Row className="w-100">
   {/* Error Alert */}
 {error && (
@@ -430,7 +443,6 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 {/* History Section */}
 <Card className="shadow-sm">
   <Card.Body>
-   {/* REPLACE your existing History header <div> with this: */}
 <div className="mb-3 d-flex justify-content-between align-items-center">
   <h5 style={{color: '#284386' }}>History</h5>
   
@@ -615,7 +627,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 </Button>
 
 
-                                               {/* Work Order Request Modal */}
+            {/* Work Order Request Modal */}
                 
                       <Modal
                         show={showWorkOrderModal}
@@ -643,7 +655,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
                       </Modal.Title>
                       </Modal.Header>
 
-                                                    {/* Body */}
+                      {/* Body */}
                       <Modal.Body style={{ padding: '30px', backgroundColor: '#ffffff' }}>
                         <Form>
                           {/* Basic Information Card */}

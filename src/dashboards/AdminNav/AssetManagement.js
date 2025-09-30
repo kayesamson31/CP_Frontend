@@ -903,18 +903,21 @@ const handleCreateTask = async () => {
                 <Row>
                   {/* Left Column - Asset Information */}
                   <Col lg={8}>
+                  <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+  <span className={`badge ${
+    selectedAsset.status === 'Operational' ? 'bg-success' :
+    selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}>
+    {selectedAsset.status}
+  </span>
+</div>
                     {!isEditing ? (
                       // View Mode
                       <div className="row g-3">
                         <div className="col-md-6">
                           <Form.Group>
-                            <Form.Label><strong>Asset ID:</strong></Form.Label>
-                            <Form.Control type="text" value={selectedAsset.id} readOnly />
-                          </Form.Group>
-                        </div>
-                        <div className="col-md-6">
-                          <Form.Group>
-                            <Form.Label><strong>Asset Name:</strong></Form.Label>
+                            <Form.Label><strong>Asset Name/Code:</strong></Form.Label>
                             <Form.Control type="text" value={selectedAsset.name} readOnly />
                           </Form.Group>
                         </div>
@@ -924,43 +927,23 @@ const handleCreateTask = async () => {
                             <Form.Control type="text" value={selectedAsset.category} readOnly />
                           </Form.Group>
                         </div>
-                        <div className="col-md-6">
-                          <Form.Group>
-                            <Form.Label><strong>Status:</strong></Form.Label>
-                            <div className="pt-2">
-                              <span className={`badge ${
-                                selectedAsset.status === 'Operational' ? 'bg-success' :
-                                selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
-                                'bg-secondary'
-                              }`}>
-                                {selectedAsset.status}
-                              </span>
-                            </div>
-                          </Form.Group>
-                        </div>
-                        <div className="col-md-6">
-                          <Form.Group>
-                            <Form.Label><strong>Location:</strong></Form.Label>
-                            <Form.Control type="text" value={selectedAsset.location} readOnly />
-                          </Form.Group>
-                        </div>
-                        <div className="col-md-6">
-                          <Form.Group>
-                            <Form.Label><strong>Acquisition Date:</strong></Form.Label>
-                            <Form.Control type="text" value={selectedAsset.acquisitionDate} readOnly />
-                          </Form.Group>
-                        </div>
-
-                        <div className="col-md-12">
+                       <div className="col-md-6">
   <Form.Group>
-    <Form.Label><strong>Next Maintenance:</strong></Form.Label>
-    <div className="d-flex align-items-center gap-3">
-      <Form.Control 
-        type="text" 
-        value={selectedAsset.nextMaintenance || 'Not scheduled'} 
-        readOnly 
-        className="flex-grow-1"
-      />
+    <Form.Label><strong>Acquisition Date:</strong></Form.Label>
+    <Form.Control type="text" value={selectedAsset.acquisitionDate} readOnly />
+  </Form.Group>
+</div>
+<div className="col-md-6">
+  <Form.Group>
+    <Form.Label><strong>Location:</strong></Form.Label>
+    <Form.Control type="text" value={selectedAsset.location} readOnly />
+  </Form.Group>
+</div>
+
+ <div className="col-md-12">
+  <Form.Group>
+    <div className="d-flex justify-content-between align-items-center mb-2">
+      <Form.Label className="mb-0"><strong>Next Maintenance:</strong></Form.Label>
       <Button 
         variant="outline-primary" 
         size="sm"
@@ -979,25 +962,23 @@ const handleCreateTask = async () => {
         Schedule
       </Button>
     </div>
+    <Form.Control 
+      type="text" 
+      value={selectedAsset.nextMaintenance || 'Not scheduled'} 
+      readOnly 
+    />
     {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
-      <Form.Text className="text-muted">
+      <Form.Text className="text-muted d-block mt-1">
         <i className="fas fa-repeat me-1"></i>
         Repeats: {selectedAsset.nextMaintenanceRepeat}
       </Form.Text>
     )}
   </Form.Group>
-</div>
-                        
+</div>                
                       </div>
                     ) : (
                       // Edit Mode
                       <div className="row g-3">
-                        <div className="col-md-6">
-                          <Form.Group>
-                            <Form.Label>Asset ID</Form.Label>
-                            <Form.Control type="text" value={editingAsset.id} disabled />
-                          </Form.Group>
-                        </div>
                         <div className="col-md-6">
                           <Form.Group>
                             <Form.Label>Asset Name *</Form.Label>
@@ -1101,8 +1082,11 @@ const handleCreateTask = async () => {
 
 
                     {/* Maintenance History */}
-                    <div className="mt-4">
-                      <h6>Maintenance History</h6>
+                  <div className="mt-4 pt-3 border-top">
+  <h6 className="mb-3">
+    <i className="fas fa-history me-2"></i>
+    Maintenance History
+  </h6>
                       <Table bordered size="sm" className="mt-2">
                         <thead>
                           <tr>
@@ -1207,14 +1191,23 @@ const handleCreateTask = async () => {
                   </Col>
 
                  {/* Right Column - Incident Reports Panel */}
+{/* Right Column - Incident Reports Panel */}
 <Col lg={4}>
-  <div className="border-start ps-4">
-    <h6>Incident Reports</h6>
+  <div className="h-100 border-start ps-4">
+    <div className="d-flex justify-content-between align-items-center mb-3">
+      <h6 className="mb-0">
+        <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
+        Incident Reports
+      </h6>
+      {selectedAsset.incidentReports?.length > 0 && (
+        <Badge bg="danger">{selectedAsset.incidentReports.length}</Badge>
+      )}
+    </div>
     
     <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
       {selectedAsset.incidentReports?.length > 0 ? (
-        selectedAsset.incidentReports.map((incident, index) => (
-          <div key={index} className="mb-3 p-3 border rounded">
+       selectedAsset.incidentReports.map((incident, index) => (
+  <div key={index} className="mb-3 p-3 border rounded shadow-sm bg-white">
             <div className="d-flex justify-content-between align-items-start mb-2">
               <div>
                 <strong className="text-danger">{incident.reportedBy}</strong>
@@ -1258,12 +1251,13 @@ const handleCreateTask = async () => {
             </Button>
           </div>
         ))
-      ) : (
-        <div className="text-center text-muted py-4">
-          <i className="fas fa-exclamation-triangle fa-2x mb-3 opacity-50"></i>
-          <p>No incident reports submitted yet.</p>
-        </div>
-      )}
+     ) : (
+  <div className="text-center text-muted py-5">
+    <i className="fas fa-clipboard-check fa-3x mb-3 opacity-25"></i>
+    <p className="mb-0">No incident reports</p>
+    <small>All clear!</small>
+  </div>
+)}
     </div>
   </div>
 </Col>
@@ -1309,16 +1303,30 @@ const handleCreateTask = async () => {
         <Col md={6}>
           <Form.Group>
             <Form.Label>Select Asset *</Form.Label>
-            <Form.Select
-              value={newTask.assetId}
-              onChange={(e) => setNewTask({...newTask, assetId: e.target.value})}
-              required
-            >
-              <option value="">Select Asset</option>
-              {assets.filter(asset => asset.status === 'Operational').map(asset => (
-                <option key={asset.id} value={asset.id}>{asset.name} ({asset.id})</option>
-              ))}
-            </Form.Select>
+           <Form.Select
+  value={newTask.assetId}
+  onChange={(e) => setNewTask({...newTask, assetId: e.target.value})}
+  required
+>
+  <option value="">Select Asset</option>
+  {assets.filter(asset => asset.status === 'Operational').length === 0 ? (
+    <option disabled>No operational assets available</option>
+  ) : (
+    assets
+      .filter(asset => asset.status === 'Operational')
+      .map(asset => (
+        <option key={asset.id} value={asset.id}>
+          {asset.name} ({asset.id})
+        </option>
+      ))
+  )}
+</Form.Select>
+<Form.Text className="text-muted">
+  {assets.filter(asset => asset.status === 'Operational').length === 0 
+    ? 'All assets are currently under maintenance or retired'
+    : `Only operational assets can be assigned tasks (${assets.filter(asset => asset.status === 'Operational').length} available)`
+  }
+</Form.Text>
             <Form.Text className="text-muted">
               Only operational assets can be assigned tasks
             </Form.Text>
@@ -1643,6 +1651,14 @@ const handleCreateTask = async () => {
     <Modal.Title>Assign Maintenance Task from Incident</Modal.Title>
   </Modal.Header>
   <Modal.Body>
+      {/* DEBUG INFO - Remove after fixing */}
+  <div className="alert alert-info">
+    <strong>Debug Info:</strong><br/>
+    Total Assets: {assets.length}<br/>
+    Operational Assets: {assets.filter(a => a.status === 'Operational').length}<br/>
+    Total Personnel: {personnel.length}
+  </div>
+
     {selectedIncident && (
       <>
         <Alert variant="info">

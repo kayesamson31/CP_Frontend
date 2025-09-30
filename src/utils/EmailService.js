@@ -1,12 +1,19 @@
-// utils/EmailService.js - Final version that matches your EmailJS template exactly
-import emailjs from 'emailjs-com';
+// Ito yung service file na ginawa ko para i-handle lahat ng email-related functionalities
+// gamit ang EmailJS. Para mas malinis at reusable, nilagay ko siya sa isang class na may static methods.
 
+
+import emailjs from 'emailjs-com';
 export class EmailService {
+    // Kinuha ko ang mga configuration values (Service ID, Template ID, Public Key)
+  // mula sa environment variables (.env file). Mas secure ito kaysa i-hardcode.
+
   static EMAILJS_SERVICE_ID = process.env.REACT_APP_EMAILJS_SERVICE_ID || '';
   static EMAILJS_TEMPLATE_ID = process.env.REACT_APP_EMAILJS_TEMPLATE_ID || '';
   static EMAILJS_PUBLIC_KEY = process.env.REACT_APP_EMAILJS_PUBLIC_KEY || '';
 
   static init() {
+     // Ginawa ko ang init() para ma-check kung kumpleto ang EmailJS configuration.
+    // Kapag kulang, maglo-log ito ng error. Kapag kumpleto, i-initialize niya ang EmailJS.
     try {
       console.log('EmailJS Config Check:', {
         serviceId: this.EMAILJS_SERVICE_ID,
@@ -28,10 +35,16 @@ export class EmailService {
     }
   }
 
+   // Simple check lang para makita kung kumpleto yung Service ID, Template ID, at Public Key.
+    // Ginagamit ko ito bago magpadala ng email para maiwasan ang errors.
   static isConfigured() {
     return !!(this.EMAILJS_SERVICE_ID && this.EMAILJS_TEMPLATE_ID && this.EMAILJS_PUBLIC_KEY);
   }
 
+   // Ito yung function na nagpapadala ng isang email sa isang user.
+    // Karaniwan kong ginagamit ito para sa "account creation" na may temporary password.
+    // Ang templateParams dito ay naka-base sa EmailJS template variables
+    // kaya kailangan magmatch ang mga pangalan (user_email, user_name, etc.)
   static async sendUserCredentials(userEmail, userFullName, tempPassword, organizationName) {
     try {
       if (!this.isConfigured()) {
@@ -72,6 +85,9 @@ export class EmailService {
     }
   }
 
+  // Ginawa ko itong method para makapagpadala ng credentials nang maramihan (bulk send).
+    // Nilagyan ko rin ng delay (3 seconds) kada email para hindi magkaproblema sa EmailJS rate limits.
+    // Gumawa rin ako ng onProgress callback para makita kung ilang emails na ang napadala.
   static async sendBulkCredentials(users, organizationName, onProgress = null) {
     if (!this.isConfigured()) {
       console.error('EmailJS not configured - all emails will fail');
@@ -145,7 +161,8 @@ export class EmailService {
   }
 
  static async testConfiguration() {
-  // Return success without actually sending email
+ // Ito naman ang simpleng function na ginawa ko para matest ang setup
+    // nang hindi nauubos ang free email requests sa EmailJS.
   console.log('Email test skipped to save free requests');
   return { success: true, message: 'Test skipped' };
 }

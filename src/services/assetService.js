@@ -1,8 +1,14 @@
-// services/assetService.js
+// Ito yung main service file ko para sa Asset Management ng system.
+// Dito ko nilagay lahat ng functions na may kinalaman sa assets, 
+// mula sa pag-fetch ng data, pag-add/update, hanggang sa maintenance tasks at bulk uploads.
+
 import { supabase } from '../supabaseClient'; // Adjust path as needed
 
 export const assetService = {
-  // Fetch all assets with related data (mapped to match component expectations)
+  // Fetch all assets kasama na yung related data tulad ng category.
+  // Ginawa ko ito para hindi na mahirapan yung components sa frontend 
+  // kasi naka-map na agad sa expected format yung data.
+
 async fetchAssets() {
   try {
     const organizationId = await this.getCurrentUserOrganization();
@@ -61,7 +67,10 @@ async fetchAssets() {
   }
 },
 
-  // Helper to map database asset_status to component status
+   // Ito yung helper function na nagko-convert ng database asset status 
+  // (halimbawa: active, maintenance, retired) papunta sa readable text 
+  // (Operational, Under Maintenance, Retired).  
+  // Para mas friendly siya kapag pinapakita sa UI.
   mapAssetStatus(dbStatus) {
     const statusMap = {
       'active': 'Operational',
@@ -72,7 +81,8 @@ async fetchAssets() {
     return statusMap[dbStatus] || 'Operational';
   },
 
-  // Helper to map component status back to database
+  // Baliktad naman ito: from UI component status, kino-convert ko pabalik sa DB format.  
+  // Para consistent yung storage sa database.
   mapComponentStatus(componentStatus) {
     const statusMap = {
       'Operational': 'active',
@@ -82,13 +92,14 @@ async fetchAssets() {
     return statusMap[componentStatus] || 'active';
   },
 
-  // Helper to capitalize first letter
+   // Maliit lang na helper function para gawing uppercase yung first letter ng string.
   capitalizeFirst(str) {
     if (!str) return str;
     return str.charAt(0).toUpperCase() + str.slice(1);
   },
 
-  // Get current user's organization ID
+ // Kinukuha ko yung organization ID ng currently logged-in user.  
+  // Kailangan ito kasi halos lahat ng assets naka-tali sa isang organization.
 async getCurrentUserOrganization() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -123,7 +134,8 @@ async getCurrentUserOrganization() {
   }
 },
 
-  // Fetch asset categories
+  // Kinukuha ko lahat ng asset categories.  
+  // Ginagamit ito sa dropdowns or pag nag-add ng bagong asset.
   async fetchAssetCategories() {
     try {
       const { data, error } = await supabase
@@ -139,12 +151,13 @@ async getCurrentUserOrganization() {
     }
   },
 
-  // Fetch users for personnel assignments
-  async fetchUsers() {
+   // Kinukuha ko lahat ng active personnel users (role_id = 3).  
+  // Kailangan ko ito para ma-assign yung mga maintenance tasks.
+async fetchUsers() {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('user_id, username, full_name, email, role_id')
+      .select('user_id, username, full_name, email, role_id, job_position')
       .eq('user_status', 'active')
       .eq('role_id', 3) // Personnel role only
       .order('full_name', { ascending: true });
@@ -159,7 +172,7 @@ async getCurrentUserOrganization() {
     return data.map(user => ({
       id: user.user_id.toString(),
       name: user.full_name,
-      department: 'General',
+      department: user.job_position || 'General Maintenance', // Use job_position!
       email: user.email
     }));
   } catch (error) {
@@ -167,7 +180,9 @@ async getCurrentUserOrganization() {
     throw error;
   }
 },
-// Fetch tasks assigned to current user
+ // Ito naman para sa personnel: kinukuha ko yung mga tasks na naka-assign sa kanila.  
+  // May join na rin ito sa work_orders, priority, at statuses para complete info na agad.
+
 async fetchMyTasks() {
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -242,7 +257,9 @@ async fetchMyTasks() {
     throw error;
   }
 },
-  // Add new asset
+   // Function para mag-add ng bagong asset.  
+  // Una kong kinukuha yung category_id based sa category name, 
+  // tapos ini-insert ko yung asset kasama yung organization_id ng user.
   async addAsset(assetData) {
     try {
      const organizationId = await this.getCurrentUserOrganization(); // ADD this line at the start
@@ -297,7 +314,8 @@ async fetchMyTasks() {
     }
   },
 
-  // Update asset
+  // Function para i-update yung existing asset details.  
+  // Kung nagbago yung category, kinukuha ko ulit yung category_id bago ko i-update.
   async updateAsset(assetCode, assetData) {
     try {
       // Get category_id if category changed
@@ -359,7 +377,9 @@ async fetchMyTasks() {
     }
   },
 
-  // Create maintenance task
+// Para gumawa ng bagong maintenance task.  
+  // Step-by-step ito: (1) kuha asset_id, (2) kuha current user, (3) gumawa ng work order, 
+  // (4) gumawa ng maintenance task, tapos (5) i-update yung asset status to "maintenance".
 async createMaintenanceTask(taskData) {
   try {
     console.log('Creating task with data:', taskData);
@@ -471,7 +491,7 @@ async createMaintenanceTask(taskData) {
   }
 },
 
-  // Helper to get asset_id from asset_code
+  // Helper function para makuha yung asset_id base sa asset_code.
   async getAssetId(assetCode) {
     try {
       const { data, error } = await supabase
@@ -487,8 +507,9 @@ async createMaintenanceTask(taskData) {
       throw error;
     }
   },
-
-  // Schedule maintenance
+// Scheduling ng maintenance task.  
+  // Nag-iinsert ako sa maintenance_schedules table tapos ina-update ko rin yung 
+  // `next_maintenance` field sa mismong asset para alam kung kailan ulit siya.
   async scheduleMaintenanceTask(scheduleData) {
     try {
       const { data, error } = await supabase
@@ -524,7 +545,10 @@ async createMaintenanceTask(taskData) {
     }
   },
 
-  // Bulk upload assets
+   // Bulk upload ng assets.  
+  // Para sa mga cases na maraming assets ang ia-upload sabay-sabay (e.g. sa CSV).  
+  // Niloop ko sila, hinahanap ko yung category_id, at sinisigurado kong 
+  // lahat may organization_id bago i-insert sa database.
   async bulkUploadAssets(assetsArray) {
     try {
     const organizationId = await this.getCurrentUserOrganization(); 
