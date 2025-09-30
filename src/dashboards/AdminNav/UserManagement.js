@@ -2,6 +2,10 @@
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
+import Papa from 'papaparse';
+import { PasswordUtils } from '../../utils/PasswordUtils';
+import { EmailService } from '../../utils/EmailService';
+import EmailProgressModal from '../../components/EmailProgressModal';
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -19,7 +23,14 @@ export default function UserManagement() {
   const [showDropdown, setShowDropdown] = useState(false);
 
   const [roles, setRoles] = useState([]);
-
+  const [emailProgress, setEmailProgress] = useState({
+  isVisible: false,
+  progress: 0,
+  total: 0,
+  currentEmail: '',
+  successCount: 0,
+  failedCount: 0
+});
   const fetchRoles = async () => {
   try {
     const { data, error } = await supabase
@@ -38,7 +49,15 @@ export default function UserManagement() {
     setRoles(['Personnel', 'Standard User']);
   }
 };
- 
+
+const handleEmailProgressClose = () => {
+  setEmailProgress(prev => ({ ...prev, isVisible: false }));
+  
+  const { successCount, failedCount } = emailProgress;
+  if (failedCount > 0) {
+    alert(`Email Summary:\n✓ ${successCount} emails sent successfully\n✗ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+  }
+};
 
   // Form state for adding new user
   const [newUser, setNewUser] = useState({
@@ -91,89 +110,206 @@ export default function UserManagement() {
   }
 };
 
-  const createUser = async (userData) => {
-    try {
-      setLoading(true);
-      
-      // TODO: Replace with actual API call
-      // const response = await fetch('/api/users', {
-      //   method: 'POST',
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify(userData)
-      // });
-      // 
-      // if (!response.ok) {
-      //   throw new Error('Failed to create user');
-      // }
-      // 
-      // const newUser = await response.json();
-      // setUsers(prevUsers => [...prevUsers, newUser]);
-      // 
-      // // Show success message with temporary password if provided
-      // if (newUser.tempPassword) {
-      //   alert(`User added successfully!\n\nEmail sent to: ${newUser.email}\nTemporary Password: ${newUser.tempPassword}`);
-      // } else {
-      //   alert('User added successfully! Welcome email sent.');
-      // }
-      
-      // For now, simulate adding user to sample data
-      const newUserWithId = {
-        ...userData,
-        id: Date.now(), // Simple ID generation for demo
-        dateCreated: new Date().toISOString()
-      };
-      setUsers(prevUsers => [...prevUsers, newUserWithId]);
-      alert('User added successfully! Welcome email sent.');
-      
-    } catch (err) {
-      setError(err.message);
-      console.error('Error creating user:', err);
-      alert('Error creating user: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
+// Helper function to get role_id from role name
+const getRoleIdFromRole = (roleString) => {
+  if (!roleString || typeof roleString !== 'string') {
+    return 4; // Default to Standard User
+  }
+  
+  const normalizedRole = roleString.trim().toLowerCase();
+  
+  const roleMap = {
+    'personnel': 3,
+    'standard user': 4,
+    'standard': 4,
+    'user': 4
   };
+  
+  return roleMap[normalizedRole] || 4;
+};
 
-  const updateUser = async (userId, userData) => {
-    try {
-      setLoading(true);
-      
-      // TODO: Replace with actual API call
-      // const response = await fetch(`/api/users/${userId}`, {
-      //   method: 'PUT',
-      //   headers: {
-      //     'Authorization': `Bearer ${token}`,
-      //     'Content-Type': 'application/json'
-      //   },
-      //   body: JSON.stringify(userData)
-      // });
-      // 
-      // if (!response.ok) {
-      //   throw new Error('Failed to update user');
-      // }
-      // 
-      // const updatedUser = await response.json();
-      // setUsers(prevUsers => 
-      //   prevUsers.map(user => user.id === userId ? updatedUser : user)
-      // );
-      
-      // For now, simulate updating user in sample data
-      setUsers(prevUsers => 
-        prevUsers.map(user => user.id === userId ? { ...user, ...userData } : user)
-      );
-      alert('User updated successfully!');
-      
-    } catch (err) {
-      setError(err.message);
-      console.error('Error updating user:', err);
-      alert('Error updating user: ' + err.message);
-    } finally {
-      setLoading(false);
+const createUser = async (userData) => {
+  try {
+    setLoading(true);
+    
+    // Get current user's organization ID
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated - please log in again.');
     }
-  };
+
+    const userEmail = user.email;
+    const { data: userDataResult, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
+
+    if (userDataError || !userDataResult) {
+      throw new Error('User data not found');
+    }
+
+    const orgId = userDataResult.organization_id;
+
+    // Generate password
+    const tempPassword = PasswordUtils.generateSecurePassword(10);
+    const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+
+    // Prepare user data
+    const newUserData = {
+      full_name: userData.name.trim(),
+      email: userData.email.trim().toLowerCase(),
+      user_status: userData.status === 'Active' ? 'pending_activation' : 'inactive',
+      role_id: getRoleIdFromRole(userData.role),
+      organization_id: orgId,
+      username: PasswordUtils.generateUsername(userData.email),
+      password_hash: hashedPassword,
+      auth_uid: null
+    };
+
+    console.log('Creating user:', { ...newUserData, password_hash: '[HIDDEN]' });
+
+    // Insert to database
+    const { data: insertResult, error: insertError } = await supabase
+      .from('users')
+      .insert([newUserData])
+      .select('*')
+      .single();
+
+    if (insertError) {
+      console.error('Database Insert Error:', insertError);
+      throw new Error(`Failed to save user to database: ${insertError.message}`);
+    }
+
+    console.log('✓ User created successfully in database');
+
+    // Refresh user list
+    await fetchUsers();
+
+    // Show email progress modal
+    setEmailProgress({
+      isVisible: true,
+      progress: 0,
+      total: 1,
+      currentEmail: userData.email,
+      successCount: 0,
+      failedCount: 0
+    });
+
+    // Send email credentials
+    try {
+      if (!EmailService.isConfigured()) {
+        throw new Error('Email service not configured. Check environment variables.');
+      }
+
+      // Get organization name
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('org_name')
+        .eq('organization_id', orgId)
+        .single();
+
+      const organizationName = orgData?.org_name || 'Your Organization';
+
+      console.log('Sending credentials email to:', userData.email);
+
+      // Send credentials email
+      const emailResult = await EmailService.sendUserCredentials(
+        newUserData.email,
+        newUserData.full_name,
+        tempPassword,
+        organizationName
+      );
+
+      // Update progress
+      setEmailProgress(prev => ({
+        ...prev,
+        progress: 1,
+        successCount: emailResult.success ? 1 : 0,
+        failedCount: emailResult.success ? 0 : 1
+      }));
+
+      if (emailResult.success) {
+        console.log('✓ Welcome email sent successfully');
+      } else {
+        console.error('✗ Email failed:', emailResult.error);
+        alert(
+          `User created successfully but email failed to send.\n\n` +
+          `Please manually send these credentials to the user:\n\n` +
+          `Email: ${newUserData.email}\n` +
+          `Temporary Password: ${tempPassword}\n` +
+          `Login URL: ${window.location.origin}/login`
+        );
+      }
+
+    } catch (emailError) {
+      console.error('Email sending exception:', emailError);
+      setEmailProgress(prev => ({
+        ...prev,
+        progress: 1,
+        failedCount: 1
+      }));
+      
+      alert(
+        `User created successfully but email failed to send.\n\n` +
+        `Please manually send these credentials to the user:\n\n` +
+        `Email: ${newUserData.email}\n` +
+        `Temporary Password: ${tempPassword}\n` +
+        `Login URL: ${window.location.origin}/login`
+      );
+    }
+    
+  } catch (err) {
+    setError(err.message);
+    console.error('Error creating user:', err);
+    alert('Error creating user: ' + err.message);
+    setEmailProgress(prev => ({ ...prev, isVisible: false }));
+  } finally {
+    setLoading(false);
+  }
+};
+
+const updateUser = async (userId, userData) => {
+  try {
+    setLoading(true);
+    
+    // Prepare the update data
+    const updateData = {
+      full_name: userData.name,
+      email: userData.email.toLowerCase(),
+      role_id: getRoleIdFromRole(userData.role),
+      user_status: userData.status === 'Active' ? 'active' : 'inactive'
+    };
+
+    console.log('Updating user:', userId, updateData);
+
+    // Update in database
+    const { data, error } = await supabase
+      .from('users')
+      .update(updateData)
+      .eq('user_id', userId)
+      .select();
+    
+    if (error) {
+      console.error('Database Update Error:', error);
+      throw new Error(`Failed to update user: ${error.message}`);
+    }
+
+    console.log('✓ User updated successfully:', data);
+    
+    // Refresh user list
+    await fetchUsers();
+    
+    alert('User updated successfully!');
+    
+  } catch (err) {
+    setError(err.message);
+    console.error('Error updating user:', err);
+    alert('Error updating user: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const bulkCreateUsers = async (usersData) => {
     try {
@@ -381,49 +517,191 @@ useEffect(() => {
     }
   };
 
-  const processUpload = async () => {
-    if (!uploadFile) return;
+const processUpload = async () => {
+  if (!uploadFile) {
+    alert('No file selected for upload!');
+    return;
+  }
 
+  setLoading(true);
+  
+  try {
+    // Get current user's organization ID
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated - please log in again.');
+    }
+
+    const userEmail = user.email;
+    const { data: userData, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
+
+    if (userDataError || !userData) {
+      throw new Error('User data not found');
+    }
+
+    const orgId = userData.organization_id;
+
+    // Parse CSV content using PapaParse
     const reader = new FileReader();
-    reader.onload = async (event) => {
+    reader.onload = async (e) => {
       try {
-        const csvText = event.target.result;
-        const lines = csvText.split('\n');
-        const headers = lines[0].split(',').map(h => h.trim());
-        
-        // Parse CSV data
-        const usersData = [];
-        for (let i = 1; i < lines.length; i++) {
-          if (lines[i].trim()) {
-            const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''));
-            if (values.length >= 3) { // Name, Email, Role minimum
-              const user = {
-                name: values[0],
-                email: values[1],
-                role: values[2],
-                status: 'Active' // Default status
-              };
-              usersData.push(user);
-            }
+        const csvContent = e.target.result;
+        const parseResult = Papa.parse(csvContent, { 
+          header: true, 
+          skipEmptyLines: true,
+          transformHeader: (header) => header.trim()
+        });
+
+        if (parseResult.errors.length > 0) {
+          console.error('CSV Parse Errors:', parseResult.errors);
+        }
+
+        const csvRows = parseResult.data.filter(row => {
+          const name = row.Name || row.name;
+          const email = row.Email || row.email;
+          return name && name.trim() !== '' && email && email.trim() !== '';
+        });
+
+        if (csvRows.length === 0) {
+          throw new Error('No valid user data found in CSV file.');
+        }
+
+        console.log(`Processing ${csvRows.length} users from CSV`);
+
+        // Generate passwords and prepare user data
+        const usersWithPasswords = csvRows.map((row) => {
+          const tempPassword = PasswordUtils.generateSecurePassword(10);
+          const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+
+          const name = (row.Name || row.name || '').trim();
+          const email = (row.Email || row.email || '').trim().toLowerCase();
+          const role = (row.Role || row.role || 'Standard User').trim();
+
+          return {
+            full_name: name,
+            email: email,
+            user_status: 'pending_activation',
+            role_id: getRoleIdFromRole(role),
+            organization_id: orgId,
+            username: PasswordUtils.generateUsername(email),
+            password_hash: hashedPassword,
+            auth_uid: null,
+            tempPassword: tempPassword
+          };
+        });
+
+        // Prepare database users (remove tempPassword)
+        const dbUsers = usersWithPasswords.map(user => {
+          const { tempPassword, ...dbUser } = user;
+          return dbUser;
+        });
+
+        // Insert to database
+        const { data: insertResult, error: insertError } = await supabase
+          .from('users')
+          .insert(dbUsers)
+          .select('*');
+
+        if (insertError) {
+          console.error('Database Insert Error:', insertError);
+          throw new Error(`Failed to save users to database: ${insertError.message}`);
+        }
+
+        const insertedCount = insertResult ? insertResult.length : dbUsers.length;
+        console.log(`Successfully inserted ${insertedCount} users to database`);
+
+        // Refresh user list
+        await fetchUsers();
+
+        // Close bulk upload modal BEFORE email sending
+        setShowBulkUploadModal(false);
+        setUploadFile(null);
+        setDragActive(false);
+
+        // Show email progress modal
+        setEmailProgress({
+          isVisible: true,
+          progress: 0,
+          total: usersWithPasswords.length,
+          currentEmail: '',
+          successCount: 0,
+          failedCount: 0
+        });
+
+        // Send bulk emails
+        console.log('Starting bulk email send...');
+        let successfulEmails = 0;
+        let failedEmails = 0;
+
+        try {
+          if (!EmailService.isConfigured()) {
+            throw new Error('Email service not configured. Check environment variables.');
           }
-        }
-        
-        if (usersData.length > 0) {
-          await bulkCreateUsers(usersData);
-          cancelUpload();
+
+          // Get organization name for email
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('org_name')
+            .eq('organization_id', orgId)
+            .single();
+
+          const organizationName = orgData?.org_name || 'Your Organization';
+
+          const emailResults = await EmailService.sendBulkCredentials(
+            usersWithPasswords,
+            organizationName,
+            (sent, total, currentEmail, success) => {
+              setEmailProgress(prev => ({
+                ...prev,
+                progress: sent,
+                currentEmail: currentEmail,
+                successCount: success ? prev.successCount + 1 : prev.successCount,
+                failedCount: success ? prev.failedCount : prev.failedCount + 1
+              }));
+            }
+          );
+
+          successfulEmails = emailResults.filter(r => r.success).length;
+          failedEmails = emailResults.filter(r => !r.success).length;
+
+          console.log(`Email sending complete: ${successfulEmails} sent, ${failedEmails} failed`);
+
+        } catch (emailError) {
+          console.error('Email sending failed:', emailError);
+          failedEmails = usersWithPasswords.length;
           
-          // Refresh user list
-          fetchUsers();
-        } else {
-          alert('No valid user data found in CSV file.');
+          setEmailProgress(prev => ({
+            ...prev,
+            progress: usersWithPasswords.length,
+            failedCount: usersWithPasswords.length,
+            currentEmail: 'Email sending failed'
+          }));
         }
-      } catch (err) {
-        console.error('Error processing CSV:', err);
-        alert('Error processing CSV file: ' + err.message);
+
+        console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
+
+      } catch (error) {
+        console.error('Error processing CSV:', error);
+        alert(`Error: ${error.message}`);
+        setEmailProgress(prev => ({ ...prev, isVisible: false }));
+      } finally {
+        setLoading(false);
       }
     };
+
     reader.readAsText(uploadFile);
-  };
+    
+  } catch (error) {
+    console.error('Error processing user CSV:', error);
+    alert(`Error: ${error.message}`);
+    setEmailProgress(prev => ({ ...prev, isVisible: false }));
+    setLoading(false);
+  }
+};
 
   const cancelUpload = () => {
     setShowBulkUploadModal(false);
@@ -941,6 +1219,16 @@ useEffect(() => {
           </div>
         )}
       </div>
+      {/* Email Progress Modal */}
+        <EmailProgressModal
+          isVisible={emailProgress.isVisible}
+          progress={emailProgress.progress}
+          total={emailProgress.total}
+          currentEmail={emailProgress.currentEmail}
+          successCount={emailProgress.successCount}
+          failedCount={emailProgress.failedCount}
+          onClose={handleEmailProgressClose}
+        />
     </SidebarLayout>
   );
 }

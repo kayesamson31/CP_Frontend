@@ -19,10 +19,7 @@ export default function DashboardSyAdmin() {
   const [recentActivities, setRecentActivities] = useState([]);
   
   // NEW: States for bulk upload modals
-  const [showUserUploadModal, setShowUserUploadModal] = useState(false);
   const [showAssetUploadModal, setShowAssetUploadModal] = useState(false);
-  const [selectedUserType, setSelectedUserType] = useState('');
-  const [uploadingUsers, setUploadingUsers] = useState(false);
   const [uploadingAssets, setUploadingAssets] = useState(false);
 
 const [assetPreviewData, setAssetPreviewData] = useState(null);
@@ -110,19 +107,9 @@ const getRoleIdFromRole = (roleString) => {
   return roleMap[normalizedRole] || 4; // Default to Standard user
 };
 
-
 // Template download function
 const downloadTemplate = (type) => {
   const templates = {
-    heads: `Name,Email,Status,Role
-John Admin,john.admin@company.com,active,Admin official
-Jane Head,jane.head@company.com,active,system admin`,
-    personnel: `Name,Email,Status,Role
-Mike Staff,mike.staff@company.com,active,Personnel
-Sarah Worker,sarah.worker@company.com,active,Personnel`,
-    standardUsers: `Name,Email,Status,Role
-Tom User,tom.user@company.com,active,Standard user
-Lisa Member,lisa.member@company.com,active,Standard user`,
     assets: `Asset Name,Category,Status,Location
 Laptop Dell XPS,Computer,Operational,Office Floor 1
 Printer HP LaserJet,Office Equipment,Operational,Reception`
@@ -396,33 +383,7 @@ const fetchDatabaseStats = async () => {
     setOrganizationData(updatedOrgData);
   };
 
-// NEW: State for preview data
-const [previewData, setPreviewData] = useState(null);
-const [selectedFile, setSelectedFile] = useState(null);
 
-// NEW: Function to preview CSV data
-const handleFilePreview = (file, userType) => {
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const csvContent = e.target.result;
-      const rowCount = countCSVRows(csvContent);
-      
-      setPreviewData({
-        userType,
-        fileName: file.name,
-        rowCount,
-        csvContent
-      });
-      setSelectedFile(file);
-    } catch (error) {
-      alert('Error reading the file. Please check the file format.');
-    }
-  };
-  reader.readAsText(file);
-};
 
 const updateSetupProgress = () => {
   try {
@@ -476,249 +437,6 @@ const updateSetupProgress = () => {
   }
 };
 
-
-// PRACTICAL SOLUTION: Database-only approach with null auth_uid
-const handleBulkUserUpload = async () => {
-  if (!previewData || !selectedFile) {
-    alert('No file selected for upload!');
-    return;
-  }
-
-  setUploadingUsers(true);
-  
-  try {
-    // Get current user's organization ID
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('User not authenticated - please log in again.');
-    }
-
-    const userEmail = user.email;
-    const { data: userData, error: userDataError } = await supabase
-      .from('users')
-      .select('organization_id')
-      .eq('email', userEmail)
-      .single();
-
-    if (userDataError || !userData) {
-      throw new Error('User data not found');
-    }
-
-    const orgId = userData.organization_id;
-
-    // Parse CSV content  
-    const { csvContent, userType } = previewData;
-    const parseResult = Papa.parse(csvContent, { 
-      header: true, 
-      skipEmptyLines: true,
-      transformHeader: (header) => header.trim()
-    });
-
-    if (parseResult.errors.length > 0) {
-      console.error('CSV Parse Errors:', parseResult.errors);
-    }
-
-    const csvRows = parseResult.data.filter(row => 
-      row.Name && row.Name.trim() !== '' && 
-      row.Email && row.Email.trim() !== ''
-    );
-
-    console.log(`Processing ${csvRows.length} users from CSV`);
-
-    // Generate passwords and prepare user data with credentials
-    const usersWithPasswords = csvRows.map((row) => {
-      const tempPassword = PasswordUtils.generateSecurePassword(10);
-      const hashedPassword = PasswordUtils.hashPassword(tempPassword);
-
-      return {
-        full_name: row.Name.trim(),
-        email: row.Email.trim().toLowerCase(),
-        user_status: 'pending_activation', // Mark as pending - they need to activate account
-        role_id: getRoleIdFromRole(row.Role),
-        organization_id: orgId,
-        username: PasswordUtils.generateUsername(row.Email.trim().toLowerCase()),
-        password_hash: hashedPassword,
-        auth_uid: null, // Will be populated when they first login and create Supabase auth
-        tempPassword: tempPassword,
-        needs_auth_setup: true // Custom flag to indicate auth setup needed
-      };
-    });
-
-    console.log('Generated passwords for users:', usersWithPasswords.map(u => ({
-      name: u.full_name, 
-      email: u.email,
-      password: '[HIDDEN]'
-    })));
-
-    // Prepare database users (remove tempPassword and needs_auth_setup)
-    const dbUsers = usersWithPasswords
-      .map(user => {
-        const { tempPassword, needs_auth_setup, ...dbUser } = user;
-        return dbUser;
-      });
-
-    const { data: insertResult, error: insertError } = await supabase
-      .from('users')
-      .insert(dbUsers)
-      .select('*');
-
-    if (insertError) {
-      console.error('Database Insert Error:', insertError);
-      throw new Error(`Failed to save users to database: ${insertError.message}`);
-    }
-
-    const insertedCount = insertResult ? insertResult.length : dbUsers.length;
-    console.log(`Successfully inserted ${insertedCount} users to database`);
-
-    // Dashboard refresh
-    console.log('Refreshing dashboard counts...');
-    const dbStats = await fetchDatabaseStats();
-    setOrganizationData(prev => ({
-      ...prev,
-      ...dbStats
-    }));
-
-    setDashboardData(prev => ({
-      ...prev,
-      totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
-      totalAssets: dbStats.totalAssets
-    }));
-
-    // Close the user upload modal BEFORE starting email process
-    setShowUserUploadModal(false);
-    setSelectedUserType('');
-    setPreviewData(null);
-    setSelectedFile(null);
-
-    // Show email progress modal
-    setEmailProgress({
-      isVisible: true,
-      progress: 0,
-      total: usersWithPasswords.length,
-      currentEmail: '',
-      successCount: 0,
-      failedCount: 0
-    });
-
-    // Update localStorage for activity tracking
-    let setupWizardData = localStorage.getItem('setupWizardData');
-    let wizardData = setupWizardData ? JSON.parse(setupWizardData) : {
-      orgData: { name: organizationData.name, email: organizationData.contactEmail },
-      uploadedFiles: {},
-      skippedSteps: {},
-      completed: false
-    };
-
-    if (!wizardData.uploadedFiles) wizardData.uploadedFiles = {};
-    
-    const uploadRecord = {
-      fileName: selectedFile.name,
-      uploadDate: new Date().toISOString(),
-      recordsProcessed: insertedCount,
-      emailsSent: 0,
-      emailsFailed: 0,
-      source: 'database_auth_pending' // Users need to setup auth on first login
-    };
-
-    if (wizardData.uploadedFiles[userType]) {
-      if (Array.isArray(wizardData.uploadedFiles[userType])) {
-        wizardData.uploadedFiles[userType].push(uploadRecord);
-      } else {
-        wizardData.uploadedFiles[userType] = [wizardData.uploadedFiles[userType], uploadRecord];
-      }
-    } else {
-      wizardData.uploadedFiles[userType] = uploadRecord;
-    }
-
-    localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
-
-    // Add activity log
-    const userTypeDisplayName = userType === 'heads' ? 'Heads' : 
-                               userType === 'personnel' ? 'Personnel' : 'Standard Users';
-    
-    addActivity(
-      'user_added',
-      `${userTypeDisplayName} added: ${insertedCount} accounts created (pending auth setup)`,
-      organizationData.contactPerson
-    );
-
-    updateSetupProgress();
-
-    // EMAIL SENDING with special instruction for first-time login
-    console.log('Starting bulk email send...');
-    let successfulEmails = 0;
-    let failedEmails = 0;
-
-    try {
-      if (!EmailService.isConfigured()) {
-        throw new Error('Email service not configured. Check environment variables.');
-      }
-
-      const emailResults = await EmailService.sendBulkCredentials(
-        usersWithPasswords, // This contains tempPassword for emails
-        organizationData.name,
-        (sent, total, currentEmail, success) => {
-          setEmailProgress(prev => ({
-            ...prev,
-            progress: sent,
-            currentEmail: currentEmail,
-            successCount: success ? prev.successCount + 1 : prev.successCount,
-            failedCount: success ? prev.failedCount : prev.failedCount + 1
-          }));
-        }
-      );
-
-      successfulEmails = emailResults.filter(r => r.success).length;
-      failedEmails = emailResults.filter(r => !r.success).length;
-
-      // Update the upload record with email results
-      const updatedWizardData = JSON.parse(localStorage.getItem('setupWizardData'));
-      if (updatedWizardData.uploadedFiles[userType]) {
-        const currentRecord = Array.isArray(updatedWizardData.uploadedFiles[userType]) 
-          ? updatedWizardData.uploadedFiles[userType][updatedWizardData.uploadedFiles[userType].length - 1]
-          : updatedWizardData.uploadedFiles[userType];
-        
-        currentRecord.emailsSent = successfulEmails;
-        currentRecord.emailsFailed = failedEmails;
-        localStorage.setItem('setupWizardData', JSON.stringify(updatedWizardData));
-      }
-
-      addActivity(
-        'csv_upload',
-        failedEmails > 0 
-          ? `Email sending completed: ${successfulEmails} sent, ${failedEmails} failed`
-          : `All ${successfulEmails} welcome emails sent successfully`,
-        organizationData.contactPerson
-      );
-
-    } catch (emailError) {
-      console.error('Email sending failed:', emailError);
-      failedEmails = usersWithPasswords.length;
-      
-      setEmailProgress(prev => ({
-        ...prev,
-        progress: usersWithPasswords.length,
-        failedCount: usersWithPasswords.length,
-        currentEmail: 'Email sending failed'
-      }));
-
-      addActivity(
-        'csv_upload',
-        `Users added successfully but email sending failed: ${emailError.message}`,
-        organizationData.contactPerson
-      );
-    }
-
-    console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
-    
-  } catch (error) {
-    console.error('Error processing user CSV:', error);
-    alert(`Error: ${error.message}`);
-    setEmailProgress(prev => ({ ...prev, isVisible: false }));
-  } finally {
-    setUploadingUsers(false);
-  }
-};
 
 // NEW: Function to preview asset CSV data
 const handleAssetFilePreview = (file) => {
@@ -1243,15 +961,6 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
           {/* Quick Actions */}
           <div className="d-flex gap-2">
             <button 
-              className="btn btn-primary" 
-              style={{borderRadius: '12px'}}
-              onClick={() => setShowUserUploadModal(true)}
-              disabled={uploadingUsers}
-            >
-              <i className="bi bi-cloud-upload-fill me-2"></i>
-              {uploadingUsers ? 'Uploading...' : 'Bulk Upload Users (CSV)'}
-            </button>
-            <button 
               className="btn btn-dark" 
               style={{borderRadius: '12px'}}
               onClick={() => setShowAssetUploadModal(true)}
@@ -1264,130 +973,6 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         </div>
 
         {/* User Upload Modal */}
- {/* User Upload Modal */}
-{showUserUploadModal && (
-  <div className="modal show d-block" tabIndex="-1" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
-    <div className="modal-dialog modal-dialog-centered">
-      <div className="modal-content" style={{borderRadius: '16px'}}>
-        <div className="modal-header" style={{borderRadius: '16px 16px 0 0', backgroundColor: '#284C9A', color: 'white'}}>
-          <h5 className="modal-title fw-bold">
-            <i className="bi bi-people-fill me-2"></i>
-            Bulk Upload Users
-          </h5>
-          <button 
-            type="button" 
-            className="btn-close btn-close-white" 
-            onClick={() => {
-              setShowUserUploadModal(false);
-              setSelectedUserType('');
-              setPreviewData(null);
-              setSelectedFile(null);
-            }}
-          ></button>
-        </div>
-        <div className="modal-body">
-          <div className="mb-3">
-            <label htmlFor="userType" className="form-label fw-semibold">Select User Type:</label>
-            <select 
-              id="userType"
-              className="form-select"
-              value={selectedUserType}
-              onChange={(e) => setSelectedUserType(e.target.value)}
-              disabled={previewData !== null}
-            >
-              <option value="">Choose user type...</option>
-              <option value="heads">Heads</option>
-              <option value="personnel">Personnel</option>
-              <option value="standardUsers">Standard Users</option>
-            </select>
-          </div>
-          
-{selectedUserType && !previewData && (
-  <>
-    <div className="mb-3">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          downloadTemplate(selectedUserType);
-        }}
-        className="btn btn-outline-primary btn-sm mb-3"
-      >
-        <i className="bi bi-download me-2"></i>
-        Download Template
-      </button>
-    </div>
-    
-    <div className="mb-3">
-      <label htmlFor="userCsvFile" className="form-label fw-semibold">Upload CSV File:</label>
-      <input 
-        type="file" 
-        id="userCsvFile"
-        className="form-control" 
-        accept=".csv"
-        onChange={(e) => {
-          if (e.target.files[0]) {
-            handleFilePreview(e.target.files[0], selectedUserType);
-          }
-        }}
-      />
-      <div className="form-text">
-        <i className="bi bi-info-circle me-1"></i>
-        Please ensure your CSV file has proper headers and data format.
-      </div>
-    </div>
-  </>
-)}
-
-          {/* Preview Section */}
-          {previewData && (
-            <div className="alert alert-info">
-              <h6><i className="bi bi-eye me-2"></i>File Preview</h6>
-              <p className="mb-1"><strong>File:</strong> {previewData.fileName}</p>
-              <p className="mb-1"><strong>User Type:</strong> {previewData.userType === 'heads' ? 'Heads' : previewData.userType === 'personnel' ? 'Personnel' : 'Standard Users'}</p>
-              <p className="mb-0"><strong>Records Found:</strong> {previewData.rowCount}</p>
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button 
-            type="button" 
-            className="btn btn-secondary" 
-            onClick={() => {
-              setShowUserUploadModal(false);
-              setSelectedUserType('');
-              setPreviewData(null);
-              setSelectedFile(null);
-            }}
-          >
-            Cancel
-          </button>
-          
-          {previewData && (
-            <button 
-              type="button" 
-              className="btn btn-primary"
-              onClick={handleBulkUserUpload}
-              disabled={uploadingUsers}
-            >
-              {uploadingUsers ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-cloud-upload me-2"></i>
-                  Submit Upload
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
 
         {/* Asset Upload Modal */}
      {/* Asset Upload Modal */}
