@@ -27,6 +27,17 @@ export default function SysAdUserManagement() {
   const [activeTab, setActiveTab] = useState('edit');
   // Enhanced roles for System Administrator
 const [roles, setRoles] = useState([]);
+
+const JOB_POSITIONS = [
+  'Electrician',
+  'Plumber',
+  'HVAC Technician',
+  'Office Equipment Technician',
+  'Safety Officer',
+  'Groundskeeper',
+  'Carpenter',
+  'General Maintenance Worker'
+];
 const [emailProgress, setEmailProgress] = useState({
   isVisible: false,
   progress: 0,
@@ -62,7 +73,8 @@ const fetchRoles = async () => {
     name: '',
     email: '',
     role: 'Standard User',
-    status: 'Active'
+    status: 'Active',
+    jobPosition: ''
   });
 
 
@@ -112,6 +124,7 @@ const fetchUsers = async () => {
         role_id,
         user_status,
         date_created,
+        job_position,
         roles (role_name)
       `)
       .order('date_created', { ascending: false });
@@ -127,6 +140,7 @@ const fetchUsers = async () => {
       roleId: user.role_id,
       status: user.user_status === 'active' ? 'Active' : 'Inactive',
       dateCreated: user.date_created,
+      jobPosition: user.job_position || null
     }));
     
     setUsers(transformedUsers);
@@ -174,12 +188,13 @@ const updateUser = async (userId, userData) => {
     setLoading(true);
     
     // Prepare the update data
-    const updateData = {
-      full_name: userData.name,
-      email: userData.email.toLowerCase(),
-      role_id: getRoleIdFromRole(userData.role),
-      user_status: userData.status === 'Active' ? 'active' : 'inactive'
-    };
+   const updateData = {
+  full_name: userData.name,
+  email: userData.email.toLowerCase(),
+  role_id: getRoleIdFromRole(userData.role),
+  user_status: userData.status === 'Active' ? 'active' : 'inactive',
+  job_position: userData.role === 'Personnel' ? (userData.jobPosition || null) : null // ADD THIS
+};
 
     console.log('Updating user:', userId, updateData);
 
@@ -364,7 +379,8 @@ const handleAddUser = async (e) => {
       organization_id: orgId,
       username: PasswordUtils.generateUsername(newUser.email),
       password_hash: hashedPassword,
-      auth_uid: null
+      auth_uid: null,
+       job_position: newUser.role === 'Personnel' ? (newUser.jobPosition || null) : null
     };
 
     console.log('Creating user:', { ...newUserData, password_hash: '[HIDDEN]' });
@@ -394,7 +410,8 @@ const handleAddUser = async (e) => {
       name: '',
       email: '',
       role: 'Standard User',
-      status: 'Active'
+      status: 'Active',
+      jobPosition: '' 
     });
 
     // Show email progress modal
@@ -621,24 +638,27 @@ const processUpload = async () => {
 
         // Generate passwords and prepare user data
       // Generate passwords and prepare user data
+// Generate passwords and prepare user data
 const usersWithPasswords = csvRows.map((row) => {
   const tempPassword = PasswordUtils.generateSecurePassword(10);
   const hashedPassword = PasswordUtils.hashPassword(tempPassword);
 
-  // Support both lowercase and Capital case headers
   const name = (row.Name || row.name || '').trim();
   const email = (row.Email || row.email || '').trim().toLowerCase();
   const role = (row.Role || row.role || 'Standard User').trim();
+  const status = (row.Status || row.status || 'Active').trim();
+  const jobPosition = (row.job_position || row.Job_Position || '').trim(); // ADD THIS
 
   return {
     full_name: name,
     email: email,
-    user_status: 'pending_activation',
+    user_status: status === 'Active' ? 'pending_activation' : 'inactive',
     role_id: getRoleIdFromRole(role),
     organization_id: orgId,
     username: PasswordUtils.generateUsername(email),
     password_hash: hashedPassword,
     auth_uid: null,
+    job_position: role === 'Personnel' ? (jobPosition || null) : null, // ADD THIS
     tempPassword: tempPassword
   };
 });
@@ -758,19 +778,18 @@ const usersWithPasswords = csvRows.map((row) => {
     setDragActive(false);
   };
 
-  const downloadCSVTemplate = () => {
-    const csvContent = 'name,email,role\n"John Doe","john@example.com","Standard User"\n"Jane Smith","jane@example.com","Personnel"\n"Admin User","admin@example.com","Admin Official"';
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.setAttribute('hidden', '');
-    a.setAttribute('href', url);
-    a.setAttribute('download', 'system_user_upload_template.csv');
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.URL.revokeObjectURL(url);
-  };
+const downloadCSVTemplate = () => {
+const csvContent = 'name,email,role,status,job_position\n"John Doe","john@example.com","Standard User","Active",""\n"Jane Smith","jane@example.com","Personnel","Active","Plumber"\n"Admin User","admin@example.com","Admin Official","Inactive",""';  const blob = new Blob([csvContent], { type: 'text/csv' });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.setAttribute('hidden', '');
+  a.setAttribute('href', url);
+  a.setAttribute('download', 'system_user_upload_template.csv');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(url);
+};
 
   const downloadAllUsersCSV = () => {
     exportUsers();
@@ -1036,6 +1055,28 @@ const usersWithPasswords = csvRows.map((row) => {
                         <small>System Admin can create all user types including other System Administrators</small>
                       </div>
                     </div>
+
+                      
+{newUser.role === 'Personnel' && (
+  <div className="mb-3">
+    <label className="form-label">Job Position *</label>
+    <select
+      className="form-select"
+      value={newUser.jobPosition}
+      onChange={(e) => setNewUser({...newUser, jobPosition: e.target.value})}
+      required
+      disabled={loading}
+    >
+      <option value="">Select Job Position</option>
+      {JOB_POSITIONS.map(position => (
+        <option key={position} value={position}>{position}</option>
+      ))}
+    </select>
+    <div className="form-text">
+      <small>Specify the personnel's area of expertise for task assignment</small>
+    </div>
+  </div>
+)}
                     <div className="mb-3">
                       <label className="form-label">Account Status</label>
                       <select
@@ -1141,6 +1182,27 @@ const usersWithPasswords = csvRows.map((row) => {
                     </div>
                   </div>
                 </div>
+              {editingUser.role === 'Personnel' && (
+  <div className="row">
+    <div className="col-md-6">
+      <div className="mb-3">
+        <label className="form-label">Job Position</label>
+        <select
+          className="form-select"
+          value={editingUser.jobPosition || ''}
+          onChange={(e) => setEditingUser({...editingUser, jobPosition: e.target.value})}
+          disabled={loading}
+        >
+          <option value="">Select Job Position</option>
+          {JOB_POSITIONS.map(position => (
+            <option key={position} value={position}>{position}</option>
+          ))}
+        </select>
+      </div>
+    </div>
+  </div>
+)}
+
                 <div className="row">
                   <div className="col-md-6">
                     <div className="mb-3">
@@ -1160,6 +1222,8 @@ const usersWithPasswords = csvRows.map((row) => {
                       </div>
                     </div>
                   </div>
+
+                  
                   <div className="col-md-6">
                     <div className="mb-3">
                       <label className="form-label">Account Status</label>
@@ -1393,15 +1457,16 @@ const usersWithPasswords = csvRows.map((row) => {
                     </div>
                   </div>
 
-                  {/* Enhanced Additional Info */}
-                  <div className="mt-4 pt-3 border-top">
-                    <small className="text-muted">
-                      <strong>Supported format:</strong> CSV files only<br />
-                      <strong>Required columns:</strong> name, email, role<br />
-                      <strong>Available roles:</strong> {roles.join(', ')}<br />
-                      <strong>System Admin Privilege:</strong> Can create users with any role including System Administrator
-                    </small>
-                  </div>
+                {/* Enhanced Additional Info */}
+                <div className="mt-4 pt-3 border-top">
+                  <small className="text-muted">
+                    <strong>Supported format:</strong> CSV files only<br />
+                    <strong>Required columns:</strong> name, email, role, status<br />
+                    <strong>Available roles:</strong> {roles.join(', ')}<br />
+                    <strong>Available status:</strong> Active, Inactive<br />
+                    <strong>System Admin Privilege:</strong> Can create users with any role including System Administrator
+                  </small>
+                </div>
                 </div>
               </div>
             </div>

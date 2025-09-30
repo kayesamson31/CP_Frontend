@@ -22,7 +22,19 @@ export default function UserManagement() {
   const [error, setError] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const [roles, setRoles] = useState([]);
+ const [roles, setRoles] = useState([]);
+
+const JOB_POSITIONS = [
+  'Electrician',
+  'Plumber',
+  'HVAC Technician',
+  'Office Equipment Technician',
+  'Safety Officer',
+  'Groundskeeper',
+  'Carpenter',
+  'General Maintenance Worker'
+];
+
   const [emailProgress, setEmailProgress] = useState({
   isVisible: false,
   progress: 0,
@@ -82,6 +94,7 @@ const handleEmailProgressClose = () => {
         role_id,
         user_status,
         date_created,
+        job_position,
         roles (role_name)
       `)
       .in('role_id', [3, 4]) // Only fetch Personnel and Standard User
@@ -97,7 +110,8 @@ const handleEmailProgressClose = () => {
       role: user.roles.role_name,
       roleId: user.role_id,
       status: user.user_status === 'active' ? 'Active' : 'Inactive',
-      dateCreated: user.date_created
+      dateCreated: user.date_created,
+      jobPosition: user.job_position || null 
     }));
     
     setUsers(transformedUsers);
@@ -164,7 +178,8 @@ const createUser = async (userData) => {
       organization_id: orgId,
       username: PasswordUtils.generateUsername(userData.email),
       password_hash: hashedPassword,
-      auth_uid: null
+      auth_uid: null,
+      job_position: userData.role === 'Personnel' ? (userData.jobPosition || null) : null 
     };
 
     console.log('Creating user:', { ...newUserData, password_hash: '[HIDDEN]' });
@@ -278,7 +293,8 @@ const updateUser = async (userId, userData) => {
       full_name: userData.name,
       email: userData.email.toLowerCase(),
       role_id: getRoleIdFromRole(userData.role),
-      user_status: userData.status === 'Active' ? 'active' : 'inactive'
+      user_status: userData.status === 'Active' ? 'active' : 'inactive',
+      job_position: userData.role === 'Personnel' ? (userData.jobPosition || null) : null
     };
 
     console.log('Updating user:', userId, updateData);
@@ -447,7 +463,8 @@ useEffect(() => {
       name: '',
       email: '',
       role: 'Standard User',
-      status: 'Active'
+      status: 'Active',
+      jobPosition: ''
     });
     setShowAddUserModal(false);
     
@@ -573,26 +590,28 @@ const processUpload = async () => {
         console.log(`Processing ${csvRows.length} users from CSV`);
 
         // Generate passwords and prepare user data
-        const usersWithPasswords = csvRows.map((row) => {
-          const tempPassword = PasswordUtils.generateSecurePassword(10);
-          const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+const usersWithPasswords = csvRows.map((row) => {
+  const tempPassword = PasswordUtils.generateSecurePassword(10);
+  const hashedPassword = PasswordUtils.hashPassword(tempPassword);
 
-          const name = (row.Name || row.name || '').trim();
-          const email = (row.Email || row.email || '').trim().toLowerCase();
-          const role = (row.Role || row.role || 'Standard User').trim();
+  const name = (row.Name || row.name || '').trim();
+  const email = (row.Email || row.email || '').trim().toLowerCase();
+  const role = (row.Role || row.role || 'Standard User').trim();
+  const jobPosition = (row.job_position || row.Job_Position || '').trim(); // ADD THIS
 
-          return {
-            full_name: name,
-            email: email,
-            user_status: 'pending_activation',
-            role_id: getRoleIdFromRole(role),
-            organization_id: orgId,
-            username: PasswordUtils.generateUsername(email),
-            password_hash: hashedPassword,
-            auth_uid: null,
-            tempPassword: tempPassword
-          };
-        });
+  return {
+    full_name: name,
+    email: email,
+    user_status: 'pending_activation',
+    role_id: getRoleIdFromRole(role),
+    organization_id: orgId,
+    username: PasswordUtils.generateUsername(email),
+    password_hash: hashedPassword,
+    auth_uid: null,
+    job_position: role === 'Personnel' ? (jobPosition || null) : null, // ADD THIS
+    tempPassword: tempPassword
+  };
+});
 
         // Prepare database users (remove tempPassword)
         const dbUsers = usersWithPasswords.map(user => {
@@ -710,7 +729,7 @@ const processUpload = async () => {
   };
 
   const downloadCSVTemplate = () => {
-    const csvContent = 'name,email,role\n"John Doe","john@example.com","Standard User"\n"Jane Smith","jane@example.com","Personnel"';
+const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com","Standard User",""\n"Jane Smith","jane@example.com","Personnel","Plumber"';
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -971,6 +990,27 @@ const processUpload = async () => {
                           <option key={role} value={role}>{role}</option>
                         ))}
                       </select>
+                      {newUser.role === 'Personnel' && (
+  <div className="mb-3">
+    <label className="form-label">Job Position *</label>
+    <select
+      className="form-select"
+      value={newUser.jobPosition}
+      onChange={(e) => setNewUser({...newUser, jobPosition: e.target.value})}
+      required
+      disabled={loading}
+    >
+      <option value="">Select Job Position</option>
+      {JOB_POSITIONS.map(position => (
+        <option key={position} value={position}>{position}</option>
+      ))}
+    </select>
+    <div className="form-text">
+      <small>Specify the personnel's area of expertise for task assignment</small>
+    </div>
+  </div>
+)}
+
                     </div>
                   </div>
                   <div className="modal-footer">
@@ -1039,6 +1079,22 @@ const processUpload = async () => {
                       ))}
                     </select>
                   </div>
+                  {editingUser.role === 'Personnel' && (
+  <div className="mb-3">
+    <label className="form-label">Job Position</label>
+    <select
+      className="form-select"
+      value={editingUser.jobPosition || ''}
+      onChange={(e) => setEditingUser({...editingUser, jobPosition: e.target.value})}
+      disabled={loading}
+    >
+      <option value="">Select Job Position</option>
+      {JOB_POSITIONS.map(position => (
+        <option key={position} value={position}>{position}</option>
+      ))}
+    </select>
+  </div>
+)}
                   <div className="mb-3">
                     <div className="form-check form-switch">
                       <input
