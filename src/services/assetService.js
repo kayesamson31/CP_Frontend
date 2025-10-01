@@ -14,7 +14,6 @@ async fetchAssets() {
     const organizationId = await this.getCurrentUserOrganization();
     console.log('Fetching assets for organization:', organizationId);
     
-    // Start with a simple query first
     const { data: assets, error } = await supabase
       .from('assets')
       .select(`
@@ -37,12 +36,51 @@ async fetchAssets() {
       .eq('organization_id', organizationId)
       .order('asset_id', { ascending: false });
 
-    console.log('Assets query result:', assets);
-    console.log('Assets query error:', error);
-
     if (error) throw error;
 
-    // Simple mapping without complex relations for now
+    // Get failed maintenance tasks count
+    const { data: failedTasks } = await supabase
+      .from('maintenance_tasks')
+      .select('asset_id, status_id')
+      .eq('status_id', 11);
+
+    const failedCountMap = {};
+    failedTasks?.forEach(task => {
+      failedCountMap[task.asset_id] = (failedCountMap[task.asset_id] || 0) + 1;
+    });
+
+    // Fetch maintenance history for all assets
+    const { data: maintenanceTasks } = await supabase
+      .from('maintenance_tasks')
+      .select(`
+        task_id,
+        task_name,
+        description,
+        due_date,
+        date_completed,
+        asset_id,
+        assigned_to,
+        status_id,
+        statuses(status_name),
+        users!assigned_to(full_name)
+      `)
+      .in('asset_id', assets.map(a => a.asset_id))
+      .order('due_date', { ascending: false });
+
+    // Group tasks by asset_id
+    const tasksByAsset = {};
+    maintenanceTasks?.forEach(task => {
+      if (!tasksByAsset[task.asset_id]) {
+        tasksByAsset[task.asset_id] = [];
+      }
+      tasksByAsset[task.asset_id].push({
+        date: task.date_completed || task.due_date,
+        task: task.task_name,
+        assigned: task.users?.full_name || 'Unassigned',
+        status: task.statuses?.status_name?.toLowerCase() || 'pending'
+      });
+    });
+
     return assets.map(asset => ({
       id: asset.asset_code,
       name: asset.asset_name || asset.asset_code,
@@ -56,8 +94,9 @@ async fetchAssets() {
       nextMaintenanceRepeat: asset.next_maintenance_repeat || 'none',
       nextMaintenanceAssigned: asset.next_maintenance_assigned,
       task: asset.task || '',
-      // Simplified - no complex relations for now
-      maintenanceHistory: [],
+      hasFailedMaintenance: (failedCountMap[asset.asset_id] || 0) > 0,
+      failedMaintenanceCount: failedCountMap[asset.asset_id] || 0,
+      maintenanceHistory: tasksByAsset[asset.asset_id] || [], // ✅ Now populated!
       incidentReports: [],
       maintenanceSchedule: null
     }));
@@ -194,63 +233,80 @@ async fetchMyTasks() {
     
     if (!currentUser) throw new Error('User not found');
     
-    // Fetch maintenance tasks assigned to this user
-    const { data: tasks, error } = await supabase
-      .from('maintenance_tasks')
-      .select(`
-        task_id,
-        task_name,
-        description,
-        due_date,
-        date_created,
-        date_completed,
-        remarks,
-        status_id,
-        priority_id,
-        work_order_id,
-        statuses(status_name, color_code),
-        priority_levels(priority_name, color_code),
-        work_orders(
-          work_order_id,
-          title,
-          description,
-          location,
-          category,
-          asset_id,
-          assets(asset_name, asset_code, location)
-        )
-      `)
+  const { data: tasks, error } = await supabase
+  .from('maintenance_tasks')
+  .select(`
+    task_id,
+    task_name,
+    description,
+    due_date,
+    original_due_date,
+    extension_count,
+    last_extension_date,
+    last_extension_reason,
+    date_created,
+    date_completed,
+    remarks,
+    status_id,
+    priority_id,
+    work_order_id,
+    asset_id,
+
+    statuses(status_name, color_code),
+    priority_levels(priority_name, color_code),
+    assets!maintenance_tasks_asset_id_fkey(
+      asset_name, 
+      asset_code, 
+      location,
+      asset_categories(category_name)
+    ),
+    work_orders(
+      work_order_id,
+      title,
+      description,
+      location,
+      category,
+      asset_id,
+      assets(asset_name, asset_code, location)
+    ),
+    maintenance_task_extensions(
+      extension_id,
+      old_due_date,
+      new_due_date,
+      extension_reason,
+      extension_date
+    )
+  `)
       .eq('assigned_to', currentUser.user_id)
       .order('due_date', { ascending: true });
     
     if (error) throw error;
     
-    return tasks.map(task => ({
-      id: task.task_id,
-      taskId: task.task_id,
-      title: task.task_name,
-      description: task.description,
-      dueDate: task.due_date,
-      dateCreated: task.date_created,
-      dateCompleted: task.date_completed,
-      remarks: task.remarks,
-      status: task.statuses?.status_name || 'Pending',
-      statusColor: task.statuses?.color_code,
-      priority: task.priority_levels?.priority_name || 'Medium',
-      priorityColor: task.priority_levels?.color_code,
-      workOrderId: task.work_order_id,
-      workOrder: task.work_orders ? {
-        id: task.work_orders.work_order_id,
-        title: task.work_orders.title,
-        description: task.work_orders.description,
-        location: task.work_orders.location,
-        category: task.work_orders.category,
-        asset: task.work_orders.assets ? {
-          id: task.work_orders.assets.asset_code,
-          name: task.work_orders.assets.asset_name,
-          location: task.work_orders.assets.location
-        } : null
-      } : null
+  return tasks.map(task => ({
+  id: task.task_id,
+  taskId: task.task_id,
+  title: task.task_name,
+  description: task.description || 'No description',
+  dueDate: task.due_date,
+  originalDueDate: task.original_due_date,
+  extensionCount: task.extension_count || 0,
+  lastExtensionDate: task.last_extension_date,
+  lastExtensionReason: task.last_extension_reason,
+  dateCreated: task.date_created,
+  dateCompleted: task.date_completed,
+  remarks: task.remarks,
+  status: task.statuses?.status_name || 'Pending',
+  statusColor: task.statuses?.color_code,
+  priority: task.priority_levels?.priority_name || 'Medium',
+  priorityColor: task.priority_levels?.color_code,
+  workOrderId: task.work_order_id,
+  extensionHistory: task.maintenance_task_extensions || [],
+  asset: task.assets ? {
+    id: task.assets.asset_code,
+    name: task.assets.asset_name,
+    location: task.assets.location,
+    category: task.assets.asset_categories?.category_name
+  } : null,
     }));
   } catch (error) {
     console.error('Error fetching my tasks:', error);
@@ -391,14 +447,9 @@ async createMaintenanceTask(taskData) {
       .eq('asset_code', taskData.assetId)
       .single();
     
-    if (assetError) {
-      console.error('Error finding asset:', assetError);
-      throw new Error('Asset not found');
-    }
+    if (assetError) throw new Error('Asset not found');
     
-    console.log('Found asset:', assetData);
-    
-    // Get current user ID for requested_by
+    // Get current user ID
     const { data: { user } } = await supabase.auth.getUser();
     const { data: currentUser } = await supabase
       .from('users')
@@ -406,60 +457,22 @@ async createMaintenanceTask(taskData) {
       .eq('auth_uid', user.id)
       .single();
     
-    if (!currentUser) {
-      throw new Error('Current user not found');
-    }
+    if (!currentUser) throw new Error('Current user not found');
     
-    console.log('Current user:', currentUser.user_id);
+    // Map priority
+    const priorityMap = { 'low': 1, 'medium': 2, 'high': 3 };
     
-    // Map priority: low=1, medium=2, high=3
-    const priorityMap = {
-      'low': 1,
-      'medium': 2,
-      'high': 3
-    };
-    
-    // Create work order first
-    const workOrderInsert = {
-      title: `Maintenance: ${taskData.title}`,
-      description: taskData.description || `Scheduled maintenance task for ${assetData.asset_name}`,
-      priority_id: priorityMap[taskData.priority] || 2,
-      status_id: 2, // "In Progress" status
-      asset_id: assetData.asset_id,
-      requested_by: currentUser.user_id,
-      assigned_to: parseInt(taskData.assigneeId),
-      category: 'Maintenance',
-      location: assetData.location,
-      due_date: taskData.dueDate
-    };
-    
-    console.log('Creating work order:', workOrderInsert);
-    
-    const { data: workOrder, error: workOrderError } = await supabase
-      .from('work_orders')
-      .insert([workOrderInsert])
-      .select('work_order_id')
-      .single();
-    
-    if (workOrderError) {
-      console.error('Work order creation error:', workOrderError);
-      throw workOrderError;
-    }
-    
-    console.log('Work order created with ID:', workOrder.work_order_id);
-    
-    // Now create the maintenance task with status_id
+    // Create ONLY maintenance task (no work order)
     const taskInsert = {
       task_name: taskData.title,
       description: taskData.description || '',
       priority_id: priorityMap[taskData.priority] || 2,
-      status_id: 1, // Add this! Assuming 1 = Pending for tasks
-      work_order_id: workOrder.work_order_id,
+      status_id: 1, // Pending
+      work_order_id: null, // NO WORK ORDER
+      asset_id: assetData.asset_id, 
       due_date: taskData.dueDate,
       assigned_to: parseInt(taskData.assigneeId)
     };
-    
-    console.log('Creating maintenance task:', taskInsert);
     
     const { data: taskResult, error: taskError } = await supabase
       .from('maintenance_tasks')
@@ -467,22 +480,13 @@ async createMaintenanceTask(taskData) {
       .select()
       .single();
 
-    if (taskError) {
-      console.error('Task insertion error:', taskError);
-      throw taskError;
-    }
-    
-    console.log('Task created successfully:', taskResult);
+    if (taskError) throw taskError;
 
     // Update asset status to "maintenance"
-    const { error: updateError } = await supabase
+    await supabase
       .from('assets')
       .update({ asset_status: 'maintenance' })
       .eq('asset_code', taskData.assetId);
-
-    if (updateError) {
-      console.error('Asset update error:', updateError);
-    }
 
     return taskResult;
   } catch (error) {

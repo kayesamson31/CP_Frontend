@@ -31,6 +31,7 @@ import SysadAuditLogs from './dashboards/SysadNav/SysadAuditLogs';
 //AdminNav
 import DashboardAdmin from './dashboards/DashboardAdmin';
 import WorkOrder from './dashboards/AdminNav/WorkOrder';
+import MaintenanceTasks from './dashboards/AdminNav/MaintenanceTasks';
 //import Reservation from './dashboards/AdminNav/Reservation';
 import Reports from './dashboards/AdminNav/Reports';
 import ActivityTracking from './dashboards/AdminNav/ActivityTracking';
@@ -182,6 +183,16 @@ function App() {
     </PrivateRoute>
   } 
 />
+
+<Route 
+  path="/dashboard-admin/MaintenanceTasks" 
+  element={
+    <PrivateRoute allowedRoles={['admin']}>
+      <MaintenanceTasks />
+    </PrivateRoute>
+  } 
+/>
+
 <Route 
   path="/dashboard-admin/ActivityTracking" 
   element={

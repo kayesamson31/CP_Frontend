@@ -831,15 +831,27 @@ const handleCreateTask = async () => {
                   <td>{asset.name}</td>
                   <td>{asset.category}</td>
                   <td>{asset.location}</td>
-                                      <td>
-                      <span className={`badge ${
-                        asset.status === 'Operational' ? 'bg-success' :
-                        asset.status === 'Under Maintenance' ? 'bg-warning' :
-                        'bg-secondary'
-                      }`}>
-                        {asset.status}
-                      </span>
-                    </td>
+
+                                 <td>
+  <span className={`badge ${
+    asset.status === 'Operational' ? 'bg-success' :
+    asset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}>
+    {asset.status}
+  </span>
+  {asset.hasFailedMaintenance && asset.status !== 'Operational' && (
+    <div className="d-flex align-items-center mt-1">
+      <span className="text-danger" style={{ fontSize: '0.7rem' }}>
+        ▲
+      </span>
+      <small className="text-danger ms-1" style={{ fontSize: '0.7rem', fontWeight: '500' }}>
+        FAILED MAINTENANCE ({asset.failedMaintenanceCount})
+      </small>
+    </div>
+  )}
+</td>
+
                     <td>{asset.lastMaintenance}</td>
                     
                     <td>
@@ -903,14 +915,22 @@ const handleCreateTask = async () => {
                 <Row>
                   {/* Left Column - Asset Information */}
                   <Col lg={8}>
-                  <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-  <span className={`badge ${
-    selectedAsset.status === 'Operational' ? 'bg-success' :
-    selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
-    'bg-secondary'
-  }`}>
-    {selectedAsset.status}
-  </span>
+<div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+  <div className="d-flex gap-2">
+    <span className={`badge ${
+      selectedAsset.status === 'Operational' ? 'bg-success' :
+      selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+      'bg-secondary'
+    }`}>
+      {selectedAsset.status}
+    </span>
+    {selectedAsset.hasFailedMaintenance && (
+      <span className="badge bg-danger">
+        <i className="fas fa-exclamation-triangle me-1"></i>
+        {selectedAsset.failedMaintenanceCount} Failed Task{selectedAsset.failedMaintenanceCount > 1 ? 's' : ''}
+      </span>
+    )}
+  </div>
 </div>
                     {!isEditing ? (
                       // View Mode

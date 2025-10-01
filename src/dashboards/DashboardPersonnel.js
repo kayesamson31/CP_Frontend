@@ -31,37 +31,80 @@ const apiService = {
       }
 
        // Handle maintenance_task updates
-      if (taskType === 'maintenance_task') {
-        const updateData = {
-          status_id: statusId,
-          ...(status === 'completed' && { date_completed: new Date().toISOString() }),
-          ...(reason && { remarks: reason })
-        };
+    // Inside apiService.updateTaskStatus, update the maintenance_task extension handling:
 
-        const { data, error } = await supabase
-          .from('maintenance_tasks')
-          .update(updateData)
-          .eq('task_id', taskId)
-          .select();
+if (taskType === 'maintenance_task') {
+  // Handle extension for maintenance tasks
+  if (newDate && status === 'in-progress') {
+    // Get current task data
+    const { data: currentTask } = await supabase
+      .from('maintenance_tasks')
+      .select('due_date, original_due_date, extension_count')
+      .eq('task_id', taskId)
+      .single();
 
-        if (error) throw error;
+    // Insert extension history
+    await supabase
+      .from('maintenance_task_extensions')
+      .insert({
+        task_id: taskId,
+        old_due_date: currentTask.due_date,
+        new_due_date: newDate,
+        extension_reason: reason,
+        extended_by: userProfile.user_id
+      });
 
-        // Also update the related work_order status
-        const { data: taskData } = await supabase
-          .from('maintenance_tasks')
-          .select('work_order_id')
-          .eq('task_id', taskId)
-          .single();
+    // Update maintenance_tasks with extension data
+    const taskUpdate = {
+      status_id: statusId,
+      due_date: newDate,
+      original_due_date: currentTask.original_due_date || currentTask.due_date,
+      extension_count: (currentTask.extension_count || 0) + 1,
+      last_extension_date: new Date().toISOString(),
+      last_extension_reason: reason,
+      extended_by: userProfile.user_id
+    };
 
-        if (taskData?.work_order_id) {
-          await supabase
-            .from('work_orders')
-            .update({ status_id: statusId })
-            .eq('work_order_id', taskData.work_order_id);
-        }
+    const { data, error } = await supabase
+      .from('maintenance_tasks')
+      .update(taskUpdate)
+      .eq('task_id', taskId)
+      .select();
 
-        return { success: true, data: data?.[0] };
-      }
+    if (error) throw error;
+
+    return { success: true, data: data?.[0] };
+  }
+
+  // Regular status update for maintenance tasks (non-extension)
+// Regular status update for maintenance tasks (non-extension)
+const updateData = {
+  status_id: statusId,
+  ...(status === 'completed' && { date_completed: new Date().toISOString() }),
+  ...(reason && { remarks: reason })
+};
+
+const { data, error } = await supabase
+  .from('maintenance_tasks')
+  .update(updateData)
+  .eq('task_id', taskId)
+  .select('*, asset_id');
+
+if (error) throw error;
+
+// Update asset status to operational when task is completed
+if (status === 'completed' && data?.[0]?.asset_id) {
+  await supabase
+    .from('assets')
+    .update({ 
+      asset_status: 'active',
+      last_maintenance: new Date().toISOString()
+    })
+    .eq('asset_id', data[0].asset_id);
+}
+
+return { success: true, data: data?.[0] };
+}
 
     // Handle extension logic
     if (newDate && status === 'in-progress') {
@@ -271,7 +314,9 @@ const loadTasks = async () => {
 
     // Transform maintenance tasks
     if (maintenanceTasks && maintenanceTasks.length > 0) {
-      const transformedMaintenanceTasks = maintenanceTasks.map(task => {
+      const transformedMaintenanceTasks = maintenanceTasks
+  .filter(task => !task.workOrderId)
+  .map(task => {
         const dueDate = new Date(task.dueDate);
         const currentDate = new Date();
         currentDate.setHours(0, 0, 0, 0);
@@ -286,15 +331,15 @@ const loadTasks = async () => {
           type: 'maintenance_task', // Add type identifier
           title: task.title,
           description: task.description || 'No description',
-          category: task.workOrder?.category || 'Maintenance',
-          asset: task.workOrder?.asset?.name || 'Not specified',
-          location: task.workOrder?.location || task.workOrder?.asset?.location || 'Not specified',
+         asset: task.asset?.name || task.workOrder?.asset?.name || 'Not specified',
+        location: task.asset?.location || task.workOrder?.location || task.workOrder?.asset?.location || 'Not specified',
+        category: task.asset?.category || task.workOrder?.category || 'Maintenance',
           dueDate: task.dueDate,
           originalDueDate: null,
           priority: task.priority.toLowerCase(),
           status: statusName,
           isOverdue: isOverdue,
-          failureReason: null,
+          failureReason: task.remarks,
           extensionCount: 0,
           lastExtensionReason: null,
           extensionHistory: [],
@@ -1044,7 +1089,7 @@ const twoColumnGrid = {
                                 {capitalizePriority(task.priority)}
                               </Badge>
                               <Badge bg={task.status === 'completed' ? 'success' : 'danger'} style={{ fontSize: '9px' }}>
-                                {task.status === 'completed' ? '✓ Completed' : '✗ Failed'}
+                                {task.status === 'completed' ? 'âœ“ Completed' : 'âœ— Failed'}
                               </Badge>
                             </div>
                           </div>
@@ -1221,7 +1266,7 @@ const twoColumnGrid = {
                           <div key={i} className="border p-2 mb-2 bg-warning bg-opacity-10 rounded">
                             <small><b>Extended</b> - {ext.extension_reason}</small><br />
                             <small className="text-info">
-                              From: {new Date(ext.old_due_date).toLocaleDateString()} → 
+                              From: {new Date(ext.old_due_date).toLocaleDateString()} â†’ 
                               To: {new Date(ext.new_due_date).toLocaleDateString()}
                             </small><br />
                             <small className="text-muted">{new Date(ext.extension_date).toLocaleString()}</small>
@@ -1260,7 +1305,7 @@ const twoColumnGrid = {
                   
                   {selectedTask.status === 'in-progress' && (
                     <button className="btn btn-dark" disabled>
-                      ✓ In Progress
+                      âœ“ In Progress
                     </button>
                   )}
                 </div>

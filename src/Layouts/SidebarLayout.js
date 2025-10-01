@@ -24,6 +24,7 @@ const menuConfig = {
     { label: 'Profile', path: '/dashboard-admin/profile', icon: 'bi bi-person' },
     { label: 'Notification', path: '/dashboard-admin/notification', icon: 'bi bi-bell' },
     { label: 'Work Order', path: '/dashboard-admin/WorkOrder', icon: 'bi bi-clipboard-check' },
+    { label: 'Maintenance Tasks', path: '/dashboard-admin/MaintenanceTasks', icon: 'bi bi-gear'},
     { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: 'bi bi-people' },
     { label: 'Asset Management', path: '/dashboard-admin/AssetManagement', icon: 'bi bi-box-seam' },
     { label: 'Activity Tracking', path: '/dashboard-admin/ActivityTracking', icon: 'bi bi-clock-history' },
