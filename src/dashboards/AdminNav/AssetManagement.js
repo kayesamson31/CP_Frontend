@@ -135,85 +135,72 @@ const handleAssignIncidentTask = () => {
 };
 
 const handleDismissIncident = async () => {
-  if (selectedIncident && selectedAsset) {
+  if (selectedIncident && previousAsset) {
     try {
-      const updatedAssets = assets.map(asset => {
-        if (asset.id === selectedAsset.id) {
-          return {
-            ...asset,
-            incidentReports: asset.incidentReports.map(incident =>
-              incident.id === selectedIncident.id
-                ? { ...incident, status: 'Dismissed' }
-                : incident
-            )
-          };
-        }
-        return asset;
-      });
+      // Update in database
+      await assetService.updateIncidentStatus(selectedIncident.id, 'Dismissed');
       
-      setAssets(updatedAssets);
-      const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
-      setSelectedAsset(updatedSelectedAsset);
+      // Refresh assets to get updated data
+      await fetchAssets();
       
       setShowIncidentDetailsModal(false);
+      setSelectedAsset(null);
+      setPreviousAsset(null);
+      
       alert('Incident dismissed successfully!');
     } catch (err) {
       console.error('Error dismissing incident:', err);
-      alert('Failed to dismiss incident.');
+      alert('Failed to dismiss incident. Please try again.');
     }
   }
 };
-
 const handleSubmitIncidentTask = async () => {
-  if (incidentTaskForm.assigneeId && incidentTaskForm.dueDate) {
+  if (incidentTaskForm.assigneeId && incidentTaskForm.dueDate && previousAsset) {  // ADD previousAsset check
     try {
       const assignedPersonnel = personnel.find(p => p.id === incidentTaskForm.assigneeId);
       
-      // Create task based on incident
-      const task = {
-        id: `TSK-${String(tasks.length + 1).padStart(3, '0')}`,
-        assetId: selectedAsset.id,
+      // Use previousAsset instead of selectedAsset
+      const assetId = previousAsset.id;
+      
+      // Map severity to priority
+      const severityToPriority = {
+        'Critical': 'high',
+        'Major': 'high',
+        'Minor': 'low'
+      };
+      
+      const priority = severityToPriority[selectedIncident.severity] || 'medium';
+      
+      // Create the maintenance task via API
+      const taskData = {
+        assetId: assetId,
         title: `${selectedIncident.type} - ${selectedIncident.severity} Priority`,
         description: incidentTaskForm.description || selectedIncident.description,
         assigneeId: incidentTaskForm.assigneeId,
-        priority: selectedIncident.severity === 'High' ? 'high' : selectedIncident.severity === 'Medium' ? 'medium' : 'low',
+        priority: priority,
         dueDate: incidentTaskForm.dueDate,
         dueTime: incidentTaskForm.dueTime || '09:00',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-        createdFrom: 'incident',
-        relatedIncidentId: selectedIncident.id
+        taskType: 'custom',
+        status: 'pending'
       };
       
-      setTasks(prevTasks => [...prevTasks, task]);
+      await assetService.createMaintenanceTask(taskData);
       
-      // Update asset status and incident
-      const updatedAssets = assets.map(asset => {
-        if (asset.id === selectedAsset.id) {
-          return {
-            ...asset,
-            status: "Under Maintenance",
-            incidentReports: asset.incidentReports.map(incident =>
-              incident.id === selectedIncident.id
-                ? { ...incident, status: 'Assigned to Task', assignedTaskId: task.id }
-                : incident
-            )
-          };
-        }
-        return asset;
-      });
+      // Update incident status to "Assigned to Task"
+      await assetService.updateIncidentStatus(selectedIncident.id, 'Assigned');
       
-      setAssets(updatedAssets);
-      const updatedSelectedAsset = updatedAssets.find(a => a.id === selectedAsset.id);
-      setSelectedAsset(updatedSelectedAsset);
+      // Refresh assets
+      await fetchAssets();
       
       setShowAssignTaskModal(false);
       setIncidentTaskForm({ incidentId: '', assigneeId: '', dueDate: '', dueTime: '', description: '' });
+      setPreviousAsset(null);
+      
       alert(`Maintenance task assigned to ${assignedPersonnel.name}!`);
       
     } catch (err) {
       console.error('Error assigning task:', err);
-      alert('Failed to assign task.');
+      alert('Failed to assign task: ' + err.message);
     }
   } else {
     alert('Please fill in required fields.');
@@ -421,7 +408,7 @@ const handleExportReport = () => {
     // Prepare CSV headers
     const headers = [
       'Asset ID',
-      'Asset Name', 
+      'Asset Name/Code', 
       'Category',
       'Location',
       'Status',
@@ -616,7 +603,7 @@ const handleCreateTask = async () => {
     <Row className="g-3">
       <Col md={6}>
         <Form.Group>
-          <Form.Label>Asset Name *</Form.Label>
+          <Form.Label>Asset Name/Code *</Form.Label>
           <Form.Control
             type="text"
             value={newAsset.name}
@@ -807,32 +794,29 @@ const handleCreateTask = async () => {
         </Row>
 
         {/* Assets Table */}
-        {/* Assets Table */}
 <div className="bg-white rounded shadow-sm">
   <div className="table-responsive">
     <table className="table table-hover mb-0">
-          <thead className="table-light">
+<thead className="table-light">
   <tr>
-            <th>Asset ID</th>
-            <th>Asset Name</th>
-            <th>Category</th>
-            <th>Location</th>
-            <th>Status</th>
-            <th>Last Maintenance</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
+    <th>Asset Name/Code</th>
+    <th>Category</th>
+    <th>Location</th>
+    <th>Status</th>
+    <th>Last Maintenance</th>
+    <th>Actions</th>
+  </tr>
+</thead>
           <tbody>
             {filteredAssets.length > 0 ? (
               filteredAssets.map((asset) => {
-                return (
-                  <tr key={asset.id}>
-                    <td>{asset.id}</td>
-                  <td>{asset.name}</td>
-                  <td>{asset.category}</td>
-                  <td>{asset.location}</td>
+               return (
+  <tr key={asset.id}>
+    <td>{asset.name}</td>
+    <td>{asset.category}</td>
+    <td>{asset.location}</td>
 
-                                 <td>
+                                <td>
   <span className={`badge ${
     asset.status === 'Operational' ? 'bg-success' :
     asset.status === 'Under Maintenance' ? 'bg-warning' :
@@ -850,8 +834,15 @@ const handleCreateTask = async () => {
       </small>
     </div>
   )}
+  {asset.incidentReports && asset.incidentReports.length > 0 && (
+    <div className="d-flex align-items-center mt-1">
+      <i className="fas fa-exclamation-circle text-danger" style={{ fontSize: '0.7rem' }}></i>
+      <small className="text-danger ms-1" style={{ fontSize: '0.7rem', fontWeight: '500' }}>
+        {asset.incidentReports.length} INCIDENT REPORT{asset.incidentReports.length > 1 ? 'S' : ''}
+      </small>
+    </div>
+  )}
 </td>
-
                     <td>{asset.lastMaintenance}</td>
                     
                     <td>
@@ -870,7 +861,7 @@ const handleCreateTask = async () => {
               })
             ) : (
               <tr>
-                <td colSpan="7" className="text-center text-muted py-4">
+                <td colSpan="6" className="text-center text-muted py-4">
                   {assets.length === 0 
                     ? `No assets available. Add new assets to get started.`
                     : `No assets found matching your search criteria.`
@@ -1001,7 +992,7 @@ const handleCreateTask = async () => {
                       <div className="row g-3">
                         <div className="col-md-6">
                           <Form.Group>
-                            <Form.Label>Asset Name *</Form.Label>
+                            <Form.Label>Asset Name/Code *</Form.Label>
                             <Form.Control 
                               type="text" 
                               value={editingAsset.name}
@@ -1140,6 +1131,52 @@ const handleCreateTask = async () => {
                         </tbody>
                       </Table>
                     </div>
+
+                    {/* Incident History */}
+{selectedAsset.incidentHistory && selectedAsset.incidentHistory.length > 0 && (
+  <div className="mt-4 pt-3 border-top">
+    <h6 className="mb-3">
+      <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
+      Incident Report History
+    </h6>
+    <Table bordered size="sm" className="mt-2">
+      <thead>
+        <tr>
+          <th>Date Reported</th>
+          <th>Type</th>
+          <th>Severity</th>
+          <th>Reported By</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {selectedAsset.incidentHistory.map((incident, idx) => (
+          <tr key={idx}>
+            <td>{new Date(incident.reportedAt).toLocaleDateString()}</td>
+            <td>{incident.type}</td>
+            <td>
+              <Badge bg={
+                incident.severity === 'Critical' ? 'danger' :
+                incident.severity === 'Major' ? 'warning' : 'info'
+              }>
+                {incident.severity}
+              </Badge>
+            </td>
+            <td>{incident.reportedBy}</td>
+            <td>
+              <Badge bg={
+                incident.status === 'Reported' ? 'danger' : 
+                incident.status === 'Resolved' ? 'success' : 'secondary'
+              }>
+                {incident.status}
+              </Badge>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  </div>
+)}
                     
                     {/* Maintenance Schedule Section - Only show for Under Maintenance assets */}
                     {selectedAsset.status === 'Under Maintenance' && selectedAsset.maintenanceSchedule && (
@@ -1638,7 +1675,7 @@ const handleCreateTask = async () => {
 <Modal.Footer>
   <Button variant="outline-secondary" onClick={() => {
     setShowIncidentDetailsModal(false);
-    setSelectedAsset(previousAsset); // Reopen the Asset Details modal
+    setSelectedAsset(previousAsset);
     setPreviousAsset(null);
   }}>
     <i className="fas fa-arrow-left me-2"></i>
@@ -1650,7 +1687,7 @@ const handleCreateTask = async () => {
   }}>
     Close
   </Button>
-  {selectedIncident?.status === 'Open' && (
+  {(selectedIncident?.status === 'Reported' || selectedIncident?.status === 'Open') && (
     <>
       <Button variant="warning" onClick={handleAssignIncidentTask}>
         <i className="fas fa-tasks me-2"></i>

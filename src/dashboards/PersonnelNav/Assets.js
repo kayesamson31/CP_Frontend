@@ -213,38 +213,39 @@ const [incidentForm, setIncidentForm] = useState({
   };
 
 const handleSubmitIncident = async () => {
-  if (!incidentForm.description.trim()) return;
+  if (!incidentForm.description.trim() || !incidentForm.type) {
+    alert('Please fill in all required fields.');
+    return;
+  }
 
   try {
-    const newIncident = {
-      id: `INC-${Date.now()}`,
+    const savedIncident = await assetService.createIncidentReport({
+      assetId: incidentAsset.id,
       type: incidentForm.type,
       description: incidentForm.description.trim(),
-      severity: incidentForm.severity,
-      reportedBy: currentUser.name,
-      reportedAt: new Date().toISOString(),
-      status: "Open"
-    };
-
+      severity: incidentForm.severity
+    });
+    
     const updatedAssets = assets.map((asset) => {
       if (asset.id === incidentAsset.id) {
         return {
           ...asset,
-          incidentHistory: [...(asset.incidentHistory || []), newIncident],
+          incidentHistory: [...(asset.incidentHistory || []), savedIncident],
         };
       }
       return asset;
     });
 
     setAssets(updatedAssets);
-    const updatedSelectedAsset = updatedAssets.find(a => a.id === incidentAsset.id);
-    setSelectedAsset(updatedSelectedAsset);
     
     setIncidentForm({ type: "", description: "", severity: "Low" });
     setShowIncidentModal(false);
-    setIncidentAsset(null);  // Clear the stored asset data
+    setIncidentAsset(null);
+    
+    alert('Incident report submitted successfully!');
   } catch (err) {
-    console.error('Error adding incident:', err);
+    console.error('Error submitting incident:', err);
+    alert('Failed to submit incident report. Please try again.');
   }
 };
 
@@ -347,35 +348,33 @@ const handleCancelIncident = () => {
       <div className="bg-white rounded shadow-sm">
         <div className="table-responsive">
           <table className="table table-hover mb-0">
-          <thead className="table-light">
-            <tr>
-              <th>Asset ID</th>
-              <th>Asset Name</th>
-              <th>Category</th>
-              <th>Location</th>
-              <th>Status</th>
-              <th>Last Maintenance</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredAssets.length > 0 ? (
-              filteredAssets.map((asset) => (
-                <tr key={asset.id}>
-                  <td>{asset.id}</td>
-                  <td>{asset.name}</td>
-                  <td>{asset.category}</td>
-                  <td>{asset.location}</td>
-                  <td>
-                    <span className={`badge ${
-                      asset.status === 'Operational' ? 'bg-success' :
-                      asset.status === 'Under Maintenance' ? 'bg-warning' :
-                      'bg-secondary'
-                    }`}>
-                      {asset.status}
-                    </span>
-                  </td>
-                  <td>{asset.lastMaintenance}</td>
+        <thead className="table-light">
+          <tr>
+            <th>Asset Name/Code</th>
+            <th>Category</th>
+            <th>Location</th>
+            <th>Status</th>
+            <th>Last Maintenance</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+         <tbody>
+  {filteredAssets.length > 0 ? (
+    filteredAssets.map((asset) => (
+      <tr key={asset.id}>
+        <td>{asset.name}</td>
+        <td>{asset.category}</td>
+        <td>{asset.location}</td>
+        <td>
+          <span className={`badge ${
+            asset.status === 'Operational' ? 'bg-success' :
+            asset.status === 'Under Maintenance' ? 'bg-warning' :
+            'bg-secondary'
+          }`}>
+            {asset.status}
+          </span>
+        </td>
+        <td>{asset.lastMaintenance}</td>
                   <td>
                   <div className="btn-group btn-group-sm">
                     <Button
@@ -391,7 +390,7 @@ const handleCancelIncident = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="7" className="text-center text-muted py-4">
+                <td colSpan="6" className="text-center text-muted py-4">
                   {assets.length === 0 
                     ? `No assets available. Assets will appear here once they are added by an administrator.`
                     : `No assets found matching your search criteria.`
@@ -430,27 +429,37 @@ const handleCancelIncident = () => {
                   {/* Left Column - Asset Information */}
                   <Col lg={8}>
                   {/* Status Badge and Report Button */}
-<div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-  <span className={`badge ${
-    selectedAsset.status === 'Operational' ? 'bg-success' :
-    selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
-    'bg-secondary'
-  }`}>
-    {selectedAsset.status}
-  </span>
-  <Button 
-    variant="outline-danger"
-    size="sm"
-    onClick={() => {
-      setIncidentAsset(selectedAsset);
-      setSelectedAsset(null);
-      setTimeout(() => {
-        setShowIncidentModal(true);
-      }, 100);
-    }}
-  >
-    Report Incident
-  </Button>
+<div className="mb-3 pb-2 border-bottom">
+  <div className="d-flex align-items-center gap-2">
+    <span 
+      className={`badge ${
+        selectedAsset.status === 'Operational' ? 'bg-success' :
+        selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+        'bg-secondary'
+      }`}
+      style={{
+        padding: '0.375rem 0.75rem',
+        fontSize: '0.875rem',
+        fontWeight: '400'
+      }}
+    >
+      {selectedAsset.status}
+    </span>
+    <Button 
+      variant="outline-danger"
+      size="sm"
+      onClick={() => {
+        setIncidentAsset(selectedAsset);
+        setSelectedAsset(null);
+        setTimeout(() => {
+          setShowIncidentModal(true);
+        }, 100);
+      }}
+    >
+      <i className="fas fa-exclamation-triangle me-1"></i>
+      Report Incident
+    </Button>
+  </div>
 </div>
 
                     {/* Asset Info - Two Column Grid */}
@@ -517,7 +526,7 @@ const handleCancelIncident = () => {
                               <tr key={idx}>
                                 <td>{entry.date}</td>
                                 <td>{entry.task}</td>
-                                <td>{entry.Assigned}</td>
+                                <td>{entry.assigned}</td>
                               </tr>
                             ))
                           ) : (
@@ -611,23 +620,18 @@ const handleCancelIncident = () => {
   <Modal.Header closeButton>
     <Modal.Title>Report Incident</Modal.Title>
   </Modal.Header>
+
   <Modal.Body>
     {incidentAsset && (
-      <>
-        <Row className="mb-3">
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label>Asset ID</Form.Label>
-              <Form.Control type="text" value={incidentAsset.id} readOnly />
-            </Form.Group>
-          </Col>
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label>Asset Name</Form.Label>
-              <Form.Control type="text" value={incidentAsset.name} readOnly />
-            </Form.Group>
-          </Col>
-        </Row>
+    <>
+      <Row className="mb-3">
+        <Col xs={12}>
+          <Form.Group>
+            <Form.Label>Asset Name/Code</Form.Label>
+            <Form.Control type="text" value={incidentAsset.name} readOnly />
+          </Form.Group>
+        </Col>
+      </Row>
         
         <Form.Group className="mb-3">
           <Form.Label>Category</Form.Label>

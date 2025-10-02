@@ -38,7 +38,13 @@ console.log('Profile loading for local user:', currentUser);
 // Query DB using email (since auth_uid is null in custom auth)
 const { data: userData, error: userError } = await supabase
   .from('users')
-  .select('*')
+  .select(`
+    *,
+    organizations (
+      org_name,
+      address
+    )
+  `)
   .eq('email', currentUser.email)
   .single();
 
@@ -72,11 +78,13 @@ const fallbackData = {
         default: userRole = "standard";
       }
 
-      const profileInfo = {
-        name: userData.full_name || '',
-        email: userData.email || '',
-        role: userRole,
-      };
+     const profileInfo = {
+  name: userData.full_name || '',
+  email: userData.email || '',
+  role: userRole,
+  organizationName: userData.organizations?.org_name || 'No Organization',
+  organizationAddress: userData.organizations?.address || 'Not specified',
+};
 
       setProfileData(prev => ({ ...prev, ...profileInfo }));
       setOriginalData(profileInfo);
@@ -314,18 +322,26 @@ const { data, error: updateError } = await supabase
             <Card className="border-0 shadow-sm">
               {/* Profile Header */}
               <Card.Header className="text-white border-0" style={{ padding: '20px', backgroundColor: '#284386' }}>
-                <div className="d-flex align-items-center">
-                  <div 
-                    className="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center me-3"
-                    style={{ width: '100px', height: '100px' }}
-                  >
-                    <i className="bi bi-person-fill text-white" style={{ fontSize: '3rem' }}></i>
-                  </div>
-                  <div>
-                    <h3 className="mb-1 fw-bold">{profileData.name || 'Your Name'}</h3>
-                    <p className="mb-1 opacity-90">{profileData.email || 'your.email@example.com'}</p>
-                    <div className="d-flex align-items-center">
-                      <span className="badge bg-white text-primary me-2">{profileData.role}</span>
+  <div className="d-flex align-items-center">
+    <div 
+      className="bg-white bg-opacity-25 rounded-circle d-flex align-items-center justify-content-center me-3"
+      style={{ width: '100px', height: '100px' }}
+    >
+      <i className="bi bi-person-fill text-white" style={{ fontSize: '3rem' }}></i>
+    </div>
+    <div>
+      <h3 className="mb-1 fw-bold">{profileData.name || 'Your Name'}</h3>
+      <p className="mb-1 opacity-90">{profileData.email || 'your.email@example.com'}</p>
+      <p className="mb-1 opacity-75 small">
+        <i className="bi bi-building me-1"></i>
+        {profileData.organizationName || 'No Organization'}
+      </p>
+      <p className="mb-1 opacity-75 small">
+        <i className="bi bi-geo-alt me-1"></i>
+        {profileData.organizationAddress || 'Not specified'}
+      </p>
+      <div className="d-flex align-items-center mt-2">
+        <span className="badge bg-white text-primary me-2">{profileData.role}</span>
                       {requirePasswordChange && (
                         <span className="badge bg-warning text-dark">
                           <i className="bi bi-key-fill me-1"></i>Password Change Required

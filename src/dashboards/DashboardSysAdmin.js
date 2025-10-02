@@ -17,6 +17,8 @@ export default function DashboardSyAdmin() {
   const [usersList, setUsersList] = useState([]);
   const [assetsList, setAssetsList] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
+  const [editingOrgInfo, setEditingOrgInfo] = useState(false);
+const [editedOrgData, setEditedOrgData] = useState({});
   
   // NEW: States for bulk upload modals
   const [showAssetUploadModal, setShowAssetUploadModal] = useState(false);
@@ -669,6 +671,77 @@ console.log('Asset counts updated:', dbStats);
   }
 };
 
+const handleSaveOrgInfo = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+    
+    if (!userEmail) {
+      alert('User not authenticated');
+      return;
+    }
+
+    // First, get the organization ID
+    const { data: orgData, error: fetchError } = await supabase
+      .from('organizations')
+      .select('organization_id')
+      .eq('contact_email', userEmail)
+      .single();
+
+    if (fetchError || !orgData) {
+      console.error('Fetch error:', fetchError);
+      alert('Organization not found for this user');
+      return;
+    }
+
+    // If country was changed, we need to get the country_id
+    let updateData = {
+      org_name: editedOrgData.name,
+      org_type: editedOrgData.type,
+      address: editedOrgData.address,
+      phone: editedOrgData.phone,
+      website: editedOrgData.website
+    };
+
+    // If country needs to be updated, look up country_id
+    if (editedOrgData.country) {
+      const { data: countryData } = await supabase
+        .from('countries')
+        .select('country_id')
+        .eq('country_name', editedOrgData.country)
+        .single();
+      
+      if (countryData) {
+        updateData.country_id = countryData.country_id;
+      }
+    }
+
+  // Then update using organization_id instead
+const { error } = await supabase
+  .from('organizations')
+  .update({
+    org_name: editedOrgData.name,
+    address: editedOrgData.address,
+    phone: editedOrgData.phone,
+    website: editedOrgData.website
+    // Removed org_type and country - they're foreign keys
+  })
+  .eq('organization_id', orgData.organization_id);
+
+    // Rest of your code stays the same
+    const updatedData = await getOrganizationData();
+    setOrganizationData(updatedData);
+    setEditingOrgInfo(false);
+    
+    addActivity('maintenance', 'Organization information updated', organizationData.contactPerson);
+    alert('Organization information updated successfully!');
+    
+  } catch (error) {
+    console.error('Error updating organization:', error);
+    alert('Failed to update organization info: ' + error.message);
+  }
+};
+
   // Function to handle CSV upload (existing function - keep for compatibility)
   const handleCSVUpload = (file, type) => {
     const reader = new FileReader();
@@ -1192,54 +1265,143 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
         {/* Organization Information Card */}
         <div className="card mb-4 shadow-sm" style={{borderRadius: '16px', border: '1px solid #dee2e6'}}>
-          <div className="card-header border-bottom" style={{
-            borderRadius: '16px 16px 0 0',
-            background: '#284C9A',
-            color: 'white'
-          }}>
-            <h5 className="card-title mb-0 fw-bold">
-              <i className="bi bi-building-fill me-2 text-white"></i>
-              Organization Information
-            </h5>
-          </div>
-          <div className="card-body">
-            <div className="row">
-              <div className="col-md-4">
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Organization Name</label>
-                  <p className="mb-0 fw-bold">{organizationData.name}</p>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Address</label>
-                  <p className="mb-0">{organizationData.address}</p>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Organization Type</label>
-                  <p className="mb-0">{organizationData.type}</p>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Phone</label>
-                  <p className="mb-0">{organizationData.phone}</p>
-                </div>
-              </div>
-              <div className="col-md-4">
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Country</label>
-                  <p className="mb-0">{organizationData.country}</p>
-                </div>
-                <div className="mb-3">
-                  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Official Website</label>
-                  <p className="mb-0">
-                    <a href={organizationData.website} className="text-decoration-none" target="_blank" rel="noopener noreferrer">
-                      {organizationData.website}
-                    </a>
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+         <div className="card-header border-bottom d-flex justify-content-between align-items-center" style={{
+  borderRadius: '16px 16px 0 0',
+  background: '#284C9A',
+  color: 'white'
+}}>
+  <h5 className="card-title mb-0 fw-bold">
+    <i className="bi bi-building-fill me-2 text-white"></i>
+    Organization Information
+  </h5>
+  {!editingOrgInfo ? (
+    <button 
+      className="btn btn-light btn-sm"
+      onClick={() => {
+        setEditedOrgData({
+          name: organizationData.name,
+          type: organizationData.type,
+          address: organizationData.address,
+          phone: organizationData.phone,
+          country: organizationData.country,
+          website: organizationData.website
+        });
+        setEditingOrgInfo(true);
+      }}
+    >
+      <i className="bi bi-pencil me-1"></i>
+      Edit
+    </button>
+  ) : (
+    <div>
+      <button 
+        className="btn btn-success btn-sm me-2"
+        onClick={handleSaveOrgInfo}
+      >
+        <i className="bi bi-check me-1"></i>
+        Save
+      </button>
+      <button 
+        className="btn btn-secondary btn-sm"
+        onClick={() => setEditingOrgInfo(false)}
+      >
+        Cancel
+      </button>
+    </div>
+  )}
+</div>
+        <div className="card-body">
+  <div className="row">
+    <div className="col-md-4">
+      <div className="mb-3">
+        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Organization Name</label>
+        {editingOrgInfo ? (
+          <input 
+            type="text" 
+            className="form-control"
+            value={editedOrgData.name}
+            onChange={(e) => setEditedOrgData({...editedOrgData, name: e.target.value})}
+          />
+        ) : (
+          <p className="mb-0 fw-bold">{organizationData.name}</p>
+        )}
+      </div>
+      <div className="mb-3">
+        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Address</label>
+        {editingOrgInfo ? (
+          <textarea 
+            className="form-control"
+            rows="2"
+            value={editedOrgData.address}
+            onChange={(e) => setEditedOrgData({...editedOrgData, address: e.target.value})}
+          />
+        ) : (
+          <p className="mb-0">{organizationData.address}</p>
+        )}
+      </div>
+    </div>
+    <div className="col-md-4">
+      <div className="mb-3">
+        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Organization Type</label>
+        {editingOrgInfo ? (
+          <input 
+            type="text" 
+            className="form-control"
+            value={editedOrgData.type}
+            onChange={(e) => setEditedOrgData({...editedOrgData, type: e.target.value})}
+          />
+        ) : (
+          <p className="mb-0">{organizationData.type}</p>
+        )}
+      </div>
+      <div className="mb-3">
+        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Phone</label>
+        {editingOrgInfo ? (
+          <input 
+            type="text" 
+            className="form-control"
+            value={editedOrgData.phone}
+            onChange={(e) => setEditedOrgData({...editedOrgData, phone: e.target.value})}
+          />
+        ) : (
+          <p className="mb-0">{organizationData.phone}</p>
+        )}
+      </div>
+    </div>
+    <div className="col-md-4">
+      <div className="mb-3">
+        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Country</label>
+        {editingOrgInfo ? (
+          <input 
+            type="text" 
+            className="form-control"
+            value={editedOrgData.country}
+            onChange={(e) => setEditedOrgData({...editedOrgData, country: e.target.value})}
+          />
+        ) : (
+          <p className="mb-0">{organizationData.country}</p>
+        )}
+      </div>
+      <div className="mb-3">
+        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Official Website</label>
+        {editingOrgInfo ? (
+          <input 
+            type="url" 
+            className="form-control"
+            value={editedOrgData.website}
+            onChange={(e) => setEditedOrgData({...editedOrgData, website: e.target.value})}
+          />
+        ) : (
+          <p className="mb-0">
+            <a href={organizationData.website} className="text-decoration-none" target="_blank" rel="noopener noreferrer">
+              {organizationData.website}
+            </a>
+          </p>
+        )}
+      </div>
+    </div>
+  </div>
+</div>
         </div>
 
 {/* Statistics Cards Row */}

@@ -2,246 +2,40 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Card, ListGroup } from 'react-bootstrap';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { formatDistanceToNow } from 'date-fns';
-
-export default function Notification({ role = 'standard', userId = 'user123' }) {
-  const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-
-  // Role-based example notifications
-  const getNotificationsByRole = (role) => {
-    const baseTimestamp = Date.now();
-    
-    const notificationTemplates = {
-      standard: [
-        {
-          id: 1,
-          title: "Work Order Request Pending",
-          message: "Your work order request #WO-2024-001 for office AC repair is now pending for admin approval.",
-          status: "Pending",
-          workOrderId: "WO-2024-001",
-          timestamp: new Date(baseTimestamp - 2 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "normal",
-          notifiedBy: "admin",
-          actionType: "status_update"
-        },
-        {
-          id: 2,
-          title: "Work Order Request Rejected",
-          message: "Your work order request #WO-2024-002 has been rejected. Reason: Insufficient details provided.",
-          status: "Rejected",
-          workOrderId: "WO-2024-002",
-          timestamp: new Date(baseTimestamp - 24 * 60 * 60 * 1000).toISOString(),
-          isRead: true,
-          category: "work_order",
-          priority: "high",
-          notifiedBy: "admin",
-          actionType: "status_update"
-        },
-        {
-          id: 3,
-          title: "Work Order In Progress",
-          message: "Your work order request #WO-2024-003 is now in progress. Technician John Doe has started working on it.",
-          status: "In Progress",
-          workOrderId: "WO-2024-003",
-          timestamp: new Date(baseTimestamp - 4 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "normal",
-          notifiedBy: "personnel",
-          actionType: "status_update"
-        },
-        {
-          id: 4,
-          title: "Work Order Completed",
-          message: "Your work order request #WO-2024-004 has been successfully completed by our technician.",
-          status: "Completed",
-          workOrderId: "WO-2024-004",
-          timestamp: new Date(baseTimestamp - 6 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "normal",
-          notifiedBy: "personnel",
-          actionType: "status_update"
-        },
-        {
-          id: 5,
-          title: "Work Order Failed",
-          message: "Work order #WO-2024-005 encountered issues during execution. Please contact support for details.",
-          status: "Failed",
-          workOrderId: "WO-2024-005",
-          timestamp: new Date(baseTimestamp - 8 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "high",
-          notifiedBy: "personnel",
-          actionType: "status_update"
-        }
-      ],
-      
-      admin: [
-        {
-          id: 6,
-          title: "New Work Order Request Received",
-          message: "A new work order request #WO-2024-006 has been submitted by Jane Smith for printer maintenance.",
-          status: "To Review",
-          workOrderId: "WO-2024-006",
-          timestamp: new Date(baseTimestamp - 30 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "normal",
-          notifiedBy: "system",
-          actionType: "new_request",
-          requestor: "Jane Smith"
-        },
-        {
-          id: 7,
-          title: "Task Completed by Personnel",
-          message: "Personnel Mike Johnson has marked work order #WO-2024-007 as completed.",
-          status: "Completed",
-          workOrderId: "WO-2024-007",
-          timestamp: new Date(baseTimestamp - 2 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "normal",
-          notifiedBy: "personnel",
-          actionType: "task_update",
-          personnel: "Mike Johnson"
-        },
-        {
-          id: 8,
-          title: "Task In Progress with Extended Due Date",
-          message: "Personnel has extended the due date for work order #WO-2024-008. New expected completion: Tomorrow.",
-          status: "In Progress",
-          workOrderId: "WO-2024-008",
-          timestamp: new Date(baseTimestamp - 4 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "medium",
-          notifiedBy: "personnel",
-          actionType: "task_update"
-        },
-        {
-          id: 9,
-          title: "Asset Maintenance Remarks",
-          message: "Personnel provided remarks for asset maintenance #AM-2024-001: 'Equipment requires part replacement'",
-          status: "Completed",
-          workOrderId: "AM-2024-001",
-          timestamp: new Date(baseTimestamp - 6 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "asset_maintenance",
-          priority: "normal",
-          notifiedBy: "personnel",
-          actionType: "remarks_added"
-        },
-        {
-          id: 10,
-          title: "Overdue Task Alert",
-          message: "Work order #WO-2024-009 assigned to Personnel is now overdue by 2 days.",
-          status: "Failed",
-          workOrderId: "WO-2024-009",
-          timestamp: new Date(baseTimestamp - 8 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "high",
-          notifiedBy: "system",
-          actionType: "overdue_alert"
-        }
-      ],
-      
-      personnel: [
-        {
-          id: 11,
-          title: "New Work Order Assignment",
-          message: "You have been assigned a new work order #WO-2024-011 for electrical repair in Conference Room A.",
-          status: "Pending",
-          workOrderId: "WO-2024-011",
-          timestamp: new Date(baseTimestamp - 1 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "normal",
-          notifiedBy: "admin",
-          actionType: "task_assigned"
-        },
-        {
-          id: 12,
-          title: "Asset Maintenance Assignment",
-          message: "You have been assigned asset maintenance #AM-2024-002 for HVAC system inspection in Building B.",
-          status: "Pending",
-          workOrderId: "AM-2024-002",
-          timestamp: new Date(baseTimestamp - 3 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "asset_maintenance",
-          priority: "medium",
-          notifiedBy: "admin",
-          actionType: "task_assigned"
-        },
-        {
-          id: 13,
-          title: "High Priority Assignment",
-          message: "URGENT: You have been assigned a high-priority work order #WO-2024-013 for emergency plumbing repair.",
-          status: "Pending",
-          workOrderId: "WO-2024-013",
-          timestamp: new Date(baseTimestamp - 15 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "work_order",
-          priority: "high",
-          notifiedBy: "admin",
-          actionType: "task_assigned"
-        }
-      ],
-      
-      sysadmin: [
-        {
-          id: 14,
-          title: "Database Connection Error",
-          message: "Critical system error detected: Database connection timeout in Work Order module at 14:30.",
-          status: "Failed",
-          workOrderId: "SYS-2024-001",
-          timestamp: new Date(baseTimestamp - 30 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "system_error",
-          priority: "critical",
-          notifiedBy: "system",
-          actionType: "system_alert",
-          errorCode: "DB_TIMEOUT_001"
-        },
-        {
-          id: 15,
-          title: "API Service Down",
-          message: "System alert: Notification service API is experiencing downtime. User notifications may be delayed.",
-          status: "Failed",
-          workOrderId: "SYS-2024-002",
-          timestamp: new Date(baseTimestamp - 2 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "system_error",
-          priority: "high",
-          notifiedBy: "system",
-          actionType: "system_alert",
-          errorCode: "API_DOWN_002"
-        },
-        {
-          id: 16,
-          title: "System Performance Warning",
-          message: "Warning: Server CPU usage has exceeded 85% for the past 15 minutes. Consider scaling resources.",
-          status: "To Review",
-          workOrderId: "SYS-2024-003",
-          timestamp: new Date(baseTimestamp - 4 * 60 * 60 * 1000).toISOString(),
-          isRead: false,
-          category: "system_error",
-          priority: "medium",
-          notifiedBy: "system",
-          actionType: "system_alert",
-          errorCode: "PERF_WARN_003"
-        }
-      ]
+import { supabase } from '../../supabaseClient';
+export default function Notification() {
+  // Get current user from localStorage
+  const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
+  
+  // Map role_id to role name
+  const getRoleName = (roleId) => {
+    const roleMap = {
+      1: 'sysadmin',
+      2: 'admin',
+      3: 'personnel',
+      4: 'standard'
     };
-
-    return notificationTemplates[role] || [];
+    return roleMap[roleId] || 'standard';
   };
 
-  // Get text color class based on status
+  const role = getRoleName(currentUser.role);
+  const userId = currentUser.id;
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  // Get role_id from role name
+  const getRoleId = (roleName) => {
+    const roleMap = {
+      'standard': 4,
+      'admin': 2,
+      'personnel': 3,
+      'sysadmin': 1
+    };
+    return roleMap[roleName.toLowerCase()] || 4;
+  };
+
+  // Get status color based on status name
   const getStatusTextClass = (status) => {
     const statusColorMap = {
       'To Review': 'text-warning',
@@ -250,43 +44,185 @@ export default function Notification({ role = 'standard', userId = 'user123' }) 
       'Completed': 'text-success',
       'Failed': 'text-danger',
       'Rejected': 'text-secondary',
-      'Cancelled': 'text-dark'
+      'Cancelled': 'text-dark',
+      'Reported': 'text-warning',
+      'Resolved': 'text-success'
     };
-    
     return statusColorMap[status] || 'text-muted';
   };
 
-  // Add this new useEffect after the existing one
-useEffect(() => {
-  // Store unread count in localStorage for sidebar to read
-  localStorage.setItem(`unreadCount_${role}`, unreadCount.toString());
-}, [unreadCount, role]);
-    
-  useEffect(() => {
-    const storedNotifications = localStorage.getItem(`notifications_${role}`);
-    if (storedNotifications) {
-      const parsed = JSON.parse(storedNotifications);
-      setNotifications(parsed);
-      setUnreadCount(parsed.filter(n => !n.isRead).length);
-    } else {
-      const roleNotifications = getNotificationsByRole(role);
-      setNotifications(roleNotifications);
-      setUnreadCount(roleNotifications.filter(n => !n.isRead).length);
-      localStorage.setItem(`notifications_${role}`, JSON.stringify(roleNotifications));
+  // Fetch notifications from Supabase
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const roleId = getRoleId(role);
+
+      // Fetch notifications for this role
+      const { data: notificationsData, error } = await supabase
+        .from('notifications')
+        .select(`
+          notification_id,
+          title,
+          message,
+          created_at,
+          related_table,
+          related_id,
+          notification_types(type_name),
+          priority_levels(priority_name, color_code),
+          created_by
+        `)
+        .contains('target_roles', [roleId.toString()])
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Fetch which notifications current user has read
+      const { data: readData, error: readError } = await supabase
+        .from('notification_user_reads')
+        .select('notification_id')
+        .eq('user_id', userId);
+
+      if (readError) throw readError;
+
+      const readNotificationIds = readData.map(r => r.notification_id);
+
+      // Transform data to match your component structure
+      const transformedNotifications = notificationsData.map(notif => ({
+        id: notif.notification_id,
+        title: notif.title,
+        message: notif.message,
+        timestamp: notif.created_at,
+        isRead: readNotificationIds.includes(notif.notification_id),
+        priority: notif.priority_levels?.priority_name || 'normal',
+        priorityColor: notif.priority_levels?.color_code || '#6c757d',
+        category: notif.notification_types?.type_name || 'general',
+        relatedTable: notif.related_table,
+        relatedId: notif.related_id,
+        // We'll fetch status separately if needed
+        status: 'Notification', // Default, we'll update this below
+        workOrderId: notif.related_id
+      }));
+
+      // Fetch related work order statuses if applicable
+      for (let notif of transformedNotifications) {
+        if (notif.relatedTable === 'work_orders' && notif.relatedId) {
+          const { data: woData } = await supabase
+            .from('work_orders')
+            .select('status_id, statuses(status_name)')
+            .eq('work_order_id', notif.relatedId)
+            .single();
+
+          if (woData) {
+            notif.status = woData.statuses?.status_name || 'Unknown';
+          }
+        } else if (notif.relatedTable === 'incident_reports' && notif.relatedId) {
+          const { data: irData } = await supabase
+            .from('incident_reports')
+            .select('status_id, statuses(status_name)')
+            .eq('incident_report_id', notif.relatedId)
+            .single();
+
+          if (irData) {
+            notif.status = irData.statuses?.status_name || 'Unknown';
+          }
+        }
+      }
+
+      setNotifications(transformedNotifications);
+      setUnreadCount(transformedNotifications.filter(n => !n.isRead).length);
+
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
     }
-  }, [role]);
-
-  const markAsRead = (notificationId) => {
-    const updated = notifications.map(notification =>
-      notification.id === notificationId
-        ? { ...notification, isRead: true }
-        : notification
-    );
-
-    setNotifications(updated);
-    setUnreadCount(updated.filter(n => !n.isRead).length);
-    localStorage.setItem(`notifications_${role}`, JSON.stringify(updated));
   };
+
+  // Mark notification as read
+  const markAsRead = async (notificationId) => {
+    try {
+      // Insert into notification_user_reads
+      const { error } = await supabase
+        .from('notification_user_reads')
+        .insert({
+          notification_id: notificationId,
+          user_id: userId,
+          read_at: new Date().toISOString()
+        });
+
+      if (error && error.code !== '23505') { // Ignore duplicate key errors
+        throw error;
+      }
+
+      // Update local state
+      const updated = notifications.map(notification =>
+        notification.id === notificationId
+          ? { ...notification, isRead: true }
+          : notification
+      );
+
+      setNotifications(updated);
+      setUnreadCount(updated.filter(n => !n.isRead).length);
+
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  // Mark all as read
+  const markAllAsRead = async () => {
+    try {
+      const unreadNotifications = notifications.filter(n => !n.isRead);
+
+      for (const notif of unreadNotifications) {
+        await supabase
+          .from('notification_user_reads')
+          .insert({
+            notification_id: notif.id,
+            user_id: userId,
+            read_at: new Date().toISOString()
+          });
+      }
+
+      const updated = notifications.map(n => ({ ...n, isRead: true }));
+      setNotifications(updated);
+      setUnreadCount(0);
+
+    } catch (error) {
+      console.error('Error marking all as read:', error);
+    }
+  };
+
+
+useEffect(() => {
+    fetchNotifications();
+    
+    // Set up real-time subscription for new notifications
+    const subscription = supabase
+      .channel('notifications')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications'
+        },
+        (payload) => {
+          const roleId = getRoleId(role);
+          if (payload.new.target_roles?.includes(roleId.toString())) {
+            fetchNotifications(); // Refresh notifications
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [role, userId]);
+
+
 
   const handleNotificationClick = (notification) => {
     if (!notification.isRead) {
@@ -335,23 +271,25 @@ useEffect(() => {
               </div>
 
               {unreadCount > 0 && (
-                <Button
-                  variant="outline-primary"
-                  onClick={() => {
-                    const updated = notifications.map(n => ({ ...n, isRead: true }));
-                    setNotifications(updated);
-                    setUnreadCount(0);
-                    localStorage.setItem(`notifications_${role}`, JSON.stringify(updated));
-                  }}
-                >
-                  Mark All as Read
-                </Button>
+<Button
+  variant="outline-primary"
+  onClick={markAllAsRead}
+>
+  Mark All as Read
+</Button>
               )}
             </div>
 
             <Card className="shadow-sm" style={{ width: '100%' }}>
               <Card.Body className="p-0">
-                {notifications.length === 0 ? (
+  {loading ? (
+    <div className="text-center py-5">
+      <div className="spinner-border text-primary" role="status">
+        <span className="visually-hidden">Loading...</span>
+      </div>
+      <p className="text-muted mt-2">Loading notifications...</p>
+    </div>
+  ) : notifications.length === 0 ? (
                   <div className="text-center py-5">
                     <h5 style={{ color: '#6C757D', marginBottom: '10px' }}>No notifications yet</h5>
                     <p className="text-muted">You'll see notifications here when there are updates relevant to your role.</p>

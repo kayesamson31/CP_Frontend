@@ -80,6 +80,55 @@ async fetchAssets() {
         status: task.statuses?.status_name?.toLowerCase() || 'pending'
       });
     });
+    // Fetch incident reports for all assets
+// Fetch incident reports for all assets (fetch ALL statuses for history)
+    const { data: allIncidents } = await supabase
+      .from('incident_reports')
+      .select(`
+        incident_id,
+        description,
+        date_reported,
+        date_resolved,
+        asset_id,
+        status_id,
+        incident_types(type_name),
+        severity_levels(severity_name),
+        statuses(status_name),
+        users!reported_by(full_name)
+      `)
+      .in('asset_id', assets.map(a => a.asset_id))
+      .order('date_reported', { ascending: false });
+
+    // Separate active incidents (for badge) vs history (for modal)
+    const activeIncidentsByAsset = {};
+    const incidentHistoryByAsset = {};
+
+    allIncidents?.forEach(incident => {
+      const incidentObj = {
+        id: `INC-${incident.incident_id}`,
+        type: incident.incident_types?.type_name || 'Unknown',
+        description: incident.description,
+        severity: incident.severity_levels?.severity_name || 'Minor',
+        reportedBy: incident.users?.full_name || 'Unknown',
+        reportedAt: incident.date_reported,
+        resolvedAt: incident.date_resolved,
+        status: incident.statuses?.status_name || 'Reported'
+      };
+      
+      // For history: include ALL incidents
+      if (!incidentHistoryByAsset[incident.asset_id]) {
+        incidentHistoryByAsset[incident.asset_id] = [];
+      }
+      incidentHistoryByAsset[incident.asset_id].push(incidentObj);
+      
+      // For active badge: only "Reported" status (status_id = 4)
+      if (incident.status_id === 4) {
+        if (!activeIncidentsByAsset[incident.asset_id]) {
+          activeIncidentsByAsset[incident.asset_id] = [];
+        }
+        activeIncidentsByAsset[incident.asset_id].push(incidentObj);
+      }
+    });
 
     return assets.map(asset => ({
       id: asset.asset_code,
@@ -97,7 +146,8 @@ async fetchAssets() {
       hasFailedMaintenance: (failedCountMap[asset.asset_id] || 0) > 0,
       failedMaintenanceCount: failedCountMap[asset.asset_id] || 0,
       maintenanceHistory: tasksByAsset[asset.asset_id] || [], // ✅ Now populated!
-      incidentReports: [],
+     incidentReports: activeIncidentsByAsset[asset.asset_id] || [],
+      incidentHistory: incidentHistoryByAsset[asset.asset_id] || [],
       maintenanceSchedule: null
     }));
   } catch (error) {
@@ -136,6 +186,8 @@ async fetchAssets() {
     if (!str) return str;
     return str.charAt(0).toUpperCase() + str.slice(1);
   },
+  
+  
 
  // Kinukuha ko yung organization ID ng currently logged-in user.  
   // Kailangan ito kasi halos lahat ng assets naka-tali sa isang organization.
@@ -591,5 +643,108 @@ async createMaintenanceTask(taskData) {
       console.error('Error bulk uploading assets:', error);
       throw error;
     }
+  },
+
+ async createIncidentReport(incidentData) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('user_id')
+        .eq('auth_uid', user.id)
+        .single();
+      
+      if (!currentUser) throw new Error('User not found');
+
+      const { data: assetData, error: assetError } = await supabase
+        .from('assets')
+        .select('asset_id')
+        .eq('asset_code', incidentData.assetId)
+        .single();
+      
+      if (assetError) throw new Error('Asset not found');
+
+      const incidentTypeMap = {
+        'Equipment Malfunction': 1,
+        'Safety Hazard': 3,
+        'Damage': 1,
+        'Performance Issue': 1,
+        'Other': 1
+      };
+
+      const severityMap = {
+        'Low': 1,
+        'Medium': 2,
+        'High': 3
+      };
+
+      const { data, error } = await supabase
+        .from('incident_reports')
+        .insert([{
+          asset_id: assetData.asset_id,
+          incident_type_id: incidentTypeMap[incidentData.type] || 1,
+          description: incidentData.description,
+          severity_id: severityMap[incidentData.severity] || 1,
+          reported_by: currentUser.user_id,
+          status_id: 4,
+          date_reported: new Date().toISOString()
+        }])
+        .select(`
+          incident_id,
+          description,
+          date_reported,
+          incident_types(type_name),
+          severity_levels(severity_name),
+          statuses(status_name),
+          users!reported_by(full_name)
+        `)
+        .single();
+
+      if (error) throw error;
+
+      return {
+        id: `INC-${data.incident_id}`,
+        type: data.incident_types?.type_name || incidentData.type,
+        description: data.description,
+        severity: data.severity_levels?.severity_name || incidentData.severity,
+        reportedBy: data.users?.full_name || 'Unknown',
+        reportedAt: data.date_reported,
+        status: data.statuses?.status_name || 'Reported'
+      };
+    } catch (error) {
+      console.error('Error creating incident report:', error);
+      throw error;
+    }
+  },
+  // Add this to assetService.js, before the closing };
+async updateIncidentStatus(incidentId, newStatus) {
+  try {
+    const numericId = parseInt(incidentId.replace('INC-', ''));
+    
+    const statusMap = {
+      'Reported': 4,
+      'Resolved': 5,
+      'Dismissed': 5,
+      'Assigned': 4  // ADD THIS - keep as Reported but will be filtered differently
+    };
+    
+    const { data, error } = await supabase
+      .from('incident_reports')
+      .update({ 
+        status_id: statusMap[newStatus] || 4,
+        date_resolved: (newStatus === 'Dismissed' || newStatus === 'Resolved') ? new Date().toISOString() : null
+      })
+      .eq('incident_id', numericId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error updating incident status:', error);
+    throw error;
   }
+}
+  
+  
 };
