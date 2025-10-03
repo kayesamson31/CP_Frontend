@@ -78,6 +78,7 @@ if (taskType === 'maintenance_task') {
 
   // Regular status update for maintenance tasks (non-extension)
 // Regular status update for maintenance tasks (non-extension)
+// Regular status update for maintenance tasks (non-extension)
 const updateData = {
   status_id: statusId,
   ...(status === 'completed' && { date_completed: new Date().toISOString() }),
@@ -88,7 +89,7 @@ const { data, error } = await supabase
   .from('maintenance_tasks')
   .update(updateData)
   .eq('task_id', taskId)
-  .select('*, asset_id');
+  .select('*, asset_id, incident_id');
 
 if (error) throw error;
 
@@ -101,10 +102,45 @@ if (status === 'completed' && data?.[0]?.asset_id) {
       last_maintenance: new Date().toISOString()
     })
     .eq('asset_id', data[0].asset_id);
+  
+  // ✅ AUTO-RESOLVE RELATED INCIDENT
+  if (data[0].incident_id) {
+    try {
+      await assetService.autoResolveIncident(data[0].incident_id);
+      console.log('Auto-resolved incident:', data[0].incident_id);
+    } catch (incidentError) {
+      console.error('Failed to auto-resolve incident:', incidentError);
+    }
+  }
+}
+
+// âœ… NOTIFY ADMIN about incident task update (OUTSIDE the completed check!)
+if (data[0]?.incident_id) {
+  try {
+    const statusMessage = status === 'completed' 
+      ? `Personnel completed incident report task #${data[0].incident_id}` 
+      : status === 'failed'
+      ? `Personnel marked incident report task #${data[0].incident_id} as failed${reason ? ': ' + reason : ''}`
+      : `Personnel updated incident report task #${data[0].incident_id} to ${status}`;
+
+    await supabase.from('notifications').insert({
+      notification_type_id: 3,
+      created_by: userProfile.user_id,
+      title: `Incident Task ${status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : 'Updated'}`,
+      message: statusMessage,
+      target_roles: '2',
+      priority_id: status === 'failed' ? 3 : 2,
+      related_table: 'incident_reports',
+      related_id: data[0].incident_id,
+      is_active: true
+    });
+  } catch (notifError) {
+    console.error('Failed to create admin notification:', notifError);
+  }
 }
 
 return { success: true, data: data?.[0] };
-}
+}  // ← This closes the maintenance_task if block
 
     // Handle extension logic
     if (newDate && status === 'in-progress') {

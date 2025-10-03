@@ -127,7 +127,7 @@ const handleViewIncidentDetails = (incident) => {
 const handleAssignIncidentTask = () => {
   setIncidentTaskForm({
     ...incidentTaskForm,
-    incidentId: selectedIncident.id
+    incidentId: parseInt(selectedIncident.id.replace('INC-', ''))  // Extract numeric part
   });
   setShowIncidentDetailsModal(false);
   setShowAssignTaskModal(true);
@@ -181,7 +181,8 @@ const handleSubmitIncidentTask = async () => {
         dueDate: incidentTaskForm.dueDate,
         dueTime: incidentTaskForm.dueTime || '09:00',
         taskType: 'custom',
-        status: 'pending'
+        status: 'pending',
+         incidentId: parseInt(selectedIncident.id.replace('INC-', ''))
       };
       
       await assetService.createMaintenanceTask(taskData);

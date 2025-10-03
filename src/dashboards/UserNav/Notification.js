@@ -59,23 +59,31 @@ export default function Notification() {
 
       // Fetch notifications for this role
       const { data: notificationsData, error } = await supabase
-        .from('notifications')
-        .select(`
-          notification_id,
-          title,
-          message,
-          created_at,
-          related_table,
-          related_id,
-          notification_types(type_name),
-          priority_levels(priority_name, color_code),
-          created_by
-        `)
-        .contains('target_roles', [roleId.toString()])
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
+  .from('notifications')
+  .select(`
+    notification_id,
+    title,
+    message,
+    created_at,
+    related_table,
+    related_id,
+    target_user_id,
+    notification_types(type_name),
+    priority_levels(priority_name, color_code),
+    created_by
+  `)
+  .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
+  .eq('is_active', true)
+  .order('created_at', { ascending: false});
 
       if (error) throw error;
+
+console.log('=== FETCH NOTIFICATIONS DEBUG ===');
+console.log('Current Role:', role);
+console.log('Current Role ID:', roleId);
+console.log('User ID:', userId);
+console.log('Notifications Data:', notificationsData);
+console.log('Total notifications fetched:', notificationsData?.length || 0);
 
       // Fetch which notifications current user has read
       const { data: readData, error: readError } = await supabase
@@ -100,34 +108,14 @@ export default function Notification() {
         relatedTable: notif.related_table,
         relatedId: notif.related_id,
         // We'll fetch status separately if needed
-        status: 'Notification', // Default, we'll update this below
+        status: notif.title, // Default, we'll update this below
         workOrderId: notif.related_id
       }));
 
-      // Fetch related work order statuses if applicable
-      for (let notif of transformedNotifications) {
-        if (notif.relatedTable === 'work_orders' && notif.relatedId) {
-          const { data: woData } = await supabase
-            .from('work_orders')
-            .select('status_id, statuses(status_name)')
-            .eq('work_order_id', notif.relatedId)
-            .single();
+      console.log('Sample timestamp from DB:', notificationsData[0]?.created_at);
+console.log('Sample transformed timestamp:', transformedNotifications[0]?.timestamp);
+console.log('Current time:', new Date().toISOString());
 
-          if (woData) {
-            notif.status = woData.statuses?.status_name || 'Unknown';
-          }
-        } else if (notif.relatedTable === 'incident_reports' && notif.relatedId) {
-          const { data: irData } = await supabase
-            .from('incident_reports')
-            .select('status_id, statuses(status_name)')
-            .eq('incident_report_id', notif.relatedId)
-            .single();
-
-          if (irData) {
-            notif.status = irData.statuses?.status_name || 'Unknown';
-          }
-        }
-      }
 
       setNotifications(transformedNotifications);
       setUnreadCount(transformedNotifications.filter(n => !n.isRead).length);
@@ -140,9 +128,18 @@ export default function Notification() {
   };
 
   // Mark notification as read
-  const markAsRead = async (notificationId) => {
-    try {
-      // Insert into notification_user_reads
+const markAsRead = async (notificationId) => {
+  try {
+    // Check if already marked as read
+    const { data: existing } = await supabase
+      .from('notification_user_reads')
+      .select('read_id')
+      .eq('notification_id', notificationId)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    // Only insert if not already read
+    if (!existing) {
       const { error } = await supabase
         .from('notification_user_reads')
         .insert({
@@ -151,24 +148,23 @@ export default function Notification() {
           read_at: new Date().toISOString()
         });
 
-      if (error && error.code !== '23505') { // Ignore duplicate key errors
-        throw error;
-      }
-
-      // Update local state
-      const updated = notifications.map(notification =>
-        notification.id === notificationId
-          ? { ...notification, isRead: true }
-          : notification
-      );
-
-      setNotifications(updated);
-      setUnreadCount(updated.filter(n => !n.isRead).length);
-
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
+      if (error) throw error;
     }
-  };
+
+    // Update local state
+    const updated = notifications.map(notification =>
+      notification.id === notificationId
+        ? { ...notification, isRead: true }
+        : notification
+    );
+
+    setNotifications(updated);
+    setUnreadCount(updated.filter(n => !n.isRead).length);
+
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+  }
+};
 
   // Mark all as read
   const markAllAsRead = async () => {
@@ -199,8 +195,8 @@ useEffect(() => {
     fetchNotifications();
     
     // Set up real-time subscription for new notifications
-    const subscription = supabase
-      .channel('notifications')
+    const channel = supabase
+      .channel('notifications-channel')
       .on(
         'postgres_changes',
         {
@@ -209,16 +205,23 @@ useEffect(() => {
           table: 'notifications'
         },
         (payload) => {
+          console.log('New notification received:', payload);
           const roleId = getRoleId(role);
-          if (payload.new.target_roles?.includes(roleId.toString())) {
-            fetchNotifications(); // Refresh notifications
+          if (payload.new.target_roles === roleId.toString()) {
+            fetchNotifications();
           }
         }
       )
       .subscribe();
 
+    // Refresh every 30 seconds as fallback
+    const intervalId = setInterval(() => {
+      fetchNotifications();
+    }, 30000);
+
     return () => {
-      subscription.unsubscribe();
+      supabase.removeChannel(channel);
+      clearInterval(intervalId);
     };
   }, [role, userId]);
 
@@ -323,8 +326,8 @@ useEffect(() => {
                                 {notification.title}
                               </h6>
                               <small className="text-muted" style={{ fontSize: '0.8rem' }}>
-                                {formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true })}
-                              </small>
+  {formatDistanceToNow(new Date(notification.timestamp + 'Z'), { addSuffix: true })}
+</small>
                             </div>
 
                             <p className="mb-2" 

@@ -49,7 +49,6 @@ export default function SidebarLayout({ children }) {
   const [loading, setLoading] = useState(true);
   const menus = menuConfig[role] || menuConfig.standard;
 
-  // ✅ NEW: Get role from Supabase instead of localStorage
   useEffect(() => {
     const getUserRoleFromSupabase = async () => {
       try {
@@ -103,20 +102,90 @@ export default function SidebarLayout({ children }) {
     getUserRoleFromSupabase();
   }, []);
 
-  useEffect(() => {
-    const updateNotificationCount = () => {
-      const count = 0;
-      setNotificationCount(parseInt(count));
-    };
-    
-    updateNotificationCount();
-    
-    const interval = setInterval(updateNotificationCount, 1000);
-    
-    return () => {
-      clearInterval(interval);
-    };
-  }, [role]);
+useEffect(() => {
+  const fetchNotificationCount = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('user_id, role_id')
+        .eq('email', user.email)
+        .single();
+
+      if (!userData) return;
+
+      const roleId = userData.role_id;
+      const userId = userData.user_id;
+
+      // ✅ UPDATED: Check both target_roles AND target_user_id
+      const { data: notifications, error } = await supabase
+        .from('notifications')
+        .select('notification_id')
+        .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)  // ← Fixed!
+        .eq('is_active', true);
+
+      if (error) throw error;
+
+      const { data: readNotifs } = await supabase
+        .from('notification_user_reads')
+        .select('notification_id')
+        .eq('user_id', userId);
+
+      const readIds = (readNotifs || []).map(r => r.notification_id);
+      const unreadCount = notifications.filter(n => !readIds.includes(n.notification_id)).length;
+
+      console.log('Sidebar notification count:', unreadCount);
+      setNotificationCount(unreadCount);
+
+    } catch (error) {
+      console.error('Error fetching notification count:', error);
+      setNotificationCount(0);
+    }
+  };
+  
+  if (role && role !== 'standard') {
+    fetchNotificationCount();
+  } else if (role === 'standard') {
+    fetchNotificationCount();
+  }
+  
+  const interval = setInterval(fetchNotificationCount, 10000);
+  
+  const channel = supabase
+    .channel('sidebar-notifications-' + role)
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notifications'
+      },
+      () => {
+        console.log('Notification change detected');
+        fetchNotificationCount();
+      }
+    )
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'notification_user_reads'
+      },
+      () => {
+        console.log('Notification read change detected');
+        fetchNotificationCount();
+      }
+    )
+    .subscribe();
+  
+  return () => {
+    clearInterval(interval);
+    supabase.removeChannel(channel);
+  };
+}, [role]);
 
   const handleLogout = async () => {
     try {
