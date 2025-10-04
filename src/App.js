@@ -27,6 +27,7 @@ import SysadReports from './dashboards/SysadNav/SysadReports';
 import SetupWizard from './dashboards/SysadNav/SetupWizard';
 import SysadUserManagement from './dashboards/SysadNav/SysadUserManagement';
 import SysadAuditLogs from './dashboards/SysadNav/SysadAuditLogs';
+import AssetOverview from './dashboards/SysadNav/AssetOverview';
 
 //AdminNav
 import DashboardAdmin from './dashboards/DashboardAdmin';
@@ -274,6 +275,15 @@ function App() {
   element={
     <PrivateRoute allowedRoles={['sysadmin']}>
       <SysadAuditLogs />
+    </PrivateRoute>
+  } 
+/>
+
+<Route 
+  path="/dashboard-sysadmin/AssetOverview" 
+  element={
+    <PrivateRoute allowedRoles={['sysadmin']}>
+      <AssetOverview/>
     </PrivateRoute>
   } 
 />

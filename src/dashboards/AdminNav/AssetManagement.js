@@ -353,7 +353,6 @@ const handleCsvFileChange = (event) => {
   }
 };
 
-// Handle bulk CSV upload
 const handleBulkUpload = async () => {
   if (!csvFile) {
     alert('Please select a CSV file first.');
@@ -361,48 +360,95 @@ const handleBulkUpload = async () => {
   }
   
   try {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
-      
-      const newAssets = [];
-      for (let i = 1; i < lines.length; i++) {
-        if (lines[i].trim()) {
-          const values = lines[i].split(',').map(v => v.trim());
-          const asset = {
-            id: `AST-${String(assets.length + newAssets.length + 1).padStart(3, '0')}`,
-            name: values[headers.indexOf('name')] || values[0],
-            category: values[headers.indexOf('category')] || values[1] || 'Facilities & Building Infra',
-            location: values[headers.indexOf('location')] || values[2],
-            status: values[headers.indexOf('status')] || values[3] || 'Operational',
-            acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || '',
-            nextMaintenance: values[headers.indexOf('nextMaintenance')] || values[5] || '',
-            task: values[headers.indexOf('task')] || values[6] || '',
-            lastMaintenance: null,
-            maintenanceHistory: [],
-            incidentReports: []
-          };
-          newAssets.push(asset);
+    const text = await csvFile.text();
+    const lines = text.split('\n');
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    const newAssets = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim()) {
+        const values = lines[i].split(',').map(v => v.trim());
+        
+        // Get category value
+        let categoryValue = values[headers.indexOf('category')] || values[1] || '';
+        
+        // Check if category exists (case-insensitive comparison)
+        const matchedCategory = categories.find(c => 
+          c.category_name.toLowerCase().trim() === categoryValue.toLowerCase().trim()
+        );
+        
+        if (!matchedCategory && categoryValue) {
+          console.error(`Category not found: "${categoryValue}"`);
+          console.log('Available categories:', categories.map(c => c.category_name));
+          alert(`Error: Category "${categoryValue}" not found in database.\n\nAvailable categories:\n${categories.map(c => c.category_name).join('\n')}`);
+          return; // Stop upload
         }
+        
+        const asset = {
+          name: values[headers.indexOf('name')] || values[0],
+          category: matchedCategory ? matchedCategory.category_name : 'HVAC Equipment', // Use matched or default
+          location: values[headers.indexOf('location')] || values[2],
+          status: values[headers.indexOf('status')] || values[3] || 'Operational',
+          acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || ''
+        };
+        newAssets.push(asset);
       }
-      
-      setAssets(prevAssets => [...prevAssets, ...newAssets]);
-      setShowBulkUploadModal(false);
-      setCsvFile(null);
-      setCsvPreview([]);
-      
-      alert(`Successfully uploaded ${newAssets.length} assets!`);
-    };
-    reader.readAsText(csvFile);
+    }
+    
+    // Upload one by one with better error handling
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const asset of newAssets) {
+      try {
+        await assetService.addAsset(asset);
+        successCount++;
+        console.log('✓ Uploaded:', asset.name);
+      } catch (uploadErr) {
+        failCount++;
+        console.error('✗ Failed:', asset.name, uploadErr.message);
+      }
+    }
+    
+    await fetchAssets();
+    
+    setShowBulkUploadModal(false);
+    setCsvFile(null);
+    setCsvPreview([]);
+    
+    alert(`Upload complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
     
   } catch (err) {
-    console.error('Error uploading CSV:', err);
-    alert('Failed to upload CSV. Please check the format and try again.');
+    console.error('CSV Upload Error:', err);
+    alert('Failed to upload CSV: ' + err.message);
   }
 };
 
+// Add this function with the other handlers (around line 280)
+const handleDownloadTemplate = () => {
+  // Use first available category or fallback
+  const sampleCategory = categories.length > 0 
+    ? categories[0].category_name 
+    : 'HVAC Equipment';
+  
+  const templateHeaders = ['name', 'category', 'location', 'status', 'acquisitionDate'];
+  const sampleRow = ['Sample Asset Name', sampleCategory, 'Building A - Room 101', 'Operational', '2024-01-15'];
+  
+  const csvContent = [
+    templateHeaders.join(','),
+    sampleRow.join(',')
+  ].join('\n');
+  
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  link.setAttribute('href', url);
+  link.setAttribute('download', 'asset_upload_template.csv');
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 // Handle export to CSV
 const handleExportReport = () => {
   try {
@@ -702,16 +748,34 @@ const handleCreateTask = async () => {
 </Modal>
 
 {/* Bulk Upload Modal */}
-<Modal show={showBulkUploadModal} onHide={() => setShowBulkUploadModal(false)} size="xl">
+<Modal show={showBulkUploadModal} onHide={() => {
+  setShowBulkUploadModal(false);
+  setCsvFile(null);
+  setCsvPreview([]);
+}} size="xl">
   <Modal.Header closeButton>
     <Modal.Title>Bulk Upload Assets (CSV)</Modal.Title>
   </Modal.Header>
+
   <Modal.Body>
-    <Alert variant="info">
-      <strong>CSV Format:</strong> name, category, location, status, acquisitionDate, nextMaintenance, task
+
+   <Alert variant="info">
+  <div className="d-flex justify-content-between align-items-center">
+    <div>
+      <strong>CSV Format:</strong> name, category, location, status, acquisitionDate
       <br />
       <small>Header row should match these column names (case sensitive)</small>
-    </Alert>
+    </div>
+    <Button 
+      variant="outline-primary" 
+      size="sm"
+      onClick={handleDownloadTemplate}
+    >
+      <i className="fas fa-download me-2"></i>
+      Download Template
+    </Button>
+  </div>
+</Alert>
     
     <Form.Group className="mb-3">
       <Form.Label>Select CSV File</Form.Label>
@@ -1784,8 +1848,9 @@ const handleCreateTask = async () => {
   </Modal.Body>
   <Modal.Footer>
 <Button variant="secondary" onClick={() => {
-  setShowAssignTaskModal(false);
-  setPreviousAsset(null);
+  setShowBulkUploadModal(false);
+  setCsvFile(null);
+  setCsvPreview([]);
 }}>
   Cancel
 </Button>

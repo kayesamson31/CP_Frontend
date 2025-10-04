@@ -1,7 +1,7 @@
-//hello_Sample2
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Col, Modal, Badge } from 'react-bootstrap';
+import { supabase } from '../supabaseClient';
 import { 
   AlertTriangle,  
   Building,  
@@ -22,7 +22,7 @@ export default function DashboardAdmin() {
 const [statsData, setStatsData] = useState([
   {
     title: "Pending Approvals",
-    value: "5",
+    value: "0",
     subtitle: "Work orders awaiting review",
     color: "#dc3545",
     icon: AlertTriangle,
@@ -30,31 +30,297 @@ const [statsData, setStatsData] = useState([
   },
   {
     title: "Overdue Tasks",
-    value: "3", 
-    subtitle: "Maintenance past due date",
+    value: "0", 
+    subtitle: "Maintenance past due",
     color: "#fd7e14",
     icon: Clock,
-    route: "/dashboard-admin/AssetManagement"
+    route: "/dashboard-admin/MaintenanceTasks"
   },
   {
-    title: "In Progress",
-    value: "8",
-    subtitle: "Active work orders",
-    color: "#0d6efd",
+    title: "Extended Tasks",
+    value: "0",
+    subtitle: "Extended due dates",
+    color: "#ffc107",
+    icon: CalendarDays,
+    route: "/dashboard-admin/MaintenanceTasks"
+  },
+  {
+    title: "Asset Maintenance",
+    value: "0",
+    subtitle: "Assets needing service",
+    color: "#17a2b8",
     icon: Wrench,
-    route: "/dashboard-admin/WorkOrder"
-  },
-  {
-    title: "Available Personnel",
-    value: "12",
-    subtitle: "Staff ready for assignment",
-    color: "#198754",
-    icon: Building,
-    route: "/dashboard-admin/UserManagement"
+    route: "/dashboard-admin/AssetManagement"
   }
 ]);
+const [pipelineData, setPipelineData] = useState([
+  {status: 'To Review', count: 0, color: '#dc3545'},
+  {status: 'Assigned', count: 0, color: '#fd7e14'}, 
+  {status: 'In Progress', count: 0, color: '#0d6efd'},
+  {status: 'Completed', count: 0, color: '#198754'}
+]);
+const [recentActivities, setRecentActivities] = useState([]);
+const [availablePersonnel, setAvailablePersonnel] = useState([]);
+const [adminName, setAdminName] = useState('Admin');
+useEffect(() => {
+  const fetchAdminData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
+      const { data: userData } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('auth_uid', user.id)
+        .single();
 
+      if (userData) {
+        setAdminName(userData.full_name);
+      }
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+    }
+  };
+
+  fetchAdminData();
+}, []);
+
+useEffect(() => {
+  const fetchDailyMetrics = async () => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // 1. Pending Approvals - work orders with status "pending" or "to review"
+      const { count: pendingCount } = await supabase
+        .from('work_orders')
+        .select('*', { count: 'exact', head: true })
+        .in('status_id', [1, 6]); // 1=Pending, 6=To Review
+
+      // 2. Overdue Tasks - maintenance tasks past due date
+      const { count: overdueCount } = await supabase
+        .from('maintenance_tasks')
+        .select('*', { count: 'exact', head: true })
+        .lt('due_date', new Date().toISOString())
+        .neq('status_id', 3); // 3=Completed
+
+      // 3. Extended Tasks - tasks extended today
+      const { count: extendedCount } = await supabase
+        .from('maintenance_task_extensions')
+        .select('*', { count: 'exact', head: true })
+        .gte('extension_date', today.toISOString());
+
+      // 4. Asset Maintenance - assets needing maintenance today
+      const { count: assetCount } = await supabase
+        .from('assets')
+        .select('*', { count: 'exact', head: true })
+        .lte('next_maintenance', new Date().toISOString())
+        .eq('asset_status', 'active');
+
+      setStatsData([
+        {
+          title: "Pending Approvals",
+          value: pendingCount || 0,
+          subtitle: "Work orders awaiting review",
+          color: "#dc3545",
+          icon: AlertTriangle,
+          route: "/dashboard-admin/WorkOrder"
+        },
+        {
+          title: "Overdue Tasks",
+          value: overdueCount || 0,
+          subtitle: "Maintenance past due",
+          color: "#fd7e14",
+          icon: Clock,
+          route: "/dashboard-admin/MaintenanceTasks"
+        },
+        {
+          title: "Extended Tasks",
+          value: extendedCount || 0,
+          subtitle: "Extended due dates",
+          color: "#ffc107",
+          icon: CalendarDays,
+          route: "/dashboard-admin/MaintenanceTasks"
+        },
+        {
+          title: "Asset Maintenance",
+          value: assetCount || 0,
+          subtitle: "Assets needing service",
+          color: "#17a2b8",
+          icon: Wrench,
+          route: "/dashboard-admin/AssetManagement"
+        }
+      ]);
+
+    } catch (error) {
+      console.error('Error fetching metrics:', error);
+    }
+  };
+
+  fetchDailyMetrics();
+}, []);
+
+useEffect(() => {
+  const fetchPipelineData = async () => {
+    try {
+      // To Review (status_id = 6)
+      const { count: toReviewWO } = await supabase
+        .from('work_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 6);
+      
+      const { count: toReviewMT } = await supabase
+        .from('maintenance_tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 6);
+      
+      // Pending/Assigned (status_id = 1)
+      const { count: pendingWO } = await supabase
+        .from('work_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 1);
+      
+      const { count: pendingMT } = await supabase
+        .from('maintenance_tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 1);
+      
+      // In Progress (status_id = 2)
+      const { count: progressWO } = await supabase
+        .from('work_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 2);
+      
+      const { count: progressMT } = await supabase
+        .from('maintenance_tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 2);
+      
+      // Completed (status_id = 3)
+      const { count: completedWO } = await supabase
+        .from('work_orders')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 3);
+      
+      const { count: completedMT } = await supabase
+        .from('maintenance_tasks')
+        .select('*', { count: 'exact', head: true })
+        .eq('status_id', 3);
+
+      setPipelineData([
+        {status: 'To Review', count: (toReviewWO || 0) + (toReviewMT || 0), color: '#dc3545'},
+        {status: 'Assigned', count: (pendingWO || 0) + (pendingMT || 0), color: '#fd7e14'}, 
+        {status: 'In Progress', count: (progressWO || 0) + (progressMT || 0), color: '#0d6efd'},
+        {status: 'Completed', count: (completedWO || 0) + (completedMT || 0), color: '#198754'}
+      ]);
+
+    } catch (error) {
+      console.error('Error fetching pipeline data:', error);
+    }
+  };
+
+  fetchPipelineData();
+}, []);
+
+useEffect(() => {
+  const fetchRecentActivity = async () => {
+    try {
+      const { data: activities, error } = await supabase
+        .from('activity_tracking')
+        .select(`
+          activity_id,
+          activity_type,
+          description,
+          timestamp,
+          user_id,
+          users!activity_tracking_user_id_fkey (full_name)
+        `)
+        .order('timestamp', { ascending: false })
+        .limit(5);
+
+      if (error) throw error;
+
+      const formattedActivities = activities.map(activity => ({
+        action: activity.description,
+        user: activity.users?.full_name || 'Unknown',
+        time: formatTimeAgo(activity.timestamp),
+        type: activity.activity_type
+      }));
+
+      setRecentActivities(formattedActivities);
+
+    } catch (error) {
+      console.error('Error fetching recent activity:', error);
+    }
+  };
+
+  fetchRecentActivity();
+}, []);
+
+useEffect(() => {
+  const fetchAvailablePersonnel = async () => {
+    try {
+      // Fetch users with role_id 3 (personnel) who are active
+      const { data: personnel, error } = await supabase
+        .from('users')
+        .select('user_id, full_name, job_position, user_status')
+        .eq('role_id', 3)
+        .eq('user_status', 'active')
+        .order('full_name', { ascending: true });
+
+      if (error) throw error;
+
+      // Check if personnel are currently assigned to active tasks
+      const personnelWithStatus = await Promise.all(
+        personnel.map(async (person) => {
+          // Check maintenance_tasks
+          const { count: activeTasks } = await supabase
+            .from('maintenance_tasks')
+            .select('*', { count: 'exact', head: true })
+            .eq('assigned_to', person.user_id)
+            .in('status_id', [1, 2]); // Pending or In Progress
+
+          let status = 'Available';
+          let statusColor = '#198754';
+
+          if (activeTasks > 0) {
+            status = 'On Task';
+            statusColor = '#0d6efd';
+          }
+
+          return {
+            name: person.full_name,
+            role: person.job_position || 'Personnel',
+            status: status,
+            statusColor: statusColor
+          };
+        })
+      );
+
+      setAvailablePersonnel(personnelWithStatus);
+
+    } catch (error) {
+      console.error('Error fetching personnel:', error);
+    }
+  };
+
+  fetchAvailablePersonnel();
+}, []);
+
+const formatTimeAgo = (timestamp) => {
+  const now = new Date();
+  const time = new Date(timestamp);
+  const diffInMinutes = Math.floor((now - time) / 60000);
+  
+  if (diffInMinutes < 1) return 'Just now';
+  if (diffInMinutes < 60) return `${diffInMinutes} min ago`;
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} hour${diffInHours > 1 ? 's' : ''} ago`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
+};
 
   const handleItemClick = (item, type) => {
     setModalData(item);
@@ -154,15 +420,27 @@ const statCardStyle = {
 
   return (
       <Col md={12} className="p-4">
+{/* Welcome Section */}
+<div style={{
+  marginBottom: '24px'
+}}>
+ <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1a1a1a' }}>
+  Welcome back, {adminName}
+</h3>
+  <p style={{ margin: '4px 0 0 0', color: '#6c757d', fontSize: '14px' }}>
+    {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+  </p>
+</div>
         {/* Stats Cards */}
         <div style={gridStyle}>
           {statsData.length === 0 ? (
             <div style={{ color: '#6c757d', fontSize: '14px' }}>No stats available</div>
           ) : (
             statsData.map((stat, index) => (
-              <div 
-                key={index} 
-                style={{...statCardStyle, cursor: 'pointer'}}
+             <div 
+              key={index} 
+              style={{...statCardStyle, cursor: 'pointer'}}
+              onClick={() => navigate(stat.route)}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.transform = 'translateY(-2px)';
                   e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.12)';
@@ -215,71 +493,58 @@ const statCardStyle = {
   
   {/* Left Column: Work Order Pipeline + Recent Activity */}
   <div>
-    {/* Workflow Pipeline */}
+    {/*Tasks Pipeline*/}
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #dee2e6' }}>
         <h5 style={{ margin: 0, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
           <Wrench size={20} style={{ marginRight: '8px', color: '#0d6efd' }} />
-          Work Order Pipeline
+        Tasks Pipeline
         </h5>
       </div>
       
-      {/* Pipeline Status Flow */}
-      <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '20px'}}>
-        {[
-          {status: 'To Review', count: 5, color: '#dc3545'},
-          {status: 'Pending', count: 8, color: '#fd7e14'}, 
-          {status: 'In Progress', count: 12, color: '#0d6efd'},
-          {status: 'Completed', count: 45, color: '#198754'}
-        ].map((stage, index) => (
-          <div key={index} style={{textAlign: 'center', flex: 1}}>
-            <div style={{
-              width: '60px', 
-              height: '60px', 
-              borderRadius: '50%', 
-              backgroundColor: `${stage.color}15`,
-              border: `3px solid ${stage.color}`,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 10px',
-              fontSize: '18px',
-              fontWeight: 'bold',
-              color: stage.color
-            }}>
-              {stage.count}
-            </div>
-            <div style={{fontSize: '12px', fontWeight: '500', color: '#6c757d'}}>
-              {stage.status}
-            </div>
-          </div>
-        ))}
-      </div>
-      
-      {/* Priority Distribution */}
-      <div style={{backgroundColor: '#f8f9fa', padding: '15px', borderRadius: '8px'}}>
-        <h6 style={{marginBottom: '12px', fontSize: '14px'}}>Priority Distribution</h6>
-        <div style={{display: 'flex', gap: '20px'}}>
-          {[
-            {priority: 'High', count: 8, color: '#dc3545'},
-            {priority: 'Medium', count: 15, color: '#fd7e14'},
-            {priority: 'Low', count: 7, color: '#198754'}
-          ].map((item, index) => (
-            <div key={index} style={{display: 'flex', alignItems: 'center'}}>
-              <div style={{
-                width: '12px',
-                height: '12px', 
-                borderRadius: '50%',
-                backgroundColor: item.color,
-                marginRight: '6px'
-              }}></div>
-              <span style={{fontSize: '13px', color: '#6c757d'}}>
-                {item.priority}: {item.count}
-              </span>
-            </div>
-          ))}
+    {/* Pipeline Status Flow - Workflow Stages */}
+<div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+
+ {pipelineData.map((stage, index) => (
+    <React.Fragment key={index}>
+      <div style={{textAlign: 'center', flex: 1}}>
+        <div style={{
+          width: '60px', 
+          height: '60px', 
+          borderRadius: '50%', 
+          backgroundColor: `${stage.color}15`,
+          border: `3px solid ${stage.color}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          margin: '0 auto 10px',
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: stage.color
+        }}>
+          {stage.count}
+        </div>
+        <div style={{fontSize: '12px', fontWeight: '500', color: '#6c757d'}}>
+          {stage.status}
         </div>
       </div>
+      
+      {/* Arrow between stages */}
+      {index < 3 && (
+        <div style={{
+          fontSize: '20px',
+          color: '#dee2e6',
+          margin: '0 10px',
+          alignSelf: 'center',
+          marginBottom: '35px'
+        }}>
+          →
+        </div>
+      )}
+    </React.Fragment>
+  ))}
+</div>
+      
     </div>
 
     {/* Recent Activity Feed - NOW IN LEFT COLUMN */}
@@ -299,113 +564,105 @@ const statCardStyle = {
         </button>
       </div>
       
-      <div style={{maxHeight: '300px', overflowY: 'auto'}}>
-        {[
-          {action: 'Work Order WO-2024-156 approved', user: 'John Smith', time: '5 min ago', type: 'approval'},
-          {action: 'Maintenance task assigned to Mike Johnson', user: 'Admin', time: '12 min ago', type: 'assignment'},
-          {action: 'HVAC inspection completed', user: 'Mike Johnson', time: '1 hour ago', type: 'completion'},
-          {action: 'New work order submitted', user: 'Sarah Wilson', time: '2 hours ago', type: 'submission'},
-          {action: 'Asset status updated: Generator #2', user: 'Tom Miller', time: '3 hours ago', type: 'update'},
-          {action: 'Work Order WO-2024-155 marked as failed', user: 'Mike Johnson', time: '4 hours ago', type: 'failure'},
-          {action: 'Emergency request: Water leak Building C', user: 'David Brown', time: '5 hours ago', type: 'emergency'},
-          {action: 'Weekly maintenance schedule generated', user: 'System', time: '6 hours ago', type: 'system'},
-          {action: 'Personnel account created: Alex Rodriguez', user: 'Admin', time: '1 day ago', type: 'account'},
-          {action: 'Asset inspection overdue notification sent', user: 'System', time: '1 day ago', type: 'notification'}
-        ].map((activity, index) => (
-          <div key={index} style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '12px 0',
-            borderBottom: index < 9 ? '1px solid #f8f9fa' : 'none'
-          }}>
-            <div style={{flex: 1}}>
-              <div style={{fontSize: '13px', fontWeight: '500', marginBottom: '2px'}}>
-                {activity.action}
-              </div>
-              <div style={{fontSize: '12px', color: '#6c757d'}}>
-                by {activity.user}
-              </div>
-            </div>
-            <div style={{fontSize: '11px', color: '#6c757d', marginLeft: '10px'}}>
-              {activity.time}
-            </div>
+<div style={{maxHeight: '300px', overflowY: 'auto'}}>
+  {recentActivities.length === 0 ? (
+    <div style={{textAlign: 'center', padding: '20px', color: '#6c757d'}}>
+      No recent activity
+    </div>
+  ) : (
+    recentActivities.map((activity, index) => (
+      <div key={index} style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '12px 0',
+        borderBottom: index < recentActivities.length - 1 ? '1px solid #f8f9fa' : 'none'
+      }}>
+        <div style={{flex: 1}}>
+          <div style={{fontSize: '13px', fontWeight: '500', marginBottom: '2px'}}>
+            {activity.action}
           </div>
-        ))}
+          <div style={{fontSize: '12px', color: '#6c757d'}}>
+            by {activity.user}
+          </div>
+        </div>
+        <div style={{fontSize: '11px', color: '#6c757d', marginLeft: '10px'}}>
+          {activity.time}
+        </div>
       </div>
+    ))
+  )}
+</div>
     </div>
   </div>
 
-  {/* Right Column: Critical Items */}
-  <div style={cardStyle}>
-    <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #dee2e6' }}>
-      <h5 style={{ margin: 0, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
-        <Clock size={20} style={{ marginRight: '8px', color: '#337FCA' }} />
-        Critical Items
-      </h5>
-    </div>
-    
-    {/* High Priority Items needing attention */}
-    {[
-      {title: 'HVAC System Down', type: 'Emergency', time: '2 hours ago'},
-      {title: 'Electrical Panel Check', type: 'Overdue', time: '1 day overdue'},
-      {title: 'Water Leak Report', type: 'High Priority', time: '30 min ago'},
-      {title: 'Generator Maintenance', type: 'Due Today', time: 'Today'},
-      {title: 'Fire Safety Inspection', type: 'Pending Approval', time: '3 hours ago'}
-    ].map((item, index) => (
-      <div key={index} style={{...itemCardStyle, height: 'auto', minHeight: '70px', cursor: 'pointer', marginBottom: '10px'}}>
-        <div style={{fontWeight: '500', fontSize: '13px', marginBottom: '4px'}}>
-          {item.title}
-        </div>
-        <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-          <span style={{
-            backgroundColor: index < 2 ? '#dc354515' : '#fd7e1415',
-            color: index < 2 ? '#dc3545' : '#fd7e14',
-            fontSize: '10px',
-            fontWeight: '600',
-            padding: '2px 6px',
-            borderRadius: '10px'
-          }}>
-            {item.type}
-          </span>
-          <span style={{fontSize: '11px', color: '#6c757d'}}>
-            {item.time}
-          </span>
-        </div>
-      </div>
-    ))}
-    
-    {/* Quick Action Buttons */}
-    <div style={{marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #dee2e6'}}>
-      <button onClick={() => navigate('/dashboard-admin/WorkOrder')} style={{
-        width: '100%',
-        padding: '10px',
-        backgroundColor: '#0d6efd',
-        color: 'white',
-        border: 'none',
-        borderRadius: '6px',
-        fontSize: '13px',
-        fontWeight: '500',
-        marginBottom: '8px',
-        cursor: 'pointer'
-      }}>
-        Review Pending Orders
-      </button>
-      <button onClick={() => navigate('/dashboard-admin/AssetManagement')} style={{
-        width: '100%',
-        padding: '10px',
-        backgroundColor: '#198754',
-        color: 'white',
-        border: 'none',
-        borderRadius: '6px',
-        fontSize: '13px',
-        fontWeight: '500',
-        cursor: 'pointer'
-      }}>
-        Schedule Maintenance
-      </button>
-    </div>
+{/* Right Column: Available Personnel */}
+<div style={cardStyle}>
+  <div style={{ marginBottom: '20px', paddingBottom: '15px', borderBottom: '1px solid #dee2e6' }}>
+    <h5 style={{ margin: 0, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+      <Building size={20} style={{ marginRight: '8px', color: '#198754' }} />
+      Available Personnel
+    </h5>
   </div>
+  
+{/* Personnel List */}
+<div style={{maxHeight: '400px', overflowY: 'auto'}}>
+  {availablePersonnel.length === 0 ? (
+    <div style={{textAlign: 'center', padding: '20px', color: '#6c757d'}}>
+      No personnel available
+    </div>
+  ) : (
+    availablePersonnel.map((person, index) => (
+      <div key={index} style={{
+        padding: '12px',
+        marginBottom: '8px',
+        backgroundColor: '#f8f9fa',
+        borderRadius: '8px',
+        border: '1px solid #e9ecef',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <div>
+          <div style={{fontWeight: '500', fontSize: '13px', marginBottom: '2px'}}>
+            {person.name}
+          </div>
+          <div style={{fontSize: '11px', color: '#6c757d'}}>
+            {person.role}
+          </div>
+        </div>
+        <span style={{
+          backgroundColor: `${person.statusColor}15`,
+          color: person.statusColor,
+          fontSize: '10px',
+          fontWeight: '600',
+          padding: '4px 8px',
+          borderRadius: '12px'
+        }}>
+          {person.status}
+        </span>
+      </div>
+    ))
+  )}
+</div>
+  
+  {/* Quick Action Buttons */}
+  <div style={{marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #dee2e6'}}>
+    <button onClick={() => navigate('/dashboard-admin/UserManagement')} style={{
+      width: '100%',
+      padding: '10px',
+      backgroundColor: '#198754',
+      color: 'white',
+      border: 'none',
+      borderRadius: '6px',
+      fontSize: '13px',
+      fontWeight: '500',
+      cursor: 'pointer'
+    }}>
+      View All Personnel
+    </button>
+  </div>
+</div>
 </div>
 
 {/* Also fix the Original Modal at the bottom */}

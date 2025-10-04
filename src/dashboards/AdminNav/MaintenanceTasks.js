@@ -94,7 +94,7 @@ const { data, error } = await supabase
   location: task.assets?.location || '-',
   status: statusName,
   priority: task.priority_levels?.priority_name || 'Low',
-  dueDate: task.due_due,
+  dueDate: task.due_date,
   dateCreated: task.date_created,
   description: task.description,
   task_id: task.task_id,

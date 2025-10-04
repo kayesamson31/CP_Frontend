@@ -71,10 +71,10 @@ const fallbackData = {
       // Convert role_id to string
       let userRole = "";
       switch (userData.role_id) {
-        case 1: userRole = "sysadmin"; break;
-        case 2: userRole = "admin"; break;
-        case 3: userRole = "personnel"; break;
-        case 4: userRole = "standard"; break;
+        case 1: userRole = "System Administrator"; break;
+        case 2: userRole = "Admin Official"; break;
+        case 3: userRole = "Personnel"; break;
+        case 4: userRole = "Standard User"; break;
         default: userRole = "standard";
       }
 
@@ -288,7 +288,6 @@ const { data, error: updateError } = await supabase
 
   return (
     <SidebarLayout role={role}>
-      <Container fluid style={{ backgroundColor: '#f8f9fa', minHeight: '100vh', padding: '20px 0' }}>
         <Row className="justify-content-center">
           <Col md={12} lg={10} xl={9}>
             {/* Page Header */}
@@ -319,7 +318,7 @@ const { data, error: updateError } = await supabase
             )}
 
             {/* Profile Card */}
-            <Card className="border-0 shadow-sm">
+            <Card className="border-1 shadow-sm">
               {/* Profile Header */}
               <Card.Header className="text-white border-0" style={{ padding: '20px', backgroundColor: '#284386' }}>
   <div className="d-flex align-items-center">
@@ -474,7 +473,7 @@ const { data, error: updateError } = await supabase
             </Card>
           </Col>
         </Row>
-      </Container>
+     
     </SidebarLayout>
   );
 }

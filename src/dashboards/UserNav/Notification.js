@@ -23,7 +23,13 @@ export default function Notification() {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(true);
-
+  // Retention policy constants
+const RETENTION_POLICY = {
+  UNREAD_DAYS: 30,
+  READ_DAYS: 7,
+  ARCHIVED_DAYS: 90,
+  MAX_NOTIFICATIONS: 500
+};
   // Get role_id from role name
   const getRoleId = (roleName) => {
     const roleMap = {
@@ -50,7 +56,42 @@ export default function Notification() {
     };
     return statusColorMap[status] || 'text-muted';
   };
+  // Cleanup old notifications based on retention policy
+const cleanupOldNotifications = async () => {
+  try {
+    const now = new Date();
+    const readCutoffDate = new Date(now.getTime() - (RETENTION_POLICY.READ_DAYS * 24 * 60 * 60 * 1000));
+    const unreadCutoffDate = new Date(now.getTime() - (RETENTION_POLICY.UNREAD_DAYS * 24 * 60 * 60 * 1000));
 
+    // Get read notifications older than 7 days
+    const { data: readNotifications } = await supabase
+      .from('notification_user_reads')
+      .select('notification_id, read_at')
+      .eq('user_id', userId)
+      .lt('read_at', readCutoffDate.toISOString());
+
+    const readNotificationIds = readNotifications?.map(n => n.notification_id) || [];
+
+    // Soft delete read notifications older than 7 days
+    if (readNotificationIds.length > 0) {
+      await supabase
+        .from('notifications')
+        .update({ is_active: false })
+        .in('notification_id', readNotificationIds);
+    }
+
+    // Soft delete unread notifications older than 30 days
+    await supabase
+      .from('notifications')
+      .update({ is_active: false })
+      .lt('created_at', unreadCutoffDate.toISOString())
+      .eq('is_active', true);
+
+    console.log(`Cleanup: Deleted ${readNotificationIds.length} old read notifications`);
+  } catch (error) {
+    console.error('Error cleaning up notifications:', error);
+  }
+};
   // Fetch notifications from Supabase
   const fetchNotifications = async () => {
     try {
@@ -190,9 +231,40 @@ const markAsRead = async (notificationId) => {
     }
   };
 
+  // Clear all read notifications
+const clearReadNotifications = async () => {
+  try {
+    const readNotificationIds = notifications
+      .filter(n => n.isRead)
+      .map(n => n.id);
+
+    if (readNotificationIds.length === 0) {
+      alert('No read notifications to clear');
+      return;
+    }
+
+    // Soft delete by setting is_active to false
+    const { error } = await supabase
+      .from('notifications')
+      .update({ is_active: false })
+      .in('notification_id', readNotificationIds);
+
+    if (error) throw error;
+
+    // Remove from local state
+    const updated = notifications.filter(n => !n.isRead);
+    setNotifications(updated);
+    
+    alert(`Cleared ${readNotificationIds.length} read notifications`);
+  } catch (error) {
+    console.error('Error clearing read notifications:', error);
+  }
+};
+
 
 useEffect(() => {
     fetchNotifications();
+     cleanupOldNotifications();
     
     // Set up real-time subscription for new notifications
     const channel = supabase
@@ -219,9 +291,16 @@ useEffect(() => {
       fetchNotifications();
     }, 30000);
 
+   // Cleanup old notifications daily
+    const cleanupIntervalId = setInterval(() => {
+      cleanupOldNotifications();
+    }, 24 * 60 * 60 * 1000); // Run every 24 hours
+
     return () => {
       supabase.removeChannel(channel);
       clearInterval(intervalId);
+      clearInterval(cleanupIntervalId); 
+      
     };
   }, [role, userId]);
 
@@ -235,17 +314,7 @@ useEffect(() => {
     // Role-specific navigation logic
     console.log('Clicked notification:', notification);
     
-    // You can implement role-specific navigation here
-    // Example:
-    // if (role === 'admin' && notification.category === 'work_order') {
-    //   navigate(`/admin/work-orders/${notification.workOrderId}`);
-    // } else if (role === 'personnel') {
-    //   navigate(`/personnel/assignments/${notification.workOrderId}`);
-    // } else if (role === 'standard') {
-    //   navigate(`/my-requests/${notification.workOrderId}`);
-    // } else if (role === 'system_admin') {
-    //   navigate(`/system/alerts/${notification.workOrderId}`);
-    // }
+   
   };
 
   const getRoleDisplayName = (role) => {
@@ -273,18 +342,25 @@ useEffect(() => {
                 </p>
               </div>
 
-              {unreadCount > 0 && (
-<Button
-  variant="outline-primary"
-  onClick={markAllAsRead}
->
-  Mark All as Read
-</Button>
-              )}
+<div className="d-flex gap-2">
+  <Button
+    variant="outline-primary"
+    onClick={markAllAsRead}
+    disabled={unreadCount === 0}
+  >
+    Mark All as Read
+  </Button>
+  <Button
+    variant="outline-secondary"
+    onClick={clearReadNotifications}
+    disabled={notifications.filter(n => n.isRead).length === 0}
+  >
+    Clear Read
+  </Button>
+</div>
             </div>
 
-            <Card className="shadow-sm" style={{ width: '100%' }}>
-              <Card.Body className="p-0">
+           
   {loading ? (
     <div className="text-center py-5">
       <div className="spinner-border text-primary" role="status">
@@ -298,21 +374,24 @@ useEffect(() => {
                     <p className="text-muted">You'll see notifications here when there are updates relevant to your role.</p>
                   </div>
                 ) : (
-                  <ListGroup variant="flush">
+                  <ListGroup className="p-2">
                     {notifications.map((notification) => (
                       <ListGroup.Item
                         key={notification.id}
                         action
                         onClick={() => handleNotificationClick(notification)}
-                        style={{
-                          backgroundColor: notification.isRead ? 'transparent' : '#F8F9FA',
-                          borderLeft: notification.isRead ? 'none' : `3px solid #007BFF`,
-                          cursor: 'pointer',
-                          padding: '12px 20px',
-                          width: '100%',
-                          boxSizing: 'border-box'
-                        }}
-                        className="border-0 border-bottom"
+                      style={{
+  backgroundColor: notification.isRead ? '#FFFFFF' : '#F3FAFFFF',
+  borderLeft: notification.isRead ? 'none' : `4px solid #007BFF`,
+  cursor: 'pointer',
+  padding: '16px 20px',
+  width: '100%',
+  boxSizing: 'border-box',
+  marginBottom: '8px',
+  borderRadius: '6px',
+  border: notification.isRead ? '2px solid #C7DFF8FF' : '1px solid #E9ECEF',  // Thicker blue border for read
+  boxShadow: 'none'  // Remove shadow muna para mas clear yung border
+}}
                       >
                         <div className="d-flex align-items-center justify-content-between">
                           <div className="flex-grow-1">
@@ -340,21 +419,16 @@ useEffect(() => {
                               {notification.message}
                             </p>
 
-                            <div className="d-flex align-items-center gap-3">
-                              <span 
-                                className={`fw-bold ${getStatusTextClass(notification.status)}`}
-                                style={{ fontSize: '0.8rem' }}>
-                                {notification.status}
-                              </span>
-                              <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                                #{notification.workOrderId}
-                              </small>
-                              {notification.priority === 'high' || notification.priority === 'critical' ? (
-                                <span className="text-danger fw-bold" style={{ fontSize: '0.75rem' }}>
-                                  {notification.priority.toUpperCase()}
-                                </span>
-                              ) : null}
-                            </div>
+                           <div className="d-flex align-items-center gap-3">
+  <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+    #{notification.workOrderId}
+  </small>
+  {notification.priority === 'high' || notification.priority === 'critical' ? (
+    <span className="text-danger fw-bold" style={{ fontSize: '0.75rem' }}>
+      {notification.priority.toUpperCase()}
+    </span>
+  ) : null}
+</div>
                           </div>
 
                           {!notification.isRead && (
@@ -373,8 +447,7 @@ useEffect(() => {
                     ))}
                   </ListGroup>
                 )}
-              </Card.Body>
-            </Card>
+             
           </Col>
         </Row>
       </Container>

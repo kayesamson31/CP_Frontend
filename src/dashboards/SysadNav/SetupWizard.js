@@ -1374,9 +1374,10 @@ onClick={async () => {
     };
     
     
-    localStorage.setItem("setupWizardData", JSON.stringify(setupData));
+   localStorage.setItem("setupWizardData", JSON.stringify(setupData));
     localStorage.removeItem("orgDataFromSignup");
     localStorage.setItem('setupJustCompleted', 'true');
+    localStorage.setItem('forceRefreshDashboard', 'true');
 
     // START EMAIL SENDING PROCESS
     if (allUsersForEmail.length > 0) {

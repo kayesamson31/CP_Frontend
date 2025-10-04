@@ -25,18 +25,19 @@ const menuConfig = {
     { label: 'Notification', path: '/dashboard-admin/notification', icon: 'bi bi-bell' },
     { label: 'Work Order', path: '/dashboard-admin/WorkOrder', icon: 'bi bi-clipboard-check' },
     { label: 'Maintenance Tasks', path: '/dashboard-admin/MaintenanceTasks', icon: 'bi bi-gear'},
-    { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: 'bi bi-people' },
     { label: 'Asset Management', path: '/dashboard-admin/AssetManagement', icon: 'bi bi-box-seam' },
+    { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: 'bi bi-people' },
     { label: 'Activity Tracking', path: '/dashboard-admin/ActivityTracking', icon: 'bi bi-clock-history' },
     { label: 'Reports', path: '/dashboard-admin/reports', icon: 'bi bi-file-earmark-text' }
   ],
   sysadmin: [
     { label: 'Dashboard', path: '/dashboard-sysadmin', icon: 'bi bi-speedometer2' },
-    { label: 'Notifications', path: '/dashboard-sysadmin/notification', icon: 'bi bi-bell' },
     { label: 'Profile', path: '/dashboard-sysadmin/profile', icon: 'bi bi-person' },
+    { label: 'Notifications', path: '/dashboard-sysadmin/notification', icon: 'bi bi-bell' },
     { label: 'User Management', path: '/dashboard-sysadmin/SysadUserManagement', icon: 'bi bi-people' },
-    { label: 'Report Tabs', path: '/dashboard-sysadmin/SysadReports', icon: 'bi bi-file-earmark-text' },
-    { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: 'bi bi-clock-history' }
+    { label: 'Asset Overview', path: '/dashboard-sysadmin/AssetOverview', icon: 'bi-clipboard-data' },
+    { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: 'bi bi-clock-history' },
+    { label: 'Report Tabs', path: '/dashboard-sysadmin/SysadReports', icon: 'bi bi-file-earmark-text' }
   ]
 };
 
@@ -234,7 +235,11 @@ useEffect(() => {
           borderRight: '1.5px solid #B0D0E6',
           width: '336px',
           flexShrink: 0,
-          overflowY: 'auto'
+          overflowY: 'auto',
+          position: 'fixed',     
+          height: '100vh',        
+          left: 0,                
+          top: 0                  
         }}
       >
         <div className="mb-4 text-center">
@@ -312,7 +317,8 @@ useEffect(() => {
       <div style={{ 
         flex: 1,
         padding: '20px',
-        overflowX: 'hidden'
+        overflowX: 'hidden',
+        marginLeft: '336px'  
       }}>
         {children}
       </div>

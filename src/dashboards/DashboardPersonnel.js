@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Col, Modal, Badge } from 'react-bootstrap';
 import { assetService } from '../services/assetService'; 
-import { supabase } from '../supabaseClient'; 
+import { supabase } from '../supabaseClient';
+ 
 import { 
   Calendar as CalendarIcon,
   Clock,
@@ -72,6 +73,7 @@ if (taskType === 'maintenance_task') {
       .select();
 
     if (error) throw error;
+    
 
     return { success: true, data: data?.[0] };
   }

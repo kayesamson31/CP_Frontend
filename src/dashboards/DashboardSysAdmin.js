@@ -209,13 +209,13 @@ const [organizationData, setOrganizationData] = useState({
   contactEmail: "admin@openfms.io",
   personnel: 0,
   standardUsers: 0,
-  heads: 0,
+  adminOfficials: 0,
   systemAdmins: 1,
   totalAssets: 0,
   systemHealthPercentage: 25,
   isUsersDataSkipped: false,
   isAssetsDataSkipped: false
-});  
+});
   const [dashboardData, setDashboardData] = useState({
     totalUsers: 0,
     totalAssets: 0,
@@ -302,24 +302,23 @@ const fetchDatabaseStats = async () => {
     const organizationId = userData?.organization_id;
     if (!organizationId) return { personnel:0, standardUsers:0, heads:0, systemAdmins:1, totalAssets:0, systemHealthPercentage:25 };
 
-    // Fetch counts
-    const [personnelResult, standardUsersResult, headsResult, systemAdminsResult, assetsResult] = await Promise.all([
-      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 3).in('user_status', ['active','pending_activation']),
-      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 4).in('user_status', ['active','pending_activation']),
-      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 2).in('user_status', ['active','pending_activation']),
-      supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 1).in('user_status', ['active','pending_activation']),
-      supabase.from('assets').select('*', { count: 'exact' }).eq('organization_id', organizationId).neq('asset_status', 'inactive_test')
-    ]);
+  const [personnelResult, standardUsersResult, adminOfficialsResult, systemAdminsResult, assetsResult] = await Promise.all([
+  supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 3).in('user_status', ['active','pending_activation']),
+  supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 4).in('user_status', ['active','pending_activation']),
+  supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 2).in('user_status', ['active','pending_activation']),
+  supabase.from('users').select('*', { count: 'exact' }).eq('organization_id', organizationId).eq('role_id', 1).in('user_status', ['active','pending_activation']),
+  supabase.from('assets').select('*', { count: 'exact' }).eq('organization_id', organizationId).neq('asset_status', 'inactive_test')
+]);
 
-    const personnel = personnelResult.count || 0;
-    const standardUsers = standardUsersResult.count || 0;
-    const heads = (headsResult.count || 0) + (systemAdminsResult.count || 0); // include system admins
-    const systemAdmins = systemAdminsResult.count || 0;
-    const totalAssets = assetsResult.count || 0;
+const personnel = personnelResult.count || 0;
+const standardUsers = standardUsersResult.count || 0;
+const adminOfficials = adminOfficialsResult.count || 0;
+const systemAdmins = systemAdminsResult.count || 0;
+const totalAssets = assetsResult.count || 0;
 
-    const systemHealthPercentage = calculateSystemHealth(personnel + standardUsers + heads, totalAssets);
+   const systemHealthPercentage = calculateSystemHealth(personnel + standardUsers + adminOfficials, totalAssets);
 
-    return { personnel, standardUsers, heads, systemAdmins, totalAssets, systemHealthPercentage };
+   return { personnel, standardUsers, adminOfficials, systemAdmins, totalAssets, systemHealthPercentage };
 
   } catch (error) {
     console.error('Error fetching stats:', error);
@@ -387,28 +386,28 @@ const fetchDatabaseStats = async () => {
 
 
 
-const updateSetupProgress = () => {
+const updateSetupProgress = async () => {
   try {
     const setupWizardData = localStorage.getItem('setupWizardData');
-    if (!setupWizardData) return;
     
-    const wizardData = JSON.parse(setupWizardData);
+    // Get actual database counts
+    const dbStats = await fetchDatabaseStats();
     
     // Check organization info
-    const hasOrganizationInfo = wizardData.orgData?.name && wizardData.orgData?.contactEmail;
+    let hasOrganizationInfo = false;
+    if (setupWizardData) {
+      const wizardData = JSON.parse(setupWizardData);
+      hasOrganizationInfo = wizardData.orgData?.name && wizardData.orgData?.contactEmail;
+    }
     
-    // Check if at least one user type has been uploaded (not skipped)
-    const hasHeads = wizardData.uploadedFiles?.heads && !wizardData.skippedSteps?.heads;
-    const hasPersonnel = wizardData.uploadedFiles?.personnel && !wizardData.skippedSteps?.personnel;
-    const hasStandardUsers = wizardData.uploadedFiles?.standardUsers && !wizardData.skippedSteps?.standardUsers;
-    const hasAnyUsers = hasHeads || hasPersonnel || hasStandardUsers;
+  const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
     
-    // Check if assets have been uploaded (not skipped)
-    const hasAssets = wizardData.uploadedFiles?.assets && !wizardData.skippedSteps?.assets;
+    // Check if assets exist in DATABASE (not just localStorage)
+    const hasAssets = dbStats.totalAssets > 0;
     
     const setupStatus = {
       organizationInfo: hasOrganizationInfo,
-      usersUpload: hasAnyUsers,
+      usersUpload: hasUsers,
       assetsUpload: hasAssets
     };
     
@@ -426,11 +425,14 @@ const updateSetupProgress = () => {
     // Check if setup is now complete
     if (completedSteps === 3) {
       setSetupCompleted(true);
+    } else {
+      setSetupCompleted(false);
     }
     
     console.log('Setup progress updated:', {
       setupStatus,
       progress: newProgress,
+      dbStats,
       completed: completedSteps === 3
     });
     
@@ -641,7 +643,7 @@ setDashboardData(prev => ({
 }));
 
 console.log('Asset counts updated:', dbStats);
-    // Add activity log
+  // Add activity log
     addActivity(
       'csv_upload',
       `Assets CSV uploaded: ${insertedCount} inserted, ${failedCount} failed`,
@@ -649,7 +651,7 @@ console.log('Asset counts updated:', dbStats);
     );
 
     // Update setup progress
-    updateSetupProgress();
+    await updateSetupProgress();
 
     // Close modal and reset
     setShowAssetUploadModal(false);
@@ -853,7 +855,8 @@ useEffect(() => {
       setOrganizationData(mergedOrgData);
       
       // Update dashboard data
-      const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.heads;
+      // Update dashboard data
+const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials;
       setDashboardData(prev => ({
         ...prev,
         totalUsers: totalUsers,
@@ -867,18 +870,18 @@ useEffect(() => {
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       // Fallback to default values
-      setOrganizationData(prev => ({
-        ...prev,
-        personnel: 0,
-        standardUsers: 0,
-        heads: 1,
-        systemAdmins: 1,
-        totalAssets: 0,
-        systemHealthPercentage: 25
-      }));
+     setOrganizationData(prev => ({
+  ...prev,
+  personnel: 0,
+  standardUsers: 0,
+  adminOfficials: 0,
+  systemAdmins: 1,
+  totalAssets: 0,
+  systemHealthPercentage: 25
+}));
     }
     
-    updateSetupProgress();
+ await updateSetupProgress();
   };
 
   loadDashboardData();
@@ -1406,7 +1409,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
 {/* Statistics Cards Row */}
 <div className="row mb-4">
-  {/* Personnel */}
+ {/* Admin Officials */}
   <div className="col-lg-4 col-md-6 mb-3">
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
       <div className="card-body text-center position-relative">
@@ -1415,11 +1418,11 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
             Not uploaded
           </span>
         )}
-        <i className="bi bi-people-fill text-primary fs-3 mb-2 d-block"></i>
+        <i className="bi bi-person-badge-fill text-warning fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">
-          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.personnel).toLocaleString()}
+          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.adminOfficials).toLocaleString()}
         </h5>
-        <p className="text-muted mb-0 small">Personnel</p>
+        <p className="text-muted mb-0 small">Admin Officials</p>
       </div>
     </div>
   </div>
@@ -1442,7 +1445,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     </div>
   </div>
 
-  {/* Heads */}
+ {/* Personnel */}
   <div className="col-lg-4 col-md-6 mb-3">
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
       <div className="card-body text-center position-relative">
@@ -1451,11 +1454,11 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
             Not uploaded
           </span>
         )}
-        <i className="bi bi-person-badge-fill text-warning fs-3 mb-2 d-block"></i>
+        <i className="bi bi-people-fill text-primary fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">
-          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.heads).toLocaleString()}
+          {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.personnel).toLocaleString()}
         </h5>
-        <p className="text-muted mb-0 small">Heads</p>
+        <p className="text-muted mb-0 small">Personnel</p>
       </div>
     </div>
   </div>

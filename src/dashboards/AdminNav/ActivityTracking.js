@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Modal, Button, Form, Card, Spinner, Alert } from "react-bootstrap";
 import SidebarLayout from "../../Layouts/SidebarLayout";
-
+import { supabase } from '../../supabaseClient';
 export default function Activity() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -10,46 +10,81 @@ export default function Activity() {
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState("all");
-
+  const [filterRole, setFilterRole] = useState("all");
+  const [filterActivityType, setFilterActivityType] = useState("all");
+ 
+  
   useEffect(() => {
-    const fetchActivities = async () => {
-      try {
-        //  Replace with your actual API when ready:
-        // const response = await fetch("/api/activities");
-        // const data = await response.json();
+  const fetchActivities = async () => {
+    try {
+      setLoading(true);
+      
+      let query = supabase
+        .from('activity_tracking')
+        .select(`
+          activity_id,
+          activity_type,
+          description,
+          timestamp,
+          user_id,
+          users!activity_tracking_user_id_fkey (
+            full_name,
+            email,
+            role_id,
+            roles (role_name)
+          )
+        `)
+        .order('timestamp', { ascending: false });
 
-        // Example data for visualization - remove this when connecting to real API
-        const exampleData = [
-          { id: 1, timestamp: "2024-09-06T09:30:00Z", user: "John Admin",email: "john.admin@company.com", role: "Admin", actionTaken: "Downloaded maintenance schedule" },
-          { id: 2, timestamp: "2024-09-06T10:15:00Z", user: "Sarah Manager", email: "john.admin@company.com", role: "Admin", actionTaken: "Approved work order" },
-          { id: 3, timestamp: "2024-09-06T11:00:00Z", user: "Mike Supervisor",email: "john.admin@company.com",  role: "Personnel", actionTaken: "Submitted work order request" },
-          { id: 4, timestamp: "2024-09-06T11:45:00Z", user: "Anna Director", email: "john.admin@company.com", role: "Admin", actionTaken: "Downloaded asset records" },
-          { id: 5, timestamp: "2024-09-06T12:20:00Z", user: "John Admin", email: "john.admin@company.com", role: "Admin", actionTaken: "Rejected work order" },
-          { id: 6, timestamp: "2024-09-06T13:10:00Z", user: "Lisa Coordinator",  email: "john.admin@company.com",role: "Personnel", actionTaken: "Downloaded report" },
-          { id: 7, timestamp: "2024-09-06T14:00:00Z", user: "Sarah Manager", email: "john.admin@company.com", role: "Admin", actionTaken: "Deleted asset" },
-          { id: 8, timestamp: "2024-09-06T14:30:00Z", user: "Tom Technician",email: "john.admin@company.com", role: "Personnel", actionTaken: "Submitted work order request" },
-          { id: 9, timestamp: "2024-09-06T15:15:00Z", user: "Anna Director", email: "john.admin@company.com", role: "Admin", actionTaken: "Downloaded maintenance schedule" },
-          { id: 10, timestamp: "2024-09-06T16:00:00Z", user: "John Admin", email: "john.admin@company.com", role: "Admin", actionTaken: "Approved work order" }
-        ];
-
-        setActivities(exampleData);
-      } catch (err) {
-        setError("Failed to fetch activity data.");
-      } finally {
-        setLoading(false);
+      // Apply date range filter
+      if (dateRange !== 'all') {
+        const daysAgo = new Date();
+        daysAgo.setDate(daysAgo.getDate() - parseInt(dateRange));
+        query = query.gte('timestamp', daysAgo.toISOString());
       }
-    };
 
-    fetchActivities();
-  }, []);
+      const { data, error } = await query;
 
-  const filteredActivities = activities.filter(
-    (act) =>
-      act.user.toLowerCase().includes(search.toLowerCase()) ||
-      act.actionTaken.toLowerCase().includes(search.toLowerCase()) ||
-      act.role.toLowerCase().includes(search.toLowerCase()) ||
-      act.email.toLowerCase().includes(search.toLowerCase())
-  );
+      if (error) throw error;
+
+      // Format data to match component structure
+      const formattedActivities = data.map(activity => ({
+        id: activity.activity_id,
+        timestamp: activity.timestamp,
+        user: activity.users?.full_name || 'Unknown User',
+        email: activity.users?.email || 'No email',
+        role: activity.users?.roles?.role_name || 'Unknown',
+        actionTaken: activity.description || activity.activity_type
+      }));
+
+      setActivities(formattedActivities);
+      setError(null);
+
+    } catch (err) {
+      console.error('Error fetching activities:', err);
+      setError("Failed to fetch activity data.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchActivities();
+}, [dateRange]);
+
+ const filteredActivities = activities.filter((act) => {
+  const matchesSearch = 
+    act.user.toLowerCase().includes(search.toLowerCase()) ||
+    act.actionTaken.toLowerCase().includes(search.toLowerCase()) ||
+    act.role.toLowerCase().includes(search.toLowerCase()) ||
+    act.email.toLowerCase().includes(search.toLowerCase());
+
+  const matchesRole = filterRole === 'all' || act.role === filterRole;
+  
+  const matchesActivityType = filterActivityType === 'all' || 
+    act.actionTaken.toLowerCase().includes(filterActivityType.toLowerCase());
+
+  return matchesSearch && matchesRole && matchesActivityType;
+});
 
   const getActionBadgeColor = (action) => {
     const actionLower = action.toLowerCase();
@@ -69,11 +104,11 @@ export default function Activity() {
           Track admin activities including downloads, deletions, work order management, and report generation.
         </p>
 
-        {/* Filters */}
-        <div className="d-flex gap-3 mb-4">
+{/* Filters */}
+<div className="d-flex gap-3 mb-4">
   <Form.Control
     type="text"
-    placeholder="Search assets by name, ID, or assignee..."
+    placeholder="Search by user, action, role, or email..."
     value={search}
     onChange={(e) => setSearch(e.target.value)}
     className="flex-grow-1"
@@ -84,15 +119,35 @@ export default function Activity() {
     onChange={(e) => setDateRange(e.target.value)}
     style={{ minWidth: "150px" }}
   >
-    <option value="all">All Status</option>
+    <option value="all">All Time</option>
     <option value="7">Last 7 Days</option>
     <option value="30">Last 30 Days</option>
+    <option value="90">Last 90 Days</option>
   </Form.Select>
   
   <Form.Select
+    value={filterRole}
+    onChange={(e) => setFilterRole(e.target.value)}
     style={{ minWidth: "150px" }}
   >
-    <option>All Categories</option>
+    <option value="all">All Roles</option>
+    <option value="Admin">Admin</option>
+    <option value="Personnel">Personnel</option>
+    <option value="System Admin">System Admin</option>
+  </Form.Select>
+
+  <Form.Select
+    value={filterActivityType}
+    onChange={(e) => setFilterActivityType(e.target.value)}
+    style={{ minWidth: "180px" }}
+  >
+    <option value="all">All Activity Types</option>
+    <option value="download">Downloads</option>
+    <option value="submit">Submissions</option>
+    <option value="approve">Approvals</option>
+    <option value="reject">Rejections</option>
+    <option value="delete">Deletions</option>
+    <option value="update">Updates</option>
   </Form.Select>
 </div>
 
@@ -222,10 +277,6 @@ export default function Activity() {
                       </div>
                       <div className="col-sm-8">
                         {selectedActivity.email || 'No email provided'}
-                      </div>
-
-                      <div className="col-sm-4">
-                        <strong className="text-primary"> Action Taken:</strong>
                       </div>
 
                       <div className="col-sm-4">

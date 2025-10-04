@@ -552,25 +552,7 @@ async createMaintenanceTask(taskData) {
       .update({ asset_status: 'maintenance' })
       .eq('asset_code', taskData.assetId);
 
-    // NOTIFICATION for assigned personnel (if incident-related)
-if (taskData.incidentId) {
-  try {
-    await supabase.from('notifications').insert({
-      notification_type_id: 2, // Task Assignment
-      created_by: currentUser.user_id,
-      title: 'Incident Report Task Assigned',
-      message: `You have been assigned to resolve incident report #${taskData.incidentId} for ${assetData.asset_name}`,
-      target_user_id: parseInt(taskData.assigneeId),
-      priority_id: priorityMap[taskData.priority] || 2,
-      related_table: 'maintenance_tasks',
-      related_id: taskResult.task_id,
-      is_active: true
-    });
-  } catch (notifError) {
-    console.error('Failed to create notification:', notifError);
-    // Don't throw - task creation should still succeed
-  }
-}
+    
 
     return taskResult;
 
