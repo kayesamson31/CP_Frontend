@@ -12,7 +12,8 @@ export default function Activity() {
   const [dateRange, setDateRange] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
   const [filterActivityType, setFilterActivityType] = useState("all");
- 
+ const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(15); // Show 20 items per page
   
   useEffect(() => {
   const fetchActivities = async () => {
@@ -86,6 +87,12 @@ export default function Activity() {
   return matchesSearch && matchesRole && matchesActivityType;
 });
 
+// Pagination calculations
+const indexOfLastItem = currentPage * itemsPerPage;
+const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+const currentActivities = filteredActivities.slice(indexOfFirstItem, indexOfLastItem);
+const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
+
   const getActionBadgeColor = (action) => {
     const actionLower = action.toLowerCase();
     if (actionLower.includes('download')) return 'bg-info';
@@ -110,13 +117,20 @@ export default function Activity() {
     type="text"
     placeholder="Search by user, action, role, or email..."
     value={search}
-    onChange={(e) => setSearch(e.target.value)}
+    onChange={(e) => {
+  setSearch(e.target.value);
+  setCurrentPage(1); // Add this
+}}
+
     className="flex-grow-1"
   />
   
   <Form.Select
     value={dateRange}
-    onChange={(e) => setDateRange(e.target.value)}
+    onChange={(e) => {
+  setDateRange(e.target.value);
+  setCurrentPage(1); // Add this
+}}
     style={{ minWidth: "150px" }}
   >
     <option value="all">All Time</option>
@@ -127,7 +141,10 @@ export default function Activity() {
   
   <Form.Select
     value={filterRole}
-    onChange={(e) => setFilterRole(e.target.value)}
+    onChange={(e) => {
+  setFilterRole(e.target.value);
+  setCurrentPage(1); // Add this
+}}
     style={{ minWidth: "150px" }}
   >
     <option value="all">All Roles</option>
@@ -138,7 +155,10 @@ export default function Activity() {
 
   <Form.Select
     value={filterActivityType}
-    onChange={(e) => setFilterActivityType(e.target.value)}
+    onChange={(e) => {
+  setFilterActivityType(e.target.value);
+  setCurrentPage(1); // Add this
+}}
     style={{ minWidth: "180px" }}
   >
     <option value="all">All Activity Types</option>
@@ -185,7 +205,8 @@ export default function Activity() {
         </tr>
       </thead>
         <tbody>
-          {filteredActivities.map((act) => (
+
+          {currentActivities.map((act) => (
             <tr
               key={act.id}
               style={{ cursor: "pointer" }}
@@ -214,6 +235,46 @@ export default function Activity() {
         </tbody>
       </table>
       
+      {/* Pagination Controls */}
+{totalPages > 1 && (
+  <div className="d-flex justify-content-between align-items-center p-3 border-top">
+    <div className="text-muted">
+      Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredActivities.length)} of {filteredActivities.length} activities
+    </div>
+    <div className="d-flex gap-2">
+      <Button 
+        variant="outline-primary" 
+        size="sm"
+        disabled={currentPage === 1}
+        onClick={() => setCurrentPage(currentPage - 1)}
+      >
+        Previous
+      </Button>
+      
+      <div className="d-flex gap-1">
+        {[...Array(totalPages)].map((_, index) => (
+          <Button
+            key={index + 1}
+            variant={currentPage === index + 1 ? "primary" : "outline-primary"}
+            size="sm"
+            onClick={() => setCurrentPage(index + 1)}
+          >
+            {index + 1}
+          </Button>
+        ))}
+      </div>
+      
+      <Button 
+        variant="outline-primary" 
+        size="sm"
+        disabled={currentPage === totalPages}
+        onClick={() => setCurrentPage(currentPage + 1)}
+      >
+        Next
+      </Button>
+    </div>
+  </div>
+)}
       {filteredActivities.length === 0 && search && (
         <div className="text-center py-4">
           <p className="text-muted mb-0">No activities match your search criteria.</p>

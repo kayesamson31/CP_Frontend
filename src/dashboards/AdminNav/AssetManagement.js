@@ -26,6 +26,7 @@ const [categories, setCategories] = useState([]);
 const [tasks, setTasks] = useState([]);
 const [personnel, setPersonnel] = useState([]);
 
+
 const [previousAsset, setPreviousAsset] = useState(null);
 const [predefinedTasks] = useState([
   'Check-up / Inspection',

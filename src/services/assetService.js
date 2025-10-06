@@ -538,23 +538,53 @@ async createMaintenanceTask(taskData) {
   incident_id: taskData.incidentId || null  
 };
     
-    const { data: taskResult, error: taskError } = await supabase
-      .from('maintenance_tasks')
-      .insert([taskInsert])
-      .select()
-      .single();
+const { data: taskResult, error: taskError } = await supabase
+  .from('maintenance_tasks')
+  .insert([taskInsert])
+  .select()
+  .single();
 
-    if (taskError) throw taskError;
+if (taskError) throw taskError;
 
-    // Update asset status to "maintenance"
-    await supabase
-      .from('assets')
-      .update({ asset_status: 'maintenance' })
-      .eq('asset_code', taskData.assetId);
+// Update asset status to "maintenance"
+await supabase
+  .from('assets')
+  .update({ asset_status: 'maintenance' })
+  .eq('asset_code', taskData.assetId);
 
-    
+// ✅ CREATE NOTIFICATION FOR PERSONNEL
+try {
+  const notificationInsert = {
+    notification_type_id: 13, // asset_maintenance_assigned
+    created_by: currentUser.user_id,
+    title: 'New Maintenance Task Assigned',
+    message: `You have been assigned: ${taskData.title} for ${assetData.asset_name}. Due: ${taskData.dueDate}`,
+    target_roles: '3', // Personnel role
+    target_user_id: parseInt(taskData.assigneeId),
+    priority_id: priorityMap[taskData.priority] || 2,
+    related_table: 'maintenance_tasks',
+    related_id: taskResult.task_id,
+    is_active: true,
+    created_at: new Date().toISOString()
+  };
 
-    return taskResult;
+  console.log('🔔 Creating notification:', notificationInsert);
+
+  const { data: notifResult, error: notifError } = await supabase
+    .from('notifications')
+    .insert([notificationInsert]);
+
+  if (notifError) {
+    console.error('❌ Notification error:', notifError);
+  } else {
+    console.log('✅ Notification created successfully');
+  }
+} catch (notifErr) {
+  console.error('❌ Notification creation failed:', notifErr);
+  // Don't throw - task was created successfully
+}
+
+return taskResult;
 
 
   } catch (error) {

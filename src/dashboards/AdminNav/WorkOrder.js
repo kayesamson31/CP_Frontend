@@ -23,6 +23,8 @@ export default function WorkOrder() {
   const [extendedDueDate, setExtendedDueDate] = useState('');
 const [showExtendModal, setShowExtendModal] = useState(false);
 const [extensionReason, setExtensionReason] = useState('');
+const [currentPage, setCurrentPage] = useState(1);
+const [itemsPerPage] = useState(15); // 15 work orders per page
 
   // API Base URL - update this to match your backend
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
@@ -80,6 +82,7 @@ const transformedOrders = data.map(wo => {
     work_order_id: wo.work_order_id,
     assignedTo: wo.assigned_user?.full_name || null,
     failureReason: wo.failure_reason,
+    rejectionReason: wo.rejection_reason,
     priority_id: wo.priority_id,
     admin_priority_id: wo.admin_priority_id,
     isOverdue: isOverdue,
@@ -176,6 +179,12 @@ const fetchCategories = async () => {
     
     return matchesTab && matchesSearch && matchesCategory && matchesPriority;
   });
+
+// Pagination calculations
+const indexOfLastItem = currentPage * itemsPerPage;
+const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+const currentOrders = filteredOrders.slice(indexOfFirstItem, indexOfLastItem);
+const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
 
   const handleViewOrder = (order) => {
     setSelectedOrder(order);
@@ -372,7 +381,7 @@ const getPriorityBadge = (priority) => {
       className="form-control"
       placeholder="Search assets by name, ID, or assignee..."
       value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
+      onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
       style={{
         borderRadius: '8px',
         border: '1px solid #ddd',
@@ -384,7 +393,7 @@ const getPriorityBadge = (priority) => {
     <select 
       className="form-select"
       value={priorityFilter}
-      onChange={(e) => setPriorityFilter(e.target.value)}
+      onChange={(e) => { setPriorityFilter(e.target.value); setCurrentPage(1); }}
       style={{
         borderRadius: '8px',
         border: '1px solid #ddd',
@@ -401,7 +410,7 @@ const getPriorityBadge = (priority) => {
     <select 
       className="form-select"
       value={categoryFilter}
-      onChange={(e) => setCategoryFilter(e.target.value)}
+      onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
       style={{
         borderRadius: '8px',
         border: '1px solid #ddd',
@@ -427,7 +436,7 @@ const getPriorityBadge = (priority) => {
                     ? 'btn-primary text-white shadow-sm' 
                     : 'btn-outline-secondary text-muted'
                 }`}
-                onClick={() => setActiveTab(tab.name)}
+                onClick={() => { setActiveTab(tab.name); setCurrentPage(1); }}
                 style={{
                   border: activeTab === tab.name ? 'none' : '1.5px solid #e5e7eb',
                   transition: 'all 0.2s ease',
@@ -490,7 +499,7 @@ const getPriorityBadge = (priority) => {
                 </thead>
                 
                 <tbody>
-                  {filteredOrders.map(order => (
+                  {currentOrders.map(order => (
                     <tr 
                   key={order.id} 
                   style={{
@@ -532,6 +541,45 @@ const getPriorityBadge = (priority) => {
                   ))}
                 </tbody>
               </table>
+
+              {/* Pagination Controls */}
+{totalPages > 1 && (
+  <div className="d-flex justify-content-between align-items-center p-3 border-top bg-light">
+    <div className="text-muted">
+      Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, filteredOrders.length)} of {filteredOrders.length} work orders
+    </div>
+    <div className="d-flex gap-2">
+      <button 
+        className="btn btn-outline-primary btn-sm"
+        disabled={currentPage === 1}
+        onClick={() => setCurrentPage(currentPage - 1)}
+      >
+        Previous
+      </button>
+      
+      <div className="d-flex gap-1">
+        {[...Array(totalPages)].map((_, index) => (
+          <button
+            key={index + 1}
+            className={`btn btn-sm ${currentPage === index + 1 ? "btn-primary" : "btn-outline-primary"}`}
+            onClick={() => setCurrentPage(index + 1)}
+          >
+            {index + 1}
+          </button>
+        ))}
+      </div>
+      
+      <button 
+        className="btn btn-outline-primary btn-sm"
+        disabled={currentPage === totalPages}
+        onClick={() => setCurrentPage(currentPage + 1)}
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
+
             </div>
           </div>
         )}
