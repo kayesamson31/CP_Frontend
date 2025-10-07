@@ -33,12 +33,17 @@ const fetchMaintenanceTasks = async () => {
   try {
     setLoading(true);
     setError(null);
-    
+  
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUser || !currentUser.organizationId) {
+  throw new Error('Session expired. Please log in again.');
+}
+
 const { data, error } = await supabase
   .from('maintenance_tasks')
   .select(`
     *,
-    assets!maintenance_tasks_asset_id_fkey(asset_id, asset_name, asset_code, location),
+    assets!maintenance_tasks_asset_id_fkey(asset_id, asset_name, asset_code, location, organization_id),
     statuses(status_name, color_code),
     priority_levels(priority_name, color_code),
     assigned_user:users!assigned_to(full_name, email),
@@ -50,6 +55,7 @@ const { data, error } = await supabase
       extension_date
     )
   `)
+  .eq('organization_id', currentUser.organizationId)  // ✅ CRITICAL FIX
   .order('date_created', { ascending: false });
     
     if (error) throw error;

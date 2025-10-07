@@ -171,11 +171,9 @@ const handleSuccessfulLogin = (userData) => {
     authUid: userData.auth_uid
   }));
 
-  // Your existing redirect logic
-if (userData.first_login === true) {
+if (userData.first_login === true && userData.role_id !== 1) {
     alert("Welcome! Please change your temporary password to continue.");
     switch (userRole) {
-      case "sysadmin": navigate("/dashboard-sysadmin/profile"); return;
       case "admin": navigate("/dashboard-admin/profile"); return;
       case "personnel": navigate("/dashboard-personnel/profile"); return;
       case "standard": navigate("/dashboard-user/profile"); return;

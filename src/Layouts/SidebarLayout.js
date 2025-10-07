@@ -120,12 +120,19 @@ useEffect(() => {
       const roleId = userData.role_id;
       const userId = userData.user_id;
 
-      // ✅ UPDATED: Check both target_roles AND target_user_id
-      const { data: notifications, error } = await supabase
-        .from('notifications')
-        .select('notification_id')
-        .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)  // ← Fixed!
-        .eq('is_active', true);
+     // Get user's organization
+const { data: orgData } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('user_id', userId)
+  .single();
+
+const { data: notifications, error } = await supabase
+  .from('notifications')
+  .select('notification_id')
+  .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
+  .eq('organization_id', orgData?.organization_id)  // CRITICAL FIX
+  .eq('is_active', true);
 
       if (error) throw error;
 

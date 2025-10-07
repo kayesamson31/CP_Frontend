@@ -294,7 +294,13 @@ async fetchMyTasks() {
     
     if (!currentUser) throw new Error('User not found');
     
-  const { data: tasks, error } = await supabase
+// ✅ Get current user's organization first
+const currentUserData = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUserData || !currentUserData.organizationId) {
+  throw new Error('Session expired. Please log in again.');
+}
+
+const { data: tasks, error } = await supabase
   .from('maintenance_tasks')
   .select(`
     task_id,
@@ -313,13 +319,13 @@ async fetchMyTasks() {
     work_order_id,
     asset_id,
     incident_id,
-
     statuses(status_name, color_code),
     priority_levels(priority_name, color_code),
     assets!maintenance_tasks_asset_id_fkey(
       asset_name, 
       asset_code, 
       location,
+      organization_id,  
       asset_categories(category_name)
     ),
     work_orders(
@@ -329,6 +335,7 @@ async fetchMyTasks() {
       location,
       category,
       asset_id,
+      organization_id,  
       assets(asset_name, asset_code, location)
     ),
     maintenance_task_extensions(
@@ -339,12 +346,23 @@ async fetchMyTasks() {
       extension_date
     )
   `)
-      .eq('assigned_to', currentUser.user_id)
-      .order('due_date', { ascending: true });
+  .eq('assigned_to', currentUser.user_id)
+  .order('due_date', { ascending: true });
+
+// ✅ Filter out tasks from other organizations
+const filteredTasks = tasks?.filter(task => {
+  if (task.assets && task.assets.organization_id !== currentUserData.organizationId) {
+    return false;
+  }
+  if (task.work_orders && task.work_orders.organization_id !== currentUserData.organizationId) {
+    return false;
+  }
+  return true;
+}) || [];
     
     if (error) throw error;
     
-  return tasks.map(task => ({
+  return filteredTasks.map(task => ({
   id: task.task_id,
   taskId: task.task_id,
   title: task.task_name,

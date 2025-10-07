@@ -62,6 +62,7 @@ const [pipelineData, setPipelineData] = useState([
 const [recentActivities, setRecentActivities] = useState([]);
 const [availablePersonnel, setAvailablePersonnel] = useState([]);
 const [adminName, setAdminName] = useState('Admin');
+
 useEffect(() => {
   const fetchAdminData = async () => {
     try {
@@ -85,22 +86,31 @@ useEffect(() => {
   fetchAdminData();
 }, []);
 
+
 useEffect(() => {
   const fetchDailyMetrics = async () => {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUser || !currentUser.organizationId) {
+  console.error('No organization found');
+  return;
+}
+const orgId = currentUser.organizationId;
 
       // 1. Pending Approvals - work orders with status "pending" or "to review"
       const { count: pendingCount } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId) 
         .in('status_id', [1, 6]); // 1=Pending, 6=To Review
 
       // 2. Overdue Tasks - maintenance tasks past due date
       const { count: overdueCount } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId) 
         .lt('due_date', new Date().toISOString())
         .neq('status_id', 3); // 3=Completed
 
@@ -108,12 +118,14 @@ useEffect(() => {
       const { count: extendedCount } = await supabase
         .from('maintenance_task_extensions')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId) 
         .gte('extension_date', today.toISOString());
 
       // 4. Asset Maintenance - assets needing maintenance today
       const { count: assetCount } = await supabase
         .from('assets')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId) 
         .lte('next_maintenance', new Date().toISOString())
         .eq('asset_status', 'active');
 
@@ -163,48 +175,59 @@ useEffect(() => {
 useEffect(() => {
   const fetchPipelineData = async () => {
     try {
+          const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (!currentUser?.organizationId) return;
+    const orgId = currentUser.organizationId;
       // To Review (status_id = 6)
       const { count: toReviewWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 6);
       
       const { count: toReviewMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 6);
       
       // Pending/Assigned (status_id = 1)
       const { count: pendingWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 1);
       
       const { count: pendingMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 1);
       
       // In Progress (status_id = 2)
       const { count: progressWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 2);
       
       const { count: progressMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 2);
       
       // Completed (status_id = 3)
       const { count: completedWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 3);
       
       const { count: completedMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 3);
 
       setPipelineData([
@@ -225,6 +248,10 @@ useEffect(() => {
 useEffect(() => {
   const fetchRecentActivity = async () => {
     try {
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (!currentUser?.organizationId) return;
+    const orgId = currentUser.organizationId;
+
       const { data: activities, error } = await supabase
         .from('activity_tracking')
         .select(`
@@ -235,6 +262,7 @@ useEffect(() => {
           user_id,
           users!activity_tracking_user_id_fkey (full_name)
         `)
+        .eq('organization_id', orgId)
         .order('timestamp', { ascending: false })
         .limit(5);
 
@@ -260,10 +288,14 @@ useEffect(() => {
 useEffect(() => {
   const fetchAvailablePersonnel = async () => {
     try {
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (!currentUser?.organizationId) return;
+    const orgId = currentUser.organizationId;
       // Fetch users with role_id 3 (personnel) who are active
       const { data: personnel, error } = await supabase
         .from('users')
         .select('user_id, full_name, job_position, user_status')
+        .eq('organization_id', orgId)
         .eq('role_id', 3)
         .eq('user_status', 'active')
         .order('full_name', { ascending: true });
@@ -277,6 +309,7 @@ useEffect(() => {
           const { count: activeTasks } = await supabase
             .from('maintenance_tasks')
             .select('*', { count: 'exact', head: true })
+            .eq('organization_id', orgId)
             .eq('assigned_to', person.user_id)
             .in('status_id', [1, 2]); // Pending or In Progress
 

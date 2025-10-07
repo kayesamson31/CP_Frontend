@@ -99,7 +99,22 @@ const cleanupOldNotifications = async () => {
       const roleId = getRoleId(role);
 
       // Fetch notifications for this role
-      const { data: notificationsData, error } = await supabase
+// ✅ Get current user's organization first
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUser || !currentUser.organizationId) {
+  throw new Error('Session expired. Please log in again.');
+}
+
+// Step 1: Get all user IDs from current organization
+const { data: orgUsers } = await supabase
+  .from('users')
+  .select('user_id')
+  .eq('organization_id', currentUser.organizationId);
+
+const orgUserIds = orgUsers?.map(u => u.user_id) || [];
+
+// Step 2: Fetch notifications - Add organization_id filter
+const { data: notificationsData, error } = await supabase
   .from('notifications')
   .select(`
     notification_id,
@@ -109,13 +124,15 @@ const cleanupOldNotifications = async () => {
     related_table,
     related_id,
     target_user_id,
+    organization_id,
     notification_types(type_name),
     priority_levels(priority_name, color_code),
     created_by
   `)
   .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
+  .eq('organization_id', currentUser.organizationId)  // ✅ CRITICAL FIX
   .eq('is_active', true)
-  .order('created_at', { ascending: false});
+  .order('created_at', { ascending: false });
 
       if (error) throw error;
 

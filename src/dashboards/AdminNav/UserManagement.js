@@ -79,11 +79,31 @@ const handleEmailProgressClose = () => {
     status: 'Active'
   });
 
- const fetchUsers = async () => {
+const fetchUsers = async () => {
   try {
     setLoading(true);
     setError(null);
     
+    // ✅ Get current user's organization first
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data: currentUserData, error: userError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (userError || !currentUserData) {
+      throw new Error('Could not fetch user organization');
+    }
+
+    const organizationId = currentUserData.organization_id;
+    console.log('Fetching users for organization:', organizationId);
+
+    // ✅ Now fetch users with organization filter
     const { data, error } = await supabase
       .from('users')
       .select(`
@@ -97,6 +117,7 @@ const handleEmailProgressClose = () => {
         job_position,
         roles (role_name)
       `)
+      .eq('organization_id', organizationId)  // ✅ ADD THIS LINE
       .in('role_id', [3, 4]) // Only fetch Personnel and Standard User
       .order('date_created', { ascending: false });
     

@@ -35,7 +35,7 @@ if (!stored) {
 const currentUser = JSON.parse(stored);
 console.log('Profile loading for local user:', currentUser);
 
-// Query DB using email (since auth_uid is null in custom auth)
+// ✅Query by user_id AND organization_id for isolation
 const { data: userData, error: userError } = await supabase
   .from('users')
   .select(`
@@ -45,7 +45,8 @@ const { data: userData, error: userError } = await supabase
       address
     )
   `)
-  .eq('email', currentUser.email)
+  .eq('user_id', currentUser.id)  //  Use user_id instead of email
+  .eq('organization_id', currentUser.organizationId)  //  Filter by org
   .single();
 
 
@@ -90,8 +91,8 @@ const fallbackData = {
       setOriginalData(profileInfo);
 
       // Check if password change is required
-const needsPasswordChange = userData.first_login === true;      setRequirePasswordChange(needsPasswordChange);
-
+// ✅ System Admins don't need password change on first login
+const needsPasswordChange = userData.first_login === true && userData.role_id !== 1;
       // Update localStorage to keep it in sync
       localStorage.setItem('userName', profileInfo.name);
       localStorage.setItem('userEmail', profileInfo.email);
@@ -99,9 +100,11 @@ const needsPasswordChange = userData.first_login === true;      setRequirePasswo
       
       if (needsPasswordChange) {
         localStorage.setItem('requirePasswordChange', 'true');
+        setRequirePasswordChange(needsPasswordChange);
         setHasChanges(true); // Enable save button
       } else {
         localStorage.removeItem('requirePasswordChange');
+        setRequirePasswordChange(false);
       }
 
     } catch (error) {

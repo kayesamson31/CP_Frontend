@@ -125,17 +125,20 @@ if (data[0]?.incident_id) {
       ? `Personnel marked incident report task #${data[0].incident_id} as failed${reason ? ': ' + reason : ''}`
       : `Personnel updated incident report task #${data[0].incident_id} to ${status}`;
 
-    await supabase.from('notifications').insert({
-      notification_type_id: 3,
-      created_by: userProfile.user_id,
-      title: `Incident Task ${status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : 'Updated'}`,
-      message: statusMessage,
-      target_roles: '2',
-      priority_id: status === 'failed' ? 3 : 2,
-      related_table: 'incident_reports',
-      related_id: data[0].incident_id,
-      is_active: true
-    });
+   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+
+await supabase.from('notifications').insert({
+  notification_type_id: 3,
+  created_by: userProfile.user_id,
+  title: `Incident Task ${status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : 'Updated'}`,
+  message: statusMessage,
+  target_roles: '2',
+  priority_id: status === 'failed' ? 3 : 2,
+  related_table: 'incident_reports',
+  related_id: data[0].incident_id,
+  organization_id: currentUser.organizationId,  // ✅ CRITICAL FIX
+  is_active: true
+});
   } catch (notifError) {
     console.error('Failed to create admin notification:', notifError);
   }
@@ -282,19 +285,25 @@ const loadTasks = async () => {
       throw profileError;
     }
 
-    // Fetch both work orders AND maintenance tasks
-    const [workOrders, maintenanceTasks] = await Promise.all([
-      // Work orders query
-      supabase
-        .from('work_orders')
-        .select(`
-          *,
-          priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
-          admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
-          statuses(status_name, color_code),
-          work_order_extensions(*)
-        `)
-        .eq('assigned_to', userProfile.user_id),
+ //Get current user's organization
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUser || !currentUser.organizationId) {
+  throw new Error('Session expired. Please log in again.');
+}
+
+const [workOrders, maintenanceTasks] = await Promise.all([
+  // Work orders query
+  supabase
+    .from('work_orders')
+    .select(`
+      *,
+      priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+      admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+      statuses(status_name, color_code),
+      work_order_extensions(*)
+    `)
+    .eq('assigned_to', userProfile.user_id)
+    .eq('organization_id', currentUser.organizationId),  // ✅ ADD THIS
       
       // Maintenance tasks query using assetService
       assetService.fetchMyTasks()
@@ -307,48 +316,60 @@ const loadTasks = async () => {
 
     const allTasks = [];
 
-    // Transform work orders
-    if (workOrders.data && workOrders.data.length > 0) {
-      const transformedWorkOrders = workOrders.data.map(wo => {
-        let statusName = 'pending';
-        switch(wo.status_id) {
-          case 1: statusName = 'pending'; break;
-          case 2: statusName = 'in-progress'; break;
-          case 3: statusName = 'completed'; break;
-          case 11: statusName = 'failed'; break;
-          default: statusName = 'pending';
-        }
+// Replace the work order transformation section in loadTasks (around line 230)
 
-        const dueDate = new Date(wo.due_date);
-        const currentDate = new Date();
-        currentDate.setHours(0, 0, 0, 0);
-        dueDate.setHours(0, 0, 0, 0);
+// Transform work orders
+if (workOrders.data && workOrders.data.length > 0) {
+  console.log('📋 Raw Work Orders:', workOrders.data); // Debug log
+  
+  const transformedWorkOrders = workOrders.data.map(wo => {
+    // ✅ FIX: Get status name from database instead of hardcoding
+    const statusName = wo.statuses?.status_name 
+      ? wo.statuses.status_name.toLowerCase().replace(' ', '-') 
+      : 'pending';
 
-        const isOverdue = (statusName === 'pending' || statusName === 'in-progress') && 
-                         dueDate < currentDate;
+    const dueDate = new Date(wo.due_date);
+    const currentDate = new Date();
+    currentDate.setHours(0, 0, 0, 0);
+    dueDate.setHours(0, 0, 0, 0);
 
-        return {
-          id: wo.work_order_id,
-          type: 'work_order', // Add type identifier
-          title: wo.title || 'Untitled Task',
-          description: wo.description || 'No description',
-          category: wo.category || 'General',
-          asset: wo.asset_text || 'Not specified',
-          location: wo.location || 'Not specified',
-          dueDate: wo.due_date,
-          originalDueDate: wo.original_due_date,
-          priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
-          status: statusName,
-          isOverdue: isOverdue,
-          failureReason: wo.failure_reason,
-          extensionCount: wo.extension_count || 0,
-          lastExtensionReason: wo.last_extension_reason,
-          extensionHistory: wo.work_order_extensions || [],
-          logs: []
-        };
-      });
-      allTasks.push(...transformedWorkOrders);
-    }
+    const isOverdue = (statusName === 'pending' || statusName === 'in-progress') && 
+                     dueDate < currentDate;
+
+    const transformed = {
+      id: wo.work_order_id,
+      type: 'work_order',
+      title: wo.title || 'Untitled Task',
+      description: wo.description || 'No description',
+      category: wo.category || 'General',
+      asset: wo.asset_text || 'Not specified',
+      location: wo.location || 'Not specified',
+      dueDate: wo.due_date,
+      originalDueDate: wo.original_due_date,
+      priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
+      status: statusName, // ✅ Now uses actual status from database
+      isOverdue: isOverdue,
+      failureReason: wo.failure_reason,
+      extensionCount: wo.extension_count || 0,
+      lastExtensionReason: wo.last_extension_reason,
+      extensionHistory: wo.work_order_extensions || [],
+      logs: []
+    };
+
+    console.log(`✅ Transformed WO ${transformed.id}:`, {
+      status: transformed.status,
+      dueDate: transformed.dueDate,
+      priority: transformed.priority
+    });
+
+    return transformed;
+  });
+  
+  console.log('✅ Total Work Orders Transformed:', transformedWorkOrders.length);
+  allTasks.push(...transformedWorkOrders);
+}
+
+console.log('✅ Final All Tasks:', allTasks.length, allTasks);
 
     // Transform maintenance tasks
     if (maintenanceTasks && maintenanceTasks.length > 0) {
@@ -395,12 +416,17 @@ const loadTasks = async () => {
     
     setTasks(allTasks);
     
-  } catch (err) {
-    setError('Failed to load tasks. Please try again.');
-    console.error('Error loading tasks:', err);
-  } finally {
-    setLoading(false);
+ } catch (err) {
+  console.error('Error loading tasks:', err);
+  
+  // Only show error if user session is expired
+  if (err.message && err.message.includes('Session expired')) {
+    setError(err.message);
   }
+  // Otherwise, silently continue (empty tasks is normal)
+} finally {
+  setLoading(false);
+}
 };
 
   // Helpers

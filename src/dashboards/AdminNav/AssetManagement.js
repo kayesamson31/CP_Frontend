@@ -194,6 +194,7 @@ const handleSubmitIncidentTask = async () => {
       // Refresh assets
       await fetchAssets();
       
+      
       setShowAssignTaskModal(false);
       setIncidentTaskForm({ incidentId: '', assigneeId: '', dueDate: '', dueTime: '', description: '' });
       setPreviousAsset(null);

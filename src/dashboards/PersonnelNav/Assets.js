@@ -238,6 +238,7 @@ const handleSubmitIncident = async () => {
 
     setAssets(updatedAssets);
     
+    
     setIncidentForm({ type: "", description: "", severity: "Low" });
     setShowIncidentModal(false);
     setIncidentAsset(null);

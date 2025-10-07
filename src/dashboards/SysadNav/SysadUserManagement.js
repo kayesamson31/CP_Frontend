@@ -6,6 +6,7 @@ import Papa from 'papaparse';
 import { PasswordUtils } from '../../utils/PasswordUtils';
 import { EmailService } from '../../utils/EmailService';
 import EmailProgressModal from '../../components/EmailProgressModal';
+import { AuditLogger } from '../../utils/AuditLogger';
 
 export default function SysAdUserManagement() {
   const [users, setUsers] = useState([]);
@@ -114,20 +115,27 @@ const fetchUsers = async () => {
     setLoading(true);
     setError(null);
     
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        user_id,
-        username,
-        full_name,
-        email,
-        role_id,
-        user_status,
-        date_created,
-        job_position,
-        roles (role_name)
-      `)
-      .order('date_created', { ascending: false });
+// ✅ Get current user's organization
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUser || !currentUser.organizationId) {
+  throw new Error('Session expired. Please log in again.');
+}
+
+const { data, error } = await supabase
+  .from('users')
+  .select(`
+    user_id,
+    username,
+    full_name,
+    email,
+    role_id,
+    user_status,
+    date_created,
+    job_position,
+    roles (role_name)
+  `)
+  .eq('organization_id', currentUser.organizationId)  // Filter by org
+  .order('date_created', { ascending: false });
     
     if (error) throw error;
     
@@ -211,7 +219,13 @@ const updateUser = async (userId, userData) => {
     }
 
     console.log('✓ User updated successfully:', data);
-    
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    await AuditLogger.logWithIP({
+      userId: currentUser.id,
+      actionTaken: `Updated user: ${userData.name} (${userData.email})`,
+      tableAffected: 'users',
+      recordId: userId
+    });
     // Refresh user list
     await fetchUsers();
     
@@ -244,7 +258,14 @@ const updateUser = async (userId, userData) => {
     }
 
     console.log('✓ User permanently deleted');
-    
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    await AuditLogger.logWithIP({
+      userId: currentUser.id,
+      actionTaken: `Deleted user permanently (ID: ${userId})`,
+      tableAffected: 'users',
+      recordId: userId
+    });
+
     // Refresh user list
     await fetchUsers();
     
@@ -399,6 +420,14 @@ const handleAddUser = async (e) => {
 
     console.log('✓ User created successfully in database');
 
+    // ✅ ADD AUDIT LOG HERE
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+await AuditLogger.logWithIP({
+  userId: currentUser.id,
+  actionTaken: `Created new user: ${newUserData.full_name} (${newUserData.email})`,
+  tableAffected: 'users',
+  recordId: insertResult.user_id
+});
     // Refresh user list
     await fetchUsers();
 

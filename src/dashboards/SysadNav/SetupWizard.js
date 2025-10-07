@@ -227,6 +227,7 @@ const importUsers = async (file, roleMap, orgData) => {
       try {
         const assetData = {
           asset_code: `${row["Asset Name"].trim()}_${Date.now()}_${i}`,
+           asset_name: row["Asset Name"].trim(),
           asset_category_id: categoryMap[row.Category.trim()],
           asset_status: (row.Status || 'operational').toLowerCase(),
           location: row.Location ? row.Location.trim() : 'Not specified',
@@ -1288,18 +1289,28 @@ onClick={async () => {
         user_status: "active",
         password_hash: PasswordUtils.hashPassword(orgData.password),
         auth_uid: user.id,
-        organization_id: orgResult.organization_id
+        organization_id: orgResult.organization_id,
+        first_login: false 
       }]);
 
     if (userInsertError) {
       throw userInsertError;
     }
 
-    localStorage.setItem('userEmail', orgData.contactEmail.toLowerCase().trim());
-    localStorage.setItem('userId', user.id);
-    localStorage.setItem('userRole', 'sysadmin');
-    localStorage.setItem('organizationId', orgResult.organization_id.toString());
+// ✅ FIXED: Store organization ID in currentUser object
+const currentUser = {
+  id: user.id,
+  email: orgData.contactEmail.toLowerCase().trim(),
+  organizationId: orgResult.organization_id,
+  role: 'sysadmin',
+  name: orgData.contactPerson
+};
 
+localStorage.setItem('currentUser', JSON.stringify(currentUser));
+localStorage.setItem('userEmail', orgData.contactEmail.toLowerCase().trim());
+localStorage.setItem('userId', user.id);
+localStorage.setItem('userRole', 'sysadmin');
+localStorage.setItem('organizationId', orgResult.organization_id.toString());
     // Get role mapping
     const roleMap = await getRoleMap();
 

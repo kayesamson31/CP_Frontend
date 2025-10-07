@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Modal, Button, Table, Form, Card, Spinner, Alert, Dropdown, ButtonGroup } from "react-bootstrap";
 import SidebarLayout from "../../Layouts/SidebarLayout";
-import axios from 'axios';
+import { supabase } from '../../supabaseClient';
 
 // EXAMPLE HARDCODED DATA - Remove this when connecting to real API
 const EXAMPLE_LOGS = [
@@ -136,64 +136,119 @@ export default function SysadAuditLogs() {
     fetchAuditLogs();
   }, [currentPage, searchDebounce, dateRange, roleFilter, severityFilter, categoryFilter]);
 
-  const fetchAuditLogs = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+const fetchAuditLogs = async () => {
+  try {
+    setLoading(true);
+    setError(null);
 
-      // EXAMPLE: Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      // EXAMPLE: Use hardcoded data instead of API call
-      let filteredLogs = [...EXAMPLE_LOGS];
-
-      // Apply filters to example data
-      if (searchDebounce) {
-        const searchLower = searchDebounce.toLowerCase();
-        filteredLogs = filteredLogs.filter(log => 
-          log.user.toLowerCase().includes(searchLower) ||
-          log.actionTaken.toLowerCase().includes(searchLower) ||
-          log.category.toLowerCase().includes(searchLower) ||
-          (log.ipAddress && log.ipAddress.includes(searchLower))
-        );
-      }
-
-      if (roleFilter && roleFilter !== 'all') {
-        filteredLogs = filteredLogs.filter(log => log.role === roleFilter);
-      }
-
-      if (severityFilter && severityFilter !== 'all') {
-        filteredLogs = filteredLogs.filter(log => log.severity === severityFilter);
-      }
-
-      if (categoryFilter && categoryFilter !== 'all') {
-        filteredLogs = filteredLogs.filter(log => log.category === categoryFilter);
-      }
-
-      // Date range filter
-      if (dateRange && dateRange !== 'all') {
-        const now = new Date();
-        const daysBack = parseInt(dateRange);
-        const filterDate = new Date(now.getTime() - (daysBack * 24 * 60 * 60 * 1000));
-        filteredLogs = filteredLogs.filter(log => new Date(log.timestamp) >= filterDate);
-      }
-
-      // EXAMPLE: Simulate pagination
-      const startIndex = (currentPage - 1) * recordsPerPage;
-      const endIndex = startIndex + recordsPerPage;
-      const paginatedLogs = filteredLogs.slice(startIndex, endIndex);
-
-      setLogs(paginatedLogs);
-      setTotalPages(Math.ceil(filteredLogs.length / recordsPerPage));
-      setTotalRecords(filteredLogs.length);
-
-    } catch (err) {
-      console.error('Error fetching audit logs:', err);
-      setError(err.response?.data?.message || err.message || "Failed to fetch audit logs.");
-    } finally {
-      setLoading(false);
+    // ✅ Get current user's organization
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (!currentUser || !currentUser.organizationId) {
+      throw new Error('Session expired. Please log in again.');
     }
+
+    // ✅ Build query with filters
+    let query = supabase
+      .from('audit_logs')
+      .select(`
+        audit_id,
+        user_id,
+        action_taken,
+        table_affected,
+        record_id,
+        ip_address,
+        timestamp,
+        users!inner (
+          full_name,
+          email,
+          organization_id,
+          roles (
+            role_name
+          )
+        )
+      `, { count: 'exact' })
+      .eq('users.organization_id', currentUser.organizationId) // ✅ Filter by org
+      .order('timestamp', { ascending: false });
+
+    // Apply search filter
+    if (searchDebounce) {
+      query = query.or(`action_taken.ilike.%${searchDebounce}%,users.full_name.ilike.%${searchDebounce}%,users.email.ilike.%${searchDebounce}%,ip_address.ilike.%${searchDebounce}%`);
+    }
+
+    // Apply role filter
+    if (roleFilter && roleFilter !== 'all') {
+      query = query.eq('users.roles.role_name', roleFilter);
+    }
+
+    // Apply date range filter
+    if (dateRange && dateRange !== 'all') {
+      const daysBack = parseInt(dateRange);
+      const filterDate = new Date(Date.now() - (daysBack * 24 * 60 * 60 * 1000)).toISOString();
+      query = query.gte('timestamp', filterDate);
+    }
+
+    // Apply pagination
+    const startIndex = (currentPage - 1) * recordsPerPage;
+    query = query.range(startIndex, startIndex + recordsPerPage - 1);
+
+    // Execute query
+    const { data, error: fetchError, count } = await query;
+
+    if (fetchError) throw fetchError;
+
+    // ✅ Transform data to match existing UI format
+    const transformedLogs = data.map(log => ({
+      id: log.audit_id,
+      timestamp: log.timestamp,
+      user: log.users.email,
+      userName: log.users.full_name,
+      role: log.users.roles?.role_name || 'Unknown',
+      category: getCategoryFromTable(log.table_affected),
+      actionTaken: log.action_taken,
+      severity: getSeverityFromAction(log.action_taken),
+      ipAddress: log.ip_address || 'N/A',
+      details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
+      tableAffected: log.table_affected,
+      recordId: log.record_id
+    }));
+
+    setLogs(transformedLogs);
+    setTotalRecords(count || 0);
+    setTotalPages(Math.ceil((count || 0) / recordsPerPage));
+
+  } catch (err) {
+    console.error('Error fetching audit logs:', err);
+    setError(err.message || "Failed to fetch audit logs.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+// ✅ Helper function to determine category from table name
+const getCategoryFromTable = (tableName) => {
+  const categoryMap = {
+    'users': 'User Management',
+    'assets': 'Asset Management',
+    'roles': 'Role Management',
+    'organizations': 'System Config',
+    'work_orders': 'Maintenance',
+    'asset_assignments': 'Asset Assignment'
   };
+  return categoryMap[tableName] || 'System Activity';
+};
+
+// ✅ Helper function to determine severity from action
+const getSeverityFromAction = (action) => {
+  const actionLower = action.toLowerCase();
+  
+  if (actionLower.includes('delete') || actionLower.includes('failed') || actionLower.includes('blocked')) {
+    return 'Critical';
+  }
+  if (actionLower.includes('update') || actionLower.includes('modify') || actionLower.includes('change')) {
+    return 'Warning';
+  }
+  return 'Info';
+};
 
   const handleFilterChange = (filterType, value) => {
     switch (filterType) {
@@ -402,19 +457,21 @@ export default function SysadAuditLogs() {
             </Form.Select>
           </div>
 
-          <div className="col-md-2">
-            <Form.Select
-              value={categoryFilter}
-              onChange={(e) => handleFilterChange('category', e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              <option value="Authentication">Authentication</option>
-              <option value="User Management">User Management</option>
-              <option value="Role Management">Role Management</option>
-              <option value="System Config">System Config</option>
-              <option value="Security">Security</option>
-            </Form.Select>
-          </div>
+<div className="col-md-2">
+         <Form.Select
+         
+  value={categoryFilter}
+  onChange={(e) => handleFilterChange('category', e.target.value)}
+>
+  <option value="all">All Categories</option>
+  <option value="User Management">User Management</option>
+  <option value="Asset Management">Asset Management</option>
+  <option value="Role Management">Role Management</option>
+  <option value="System Config">System Config</option>
+  <option value="Maintenance">Maintenance</option>
+  <option value="Asset Assignment">Asset Assignment</option>
+</Form.Select>
+</div>
           
           <div className="col-md-2">
             <Form.Select

@@ -223,6 +223,8 @@ const handleAddWorkOrder = async () => {
     const result = await WorkOrderService.submitWorkOrder(formData);
     
     if (result.success) {
+        
+
       setShowWorkOrderModal(false);
       setFormData({
         title: '',
@@ -238,6 +240,7 @@ const handleAddWorkOrder = async () => {
       // Reload data
       await loadStatusCounts();
       await loadWorkOrders();
+      
       
       // Show success message
       setError('');

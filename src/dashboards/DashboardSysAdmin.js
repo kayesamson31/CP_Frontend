@@ -20,13 +20,6 @@ export default function DashboardSyAdmin() {
   const [editingOrgInfo, setEditingOrgInfo] = useState(false);
 const [editedOrgData, setEditedOrgData] = useState({});
   
-  // NEW: States for bulk upload modals
-  const [showAssetUploadModal, setShowAssetUploadModal] = useState(false);
-  const [uploadingAssets, setUploadingAssets] = useState(false);
-
-const [assetPreviewData, setAssetPreviewData] = useState(null);
-const [selectedAssetFile, setSelectedAssetFile] = useState(null);
-
 
 
   // Function to add new activity
@@ -109,25 +102,6 @@ const getRoleIdFromRole = (roleString) => {
   return roleMap[normalizedRole] || 4; // Default to Standard user
 };
 
-// Template download function
-const downloadTemplate = (type) => {
-  const templates = {
-    assets: `Asset Name,Category,Status,Location
-Laptop Dell XPS,Computer,Operational,Office Floor 1
-Printer HP LaserJet,Office Equipment,Operational,Reception`
-  };
-
-  const blob = new Blob([templates[type]], { type: 'text/csv' });
-  const url = window.URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${type}_template.csv`;
-  a.click();
-  window.URL.revokeObjectURL(url);
-};
-
-
-
 // Helper function to format timestamp to relative time
 const getRelativeTime = (timestamp) => {
   const now = new Date();
@@ -142,11 +116,8 @@ const getRelativeTime = (timestamp) => {
   return activityTime.toLocaleDateString();
 };
 
-  
-  // Function to get dynamic organization data
-// Replace your getOrganizationData function with this fixed version:
-
-// REPLACEMENT: fetch organization data directly from Supabase
+ 
+//fetch organization data directly from Supabase
 const getOrganizationData = async () => {
   try {
     // Replace localStorage check with Supabase auth
@@ -160,7 +131,7 @@ const getOrganizationData = async () => {
     // Get organization based on user email
     const { data: orgData, error: orgError } = await supabase
       .from('organizations')
-      .select('*')
+      .select(`*,countries (country_name)`)
       .eq('contact_email', userEmail)
       .single();
 
@@ -174,7 +145,7 @@ const getOrganizationData = async () => {
       type: orgData.org_type || "Government Agency",
       address: orgData.address || "Not specified",
       phone: orgData.phone || "Not specified",
-      country: orgData.country || "Not specified",
+      country: orgData.countries?.country_name || "Not specified",
       website: orgData.website || "https://openfms.io",
       contactPerson: orgData.contact_person || "System Administrator",
       contactEmail: orgData.contact_email || userEmail
@@ -326,6 +297,59 @@ const totalAssets = assetsResult.count || 0;
   }
 };
 
+const fetchRecentAuditLogs = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+
+    if (!userEmail) return [];
+
+    // Get the organization ID
+    const { data: userData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
+
+    const organizationId = userData?.organization_id;
+    if (!organizationId) return [];
+
+    // Fetch last 5 audit logs from the same organization
+    const { data: auditLogs, error } = await supabase
+      .from('audit_logs')
+      .select(`
+        audit_id,
+        action_taken,
+        timestamp,
+        users!inner (
+          full_name,
+          email,
+          organization_id
+        )
+      `)
+      .eq('users.organization_id', organizationId)
+      .order('timestamp', { ascending: false })
+      .limit(5);
+
+    if (error) throw error;
+
+    // Transform to match the recentActivities format
+    return auditLogs.map(log => ({
+      id: log.audit_id,
+      type: 'audit_log',
+      icon: 'bi-clock-history',
+      title: log.action_taken,
+      user: log.users.full_name || log.users.email,
+      timestamp: log.timestamp,
+      color: 'info'
+    }));
+
+  } catch (error) {
+    console.error('Error fetching recent audit logs:', error);
+    return [];
+  }
+};
+
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
@@ -388,21 +412,28 @@ const totalAssets = assetsResult.count || 0;
 
 const updateSetupProgress = async () => {
   try {
-    const setupWizardData = localStorage.getItem('setupWizardData');
-    
     // Get actual database counts
     const dbStats = await fetchDatabaseStats();
     
-    // Check organization info
+    // Check organization info from Supabase (not localStorage)
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+    
     let hasOrganizationInfo = false;
-    if (setupWizardData) {
-      const wizardData = JSON.parse(setupWizardData);
-      hasOrganizationInfo = wizardData.orgData?.name && wizardData.orgData?.contactEmail;
+    if (userEmail) {
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('org_name, contact_email')
+        .eq('contact_email', userEmail)
+        .single();
+      
+      hasOrganizationInfo = orgData?.org_name && orgData?.contact_email;
     }
     
-  const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
+    // ✅ Check if users exist (based on DATABASE, not localStorage)
+    const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
     
-    // Check if assets exist in DATABASE (not just localStorage)
+    // ✅ Check if assets exist (based on DATABASE, not localStorage)
     const hasAssets = dbStats.totalAssets > 0;
     
     const setupStatus = {
@@ -422,9 +453,12 @@ const updateSetupProgress = async () => {
       systemHealth: newProgress > 66 ? 'Good' : newProgress > 33 ? 'Warning' : 'Critical'
     }));
     
-    // Check if setup is now complete
+    // ✅ CRITICAL FIX: Automatically set setupCompleted to true when all requirements are met
     if (completedSteps === 3) {
       setSetupCompleted(true);
+      // ✅ Remove the setup wizard data since it's complete
+      localStorage.removeItem('setupWizardData');
+      localStorage.setItem('justCompleted', 'true');
     } else {
       setSetupCompleted(false);
     }
@@ -441,237 +475,6 @@ const updateSetupProgress = async () => {
   }
 };
 
-
-// NEW: Function to preview asset CSV data
-const handleAssetFilePreview = (file) => {
-  if (!file) return;
-  
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    try {
-      const csvContent = e.target.result;
-      const rowCount = countCSVRows(csvContent);
-      
-      setAssetPreviewData({
-        fileName: file.name,
-        rowCount,
-        csvContent
-      });
-      setSelectedAssetFile(file);
-    } catch (error) {
-      alert('Error reading the file. Please check the file format.');
-    }
-  };
-  reader.readAsText(file);
-};
-
-// handleBulkAssetUpload function with this version
-const handleBulkAssetUpload = async () => {
-  if (!assetPreviewData || !selectedAssetFile) {
-    alert('No file selected for upload!');
-    return;
-  }
-
-  setUploadingAssets(true);
-  
-  try {
-    // Get current user's organization ID
-// Get current user directly from Supabase Auth
-const { data: { user }, error: authError } = await supabase.auth.getUser();
-if (!user || authError) {
-  throw new Error('User not authenticated - please log in again.');
-}
-
-const userEmail = user.email;
-
-// Get organization_id from database
-const { data: userData, error: userDataError } = await supabase
-  .from('users')
-  .select('organization_id')
-  .eq('email', userEmail)
-  .single();
-
-
-
-if (userDataError || !userData) {
-  throw new Error('User data not found in database');
-}
-
-
-    const orgId = userData.organization_id;
-
-    // Parse CSV content
-    const { csvContent } = assetPreviewData;
-    const parseResult = Papa.parse(csvContent, { 
-      header: true, 
-      skipEmptyLines: true,
-      transformHeader: (header) => header.trim()
-    });
-
-    if (parseResult.errors.length > 0) {
-      console.error('CSV Parse Errors:', parseResult.errors);
-    }
-
-    const csvRows = parseResult.data.filter(row => 
-      row['Asset Name'] && row['Asset Name'].trim() !== '' && 
-      row.Category && row.Category.trim() !== ''
-    );
-
-    if (csvRows.length === 0) {
-      throw new Error('No valid asset data found in CSV');
-    }
-
-    // Get unique categories from CSV
-    const uniqueCategories = [...new Set(csvRows.map(row => row.Category.trim()))];
-    console.log('Categories to process:', uniqueCategories);
-
-    // Create/get asset categories first
-    const categoryMap = {};
-    
-    for (const categoryName of uniqueCategories) {
-      try {
-        // Try to get existing category first
-        const { data: existingCategory } = await supabase
-          .from('asset_categories')
-          .select('category_id, category_name')
-          .eq('category_name', categoryName)
-          .single();
-
-        if (existingCategory) {
-          categoryMap[categoryName] = existingCategory.category_id;
-        } else {
-          // Create new category
-          const { data: newCategory, error: categoryError } = await supabase
-            .from('asset_categories')
-            .insert([{ category_name: categoryName }])
-            .select('category_id, category_name')
-            .single();
-
-          if (categoryError) {
-            console.error(`Failed to create category ${categoryName}:`, categoryError);
-            throw new Error(`Failed to create category: ${categoryName}`);
-          }
-
-          categoryMap[categoryName] = newCategory.category_id;
-        }
-      } catch (categoryError) {
-        console.error(`Error processing category ${categoryName}:`, categoryError);
-        throw new Error(`Error processing category: ${categoryName}`);
-      }
-    }
-
-    console.log('Category mapping:', categoryMap);
-
-    // Prepare assets for insertion
-    const assetsToInsert = csvRows.map((row, index) => ({
-      asset_code: `${row['Asset Name'].trim().replace(/\s+/g, '_')}_${Date.now()}_${index}`,
-      asset_category_id: categoryMap[row.Category.trim()],
-      asset_status: (row.Status || 'operational').toLowerCase(),
-      location: row.Location ? row.Location.trim() : 'Not specified',
-      organization_id: orgId
-    }));
-
-    console.log('Assets to insert:', assetsToInsert);
-
-    // Insert assets one by one to handle individual failures
-    const insertedAssets = [];
-    const failedAssets = [];
-
-    for (const assetData of assetsToInsert) {
-      try {
-        const { data, error } = await supabase
-          .from('assets')
-          .insert([assetData])
-          .select()
-          .single();
-
-        if (error) {
-          console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
-          failedAssets.push({ asset_code: assetData.asset_code, error: error.message });
-        } else {
-          insertedAssets.push(data);
-        }
-      } catch (insertError) {
-        console.error(`Error inserting asset ${assetData.asset_code}:`, insertError);
-        failedAssets.push({ asset_code: assetData.asset_code, error: insertError.message });
-      }
-    }
-
-    const insertedCount = insertedAssets.length;
-    const failedCount = failedAssets.length;
-
-    // Update localStorage for activity tracking
-    let setupWizardData = localStorage.getItem('setupWizardData');
-    let wizardData = setupWizardData ? JSON.parse(setupWizardData) : {
-      orgData: { name: organizationData.name, email: organizationData.contactEmail },
-      uploadedFiles: {},
-      skippedSteps: {},
-      completed: false
-    };
-
-    if (!wizardData.uploadedFiles) wizardData.uploadedFiles = {};
-    
-    const uploadRecord = {
-      fileName: selectedAssetFile.name,
-      uploadDate: new Date().toISOString(),
-      recordsProcessed: insertedCount,
-      recordsFailed: failedCount,
-      source: 'database'
-    };
-
-    wizardData.uploadedFiles.assets = uploadRecord;
-    
-    // Mark assets as no longer skipped
-    if (!wizardData.skippedSteps) wizardData.skippedSteps = {};
-    wizardData.skippedSteps.assets = false;
-
-    localStorage.setItem('setupWizardData', JSON.stringify(wizardData));
-
-    // Refresh dashboard data from database
-console.log('Refreshing asset counts...');
-const dbStats = await fetchDatabaseStats();
-setOrganizationData(prev => ({
-  ...prev,
-  ...dbStats
-}));
-
-// Also update dashboard data state for consistency
-setDashboardData(prev => ({
-  ...prev,
-  totalUsers: dbStats.personnel + dbStats.standardUsers + dbStats.heads,
-  totalAssets: dbStats.totalAssets
-}));
-
-console.log('Asset counts updated:', dbStats);
-  // Add activity log
-    addActivity(
-      'csv_upload',
-      `Assets CSV uploaded: ${insertedCount} inserted, ${failedCount} failed`,
-      organizationData.contactPerson
-    );
-
-    // Update setup progress
-    await updateSetupProgress();
-
-    // Close modal and reset
-    setShowAssetUploadModal(false);
-    setAssetPreviewData(null);
-    setSelectedAssetFile(null);
-    
-    // Show detailed results
-    let resultMessage = `Asset upload completed!\n\n`;
-    resultMessage += `Ã¢Å“â€¦ Successfully inserted: ${insertedCount} assets\n`;
-    if (failedCount > 0) resultMessage += `Ã¢ÂÅ’ Failed: ${failedCount} assets\n`;
-    
-    alert(resultMessage);
-    
-  } catch (error) {
-    console.error('Error processing asset CSV:', error);
-    alert(`Error: ${error.message}`);
-  } finally {
-    setUploadingAssets(false);
-  }
-};
 
 const handleSaveOrgInfo = async () => {
   try {
@@ -846,6 +649,9 @@ useEffect(() => {
       // Get all statistics from database
       const dbStats = await fetchDatabaseStats();
       
+      // ✅ ADD THIS LINE - Fetch recent audit logs
+      const recentLogs = await fetchRecentAuditLogs();
+      
       // Merge organization info with database statistics
       const mergedOrgData = {
         ...baseOrgData,
@@ -854,9 +660,11 @@ useEffect(() => {
       
       setOrganizationData(mergedOrgData);
       
+      // ✅ ADD THIS LINE - Set recent activities with audit logs
+      setRecentActivities(recentLogs);
+      
       // Update dashboard data
-      // Update dashboard data
-const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials;
+      const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials;
       setDashboardData(prev => ({
         ...prev,
         totalUsers: totalUsers,
@@ -870,23 +678,22 @@ const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOffi
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       // Fallback to default values
-     setOrganizationData(prev => ({
-  ...prev,
-  personnel: 0,
-  standardUsers: 0,
-  adminOfficials: 0,
-  systemAdmins: 1,
-  totalAssets: 0,
-  systemHealthPercentage: 25
-}));
+      setOrganizationData(prev => ({
+        ...prev,
+        personnel: 0,
+        standardUsers: 0,
+        adminOfficials: 0,
+        systemAdmins: 1,
+        totalAssets: 0,
+        systemHealthPercentage: 25
+      }));
     }
     
- await updateSetupProgress();
+    await updateSetupProgress();
   };
 
   loadDashboardData();
 }, []); // Remove dependency array issues
-
   
   // Auto-dismiss completion message
   useEffect(() => {
@@ -1015,7 +822,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     id: 1,
     type: 'system_start',
     icon: 'bi-info-circle',
-    title: 'System initialized - No recent activities yet',
+    title: 'No recent audit logs yet', 
     user: 'System',
     timestamp: new Date().toISOString(),
     color: 'secondary'
@@ -1033,129 +840,8 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
               Last updated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
             </small>
           </div>
-          
-          {/* Quick Actions */}
-          <div className="d-flex gap-2">
-            <button 
-              className="btn btn-dark" 
-              style={{borderRadius: '12px'}}
-              onClick={() => setShowAssetUploadModal(true)}
-              disabled={uploadingAssets}
-            >
-              <i className="bi bi-cloud-upload-fill me-2"></i>
-              {uploadingAssets ? 'Uploading...' : 'Bulk Upload Assets (CSV)'}
-            </button>
-          </div>
         </div>
 
-        {/* User Upload Modal */}
-
-        {/* Asset Upload Modal */}
-     {/* Asset Upload Modal */}
-{showAssetUploadModal && (
-  <div className="modal show d-block" tabIndex="-1" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
-    <div className="modal-dialog modal-dialog-centered">
-      <div className="modal-content" style={{borderRadius: '16px'}}>
-        <div className="modal-header" style={{borderRadius: '16px 16px 0 0', backgroundColor: '#284C9A', color: 'white'}}>
-          <h5 className="modal-title fw-bold">
-            <i className="bi bi-box-seam-fill me-2"></i>
-            Bulk Upload Assets
-          </h5>
-          <button 
-            type="button" 
-            className="btn-close btn-close-white" 
-            onClick={() => {
-              setShowAssetUploadModal(false);
-              setAssetPreviewData(null);
-              setSelectedAssetFile(null);
-            }}
-          ></button>
-        </div>
-        <div className="modal-body">
-         {!assetPreviewData && (
-  <>
-    <div className="mb-3">
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          downloadTemplate('assets');
-        }}
-        className="btn btn-outline-primary btn-sm mb-3"
-      >
-        <i className="bi bi-download me-2"></i>
-        Download Template
-      </button>
-    </div>
-    
-    <div className="mb-3">
-      <label htmlFor="assetCsvFile" className="form-label fw-semibold">Upload Assets CSV File:</label>
-      <input 
-        type="file" 
-        id="assetCsvFile"
-        className="form-control" 
-        accept=".csv"
-        onChange={(e) => {
-          if (e.target.files[0]) {
-            handleAssetFilePreview(e.target.files[0]);
-          }
-        }}
-      />
-      <div className="form-text">
-        <i className="bi bi-info-circle me-1"></i>
-        Please ensure your CSV file has proper headers and data format for assets.
-      </div>
-    </div>
-  </>
-)}
-
-          {/* Preview Section */}
-          {assetPreviewData && (
-            <div className="alert alert-info">
-              <h6><i className="bi bi-eye me-2"></i>File Preview</h6>
-              <p className="mb-1"><strong>File:</strong> {assetPreviewData.fileName}</p>
-              <p className="mb-0"><strong>Records Found:</strong> {assetPreviewData.rowCount}</p>
-            </div>
-          )}
-        </div>
-        <div className="modal-footer">
-          <button 
-            type="button" 
-            className="btn btn-secondary" 
-            onClick={() => {
-              setShowAssetUploadModal(false);
-              setAssetPreviewData(null);
-              setSelectedAssetFile(null);
-            }}
-          >
-            Cancel
-          </button>
-          
-          {assetPreviewData && (
-            <button 
-              type="button" 
-              className="btn btn-primary"
-              onClick={handleBulkAssetUpload}
-              disabled={uploadingAssets}
-            >
-              {uploadingAssets ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                  Uploading...
-                </>
-              ) : (
-                <>
-                  <i className="bi bi-cloud-upload me-2"></i>
-                  Submit Upload
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  </div>
-)}
 
 {/* Email Progress Modal */}
 <EmailProgressModal
@@ -1411,7 +1097,19 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 <div className="row mb-4">
  {/* Admin Officials */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
+      transition: 'transform 0.2s, box-shadow 0.2s'
+    }}
+    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  // ← ADD THIS
+    onMouseEnter={(e) => {  // ← ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => {  // ← ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    >
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1429,7 +1127,19 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
   {/* Standard Users */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
+      transition: 'transform 0.2s, box-shadow 0.2s'}}
+      onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}
+       onMouseEnter={(e) => {  // ← ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => {  // ← ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+      >
+        
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1447,7 +1157,20 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
  {/* Personnel */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',
+      cursor: 'pointer', 
+      transition: 'transform 0.2s, box-shadow 0.2s'  
+    }}
+    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  
+    onMouseEnter={(e) => {  
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => { 
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    >
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1468,7 +1191,19 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 <div className="row mb-4">
   {/* Total Assets */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',
+       cursor: 'pointer',  transition: 'transform 0.2s, box-shadow 0.2s' 
+    }}
+    onClick={() => navigate('/dashboard-sysadmin/AssetOverview')}  
+    onMouseEnter={(e) => {  
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => {  
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    >
       <div className="card-body text-center position-relative">
         {organizationData.isAssetsDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1486,7 +1221,21 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
   {/* System Administrators */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',
+     cursor: 'pointer',
+    transition: 'transform 0.2s, box-shadow 0.2s' 
+    }}
+        onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  
+    onMouseEnter={(e) => {  
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => { 
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    
+    >
       <div className="card-body text-center">
         <i className="bi bi-shield-fill-check text-danger fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">{safeNumber(organizationData.systemAdmins).toLocaleString()}</h5>
@@ -1510,11 +1259,10 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         <div className="card mb-4 shadow-sm" style={{
   borderRadius: '16px',
   border: '1px solid #dee2e6',
-  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out'
-  
+  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+  cursor: 'pointer' 
 }}
-
-
+onClick={() => navigate('/dashboard-sysadmin/SysadAuditLogs')}
 onMouseEnter={(e) => {
   e.currentTarget.style.transform = 'translateY(-2px)';
   e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
@@ -1531,12 +1279,15 @@ onMouseLeave={(e) => {
     Recent Activity
   </h5>
  
-  {recentActivities.length > 5 && (
+  {recentActivities.length > 0 && (
     <button 
       className="btn btn-link text-primary fw-semibold text-decoration-none p-0"
-      onClick={() => navigate('/dashboard-sysadmin/SysadAuditLogs')}
+       onClick={(e) => {
+        e.stopPropagation(); // ← ADD THIS to prevent card click
+        navigate('/dashboard-sysadmin/SysadAuditLogs');
+      }}
     >
-      View All Activities
+      View All Activities in Audit Logs 
     </button>
   )}
 

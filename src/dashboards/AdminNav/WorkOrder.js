@@ -250,7 +250,24 @@ const confirmAssignment = async () => {
 
     // Reload work orders
     await fetchWorkOrders();
-
+    try {
+  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+  
+  await supabase.from('notifications').insert({
+    notification_type_id: 1,
+    created_by: currentUser.id,
+    title: 'New Work Order Assigned',
+    message: `You have been assigned work order #${selectedOrder.work_order_id}: ${selectedOrder.description}`,
+    target_user_id: parseInt(assignedPersonnel),
+    priority_id: updateData.admin_priority_id || selectedOrder.priority_id,
+    related_table: 'work_orders',
+    related_id: selectedOrder.work_order_id,
+    organization_id: currentUser.organizationId,
+    is_active: true
+  });
+} catch (notifError) {
+  console.error('Failed to send notification:', notifError);
+}
     // Reset modal states
     setShowAssignModal(false);
     setAssignedPersonnel('');
@@ -295,6 +312,34 @@ const confirmRejection = async () => {
 
     // Reload work orders
     await fetchWorkOrders();
+        // ✅ ADD THIS NOTIFICATION CODE HERE
+try {
+  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+  
+  // Get requester ID from selected order
+  const { data: orderData } = await supabase
+    .from('work_orders')
+    .select('requested_by')
+    .eq('work_order_id', selectedOrder.work_order_id)
+    .single();
+  
+  if (orderData?.requested_by) {
+    await supabase.from('notifications').insert({
+      notification_type_id: 1,
+      created_by: currentUser.id,
+      title: 'Work Order Rejected',
+      message: `Your work order #${selectedOrder.work_order_id} has been rejected. Reason: ${rejectReason}`,
+      target_user_id: orderData.requested_by,
+      priority_id: 2,
+      related_table: 'work_orders',
+      related_id: selectedOrder.work_order_id,
+      organization_id: currentUser.organizationId,
+      is_active: true
+    });
+  }
+} catch (notifError) {
+  console.error('Failed to send notification:', notifError);
+}
 
     // Reset modal states
     setShowRejectModal(false);

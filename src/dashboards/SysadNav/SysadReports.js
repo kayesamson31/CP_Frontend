@@ -1,8 +1,7 @@
 // System Administrator Reports - Dynamic Data Implementation
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
-// Remove axios import since we're using mock data for now
-// import axios from 'axios'; // Will be used later for real API calls
+import { supabase } from '../../supabaseClient';
 
 export default function SysadReports() {
   const [dateFrom, setDateFrom] = useState('2024-12-01');
@@ -25,121 +24,117 @@ export default function SysadReports() {
 
   // Simulate API call with realistic data
   const fetchReportsData = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Generate dynamic summary based on date range
-      const daysDiff = Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24));
-      const baseMultiplier = Math.max(daysDiff, 1);
-      
-      // Realistic summary data that changes based on date range
-      const mockSummaryData = {
-        successfulLogins: Math.floor(150 * baseMultiplier + Math.random() * 100),
-        failedLogins: Math.floor(12 * baseMultiplier + Math.random() * 20),
-        passwordResets: Math.floor(3 * baseMultiplier + Math.random() * 5),
-        accountLockouts: Math.floor(2 * baseMultiplier + Math.random() * 3),
-        suspiciousAttempts: Math.floor(1 * baseMultiplier + Math.random() * 4)
-      };
-
-      // Generate realistic security events data
-      const eventTypes = ['Failed Login', 'Successful Login', 'Account Lockout', 'Password Reset', 'Suspicious Login'];
-      const users = [
-        'john.doe@company.com',
-        'jane.smith@company.com', 
-        'admin.user@company.com',
-        'test.account@company.com',
-        'service.account@company.com',
-        'mary.johnson@company.com',
-        'bob.wilson@company.com',
-        'sarah.brown@company.com'
-      ];
-      const ipAddresses = [
-        '192.168.1.45', '10.0.0.23', '172.16.0.10', 
-        '203.142.67.89', '192.168.1.100', '10.0.0.45',
-        '172.16.0.25', '192.168.2.10'
-      ];
-      const statuses = ['Active', 'Resolved', 'Completed', 'Under Review'];
-      
-      const mockEventsData = [];
-      const eventsCount = Math.min(50, Math.floor(20 * baseMultiplier));
-      
-      for (let i = 1; i <= eventsCount; i++) {
-        const eventDate = new Date(dateFrom);
-        eventDate.setDate(eventDate.getDate() + Math.floor(Math.random() * daysDiff));
-        
-        const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
-        const user = users[Math.floor(Math.random() * users.length)];
-        const ip = ipAddresses[Math.floor(Math.random() * ipAddresses.length)];
-        const status = statuses[Math.floor(Math.random() * statuses.length)];
-        
-        // Generate realistic details based on event type
-        let details = '';
-        switch (eventType) {
-          case 'Failed Login':
-            details = `Multiple failed login attempts detected from ${ip}`;
-            break;
-          case 'Successful Login':
-            details = `User successfully logged in from ${ip}`;
-            break;
-          case 'Account Lockout':
-            details = `Account locked after ${Math.floor(Math.random() * 3) + 3} failed attempts`;
-            break;
-          case 'Password Reset':
-            details = 'Password reset requested and completed successfully';
-            break;
-          case 'Suspicious Login':
-            details = `Login from unusual location (${ip}) detected`;
-            break;
-          default:
-            details = 'Security event logged';
-        }
-        
-        mockEventsData.push({
-          id: i,
-          date: eventDate.toISOString().split('T')[0],
-          time: `${String(Math.floor(Math.random() * 24)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}`,
-          eventType: eventType,
-          user: user,
-          ipAddress: ip,
-          details: details,
-          status: status,
-          created_at: eventDate.toISOString()
-        });
-      }
-      
-      // Sort events by date (newest first)
-      mockEventsData.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-      // Update states with mock data
-      setSystemSummary(mockSummaryData);
-      setSecurityEvents(mockEventsData);
-      
-      // Simulate occasional API errors (5% chance)
-      if (Math.random() < 0.05) {
-        throw new Error('Simulated API error');
-      }
-      
-    } catch (err) {
-      console.error('Error fetching reports data:', err);
-      setError('Failed to load reports data. Please try again.');
-      
-      // Fallback to empty data
-      setSystemSummary({
-        successfulLogins: 0,
-        failedLogins: 0,
-        passwordResets: 0,
-        accountLockouts: 0,
-        suspiciousAttempts: 0
-      });
-      setSecurityEvents([]);
-    } finally {
-      setIsLoading(false);
+  setIsLoading(true);
+  setError(null);
+  
+  try {
+    // ✅ Get current user's organization
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (!currentUser || !currentUser.organizationId) {
+      throw new Error('Session expired. Please log in again.');
     }
-  };
+
+    // ✅ Query audit_logs table for security events
+    const { data: auditData, error: auditError } = await supabase
+      .from('audit_logs')
+      .select(`
+        audit_id,
+        action_taken,
+        timestamp,
+        ip_address,
+        users!inner (
+          full_name,
+          email,
+          organization_id
+        )
+      `)
+      .eq('users.organization_id', currentUser.organizationId)
+      .gte('timestamp', dateFrom)
+      .lte('timestamp', dateTo)
+      .order('timestamp', { ascending: false });
+
+    if (auditError) throw auditError;
+
+    // ✅ Transform audit logs to security events format
+    const events = auditData.map(log => ({
+      id: log.audit_id,
+      date: log.timestamp.split('T')[0],
+      time: log.timestamp.split('T')[1]?.split('.')[0],
+      eventType: determineEventType(log.action_taken),
+      user: log.users.email,
+      ipAddress: log.ip_address || 'N/A',
+      details: log.action_taken,
+      status: 'Completed',
+      created_at: log.timestamp
+    }));
+
+    // ✅ Calculate summary from real data
+    const summary = calculateSummaryFromEvents(events);
+
+    setSecurityEvents(events);
+    setSystemSummary(summary);
+    
+  } catch (err) {
+    console.error('Error fetching reports data:', err);
+    setError('Failed to load reports data. Please try again.');
+    setSystemSummary({
+      successfulLogins: 0,
+      failedLogins: 0,
+      passwordResets: 0,
+      accountLockouts: 0,
+      suspiciousAttempts: 0
+    });
+    setSecurityEvents([]);
+  } finally {
+    setIsLoading(false);
+  }
+};
+// ✅ Helper to determine event type from action
+const determineEventType = (action) => {
+  const actionLower = action.toLowerCase();
+  
+  if (actionLower.includes('login') && actionLower.includes('failed')) {
+    return 'Failed Login';
+  }
+  if (actionLower.includes('login') && actionLower.includes('success')) {
+    return 'Successful Login';
+  }
+  if (actionLower.includes('locked') || actionLower.includes('lockout')) {
+    return 'Account Lockout';
+  }
+  if (actionLower.includes('password') && actionLower.includes('reset')) {
+    return 'Password Reset';
+  }
+  if (actionLower.includes('suspicious') || actionLower.includes('unusual')) {
+    return 'Suspicious Login';
+  }
+  
+  return 'System Activity';
+};
+
+// ✅ Save report generation record to database
+const saveReportMetadata = async (reportType, fileUrl = null) => {
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    
+    const { data, error } = await supabase
+      .from('reports')
+      .insert({
+        report_type: reportType,
+        title: `Security Report - ${dateFrom} to ${dateTo}`,
+        generated_by: currentUser.userId,
+        file_path: fileUrl,
+        status: 'completed'
+      });
+
+    if (error) throw error;
+    
+    console.log('Report metadata saved:', data);
+  } catch (err) {
+    console.error('Error saving report metadata:', err);
+    // Don't block the export if metadata save fails
+  }
+};
 
   // Alternative: Calculate summary from events data (for future use with real API)
   const calculateSummaryFromEvents = (events) => {
@@ -205,7 +200,7 @@ export default function SysadReports() {
 });
 
   // Export function with real data
-  const exportReport = (format) => {
+  const exportReport = async (format) => {
     if (filteredEvents.length === 0) {
       alert('No data to export for the selected criteria.');
       return;
@@ -253,6 +248,7 @@ export default function SysadReports() {
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
+    await saveReportMetadata(`security_${format}`, null);
   };
 
   // Refresh data manually

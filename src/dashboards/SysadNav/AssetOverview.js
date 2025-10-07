@@ -2,17 +2,10 @@
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { assetService } from '../../services/assetService';
-import {
-  Container,
-  Row,
-  Col,
-  Form,
-  Button,
-  Table,
-  Modal,
-  Alert,
-  Badge
-} from "react-bootstrap";
+import {Container,Row,Col,Form,Button,Table,Modal,Alert,Badge} from "react-bootstrap";
+import Papa from 'papaparse'
+import { PasswordUtils } from '../../utils/PasswordUtils';
+import { EmailService } from '../../utils/EmailService';
 
 export default function AssetOverview() {
   // State for assets
@@ -31,7 +24,6 @@ export default function AssetOverview() {
  
 const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
 const [csvFile, setCsvFile] = useState(null);
-const [csvPreview, setCsvPreview] = useState([]);
 const [uploadingAssets, setUploadingAssets] = useState(false);
 
   // Fetch functions
@@ -118,21 +110,11 @@ const handleCsvFileChange = (event) => {
   const file = event.target.files[0];
   if (file && file.type === 'text/csv') {
     setCsvFile(file);
-    
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n');
-      const preview = lines.slice(0, 6);
-      setCsvPreview(preview.map(line => line.split(',')));
-    };
-    reader.readAsText(file);
   } else {
     alert('Please select a valid CSV file.');
   }
 };
 
-// Handle bulk CSV upload
 const handleBulkUpload = async () => {
   if (!csvFile) {
     alert('Please select a CSV file first.');
@@ -142,52 +124,95 @@ const handleBulkUpload = async () => {
   setUploadingAssets(true);
   
   try {
+    // Get current user's organization ID
+    const organizationId = await assetService.getCurrentUserOrganization();
+    
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
-      
-      const newAssets = [];
-      for (let i = 1; i < lines.length; i++) {
-        if (lines[i].trim()) {
-          const values = lines[i].split(',').map(v => v.trim());
-          const asset = {
-            name: values[headers.indexOf('name')] || values[0],
-            category: values[headers.indexOf('category')] || values[1],
-            location: values[headers.indexOf('location')] || values[2],
-            status: values[headers.indexOf('status')] || values[3] || 'Operational',
-            acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || '',
-            nextMaintenance: values[headers.indexOf('nextMaintenance')] || values[5] || ''
-          };
-          newAssets.push(asset);
+      try {
+        const text = e.target.result;
+        
+        
+        const parseResult = Papa.parse(text, { 
+          header: true, 
+          skipEmptyLines: true,
+          transformHeader: (header) => header.trim()
+        });
+
+        if (parseResult.errors.length > 0) {
+          console.error('CSV Parse Errors:', parseResult.errors);
         }
+
+        const csvRows = parseResult.data.filter(row => 
+          row.name && row.name.trim() !== '' && 
+          row.category && row.category.trim() !== ''
+        );
+
+        if (csvRows.length === 0) {
+          throw new Error('No valid asset data found in CSV');
+        }
+
+        console.log('Parsed CSV rows:', csvRows);
+
+        // Prepare assets array for bulk upload service
+ // Prepare assets array for bulk upload service
+const assetsToUpload = csvRows.map(row => {
+  // Convert DD/MM/YYYY to YYYY-MM-DD if date exists
+  let formattedDate = null;
+  if (row.acquisitionDate && row.acquisitionDate.trim() !== '') {
+    const parts = row.acquisitionDate.trim().split('/');
+    if (parts.length === 3) {
+      // parts[0] = day, parts[1] = month, parts[2] = year
+      formattedDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+    }
+  }
+  
+  return {
+    name: row.name.trim(),
+    category: row.category.trim(),
+    location: row.location?.trim() || 'Not specified',
+    status: row.status || 'Operational',
+    acquisitionDate: formattedDate
+  };
+});
+
+        console.log('Assets to upload:', assetsToUpload);
+
+        // Call the bulk upload service
+        const result = await assetService.bulkUploadAssets(assetsToUpload);
+        
+        console.log('Upload result:', result);
+
+        alert(`Successfully uploaded ${assetsToUpload.length} assets!`);
+        
+        // Close modal and reset
+        setShowBulkUploadModal(false);
+        setCsvFile(null);
+        
+        // Refresh the asset list
+        await fetchAssets();
+        
+      } catch (innerError) {
+        console.error('Error processing CSV:', innerError);
+        alert('Failed to upload CSV: ' + innerError.message);
       }
-      
-      // You would normally call your API here
-      // await assetService.bulkUploadAssets(newAssets);
-      
-      alert(`Successfully prepared ${newAssets.length} assets for upload!`);
-      setShowBulkUploadModal(false);
-      setCsvFile(null);
-      setCsvPreview([]);
-      await fetchAssets();
     };
+    
     reader.readAsText(csvFile);
     
-  } catch (err) {
-    console.error('Error uploading CSV:', err);
+  } catch (error) {
+    console.error('Error uploading CSV:', error);
     alert('Failed to upload CSV. Please check the format and try again.');
   } finally {
     setUploadingAssets(false);
   }
 };
 
-// Download template
 const downloadTemplate = () => {
-  const template = `name,category,location,status,acquisitionDate,nextMaintenance
-Laptop Dell XPS,Computer,Office Floor 1,Operational,2024-01-15,2024-06-15
-Printer HP LaserJet,Office Equipment,Reception,Operational,2024-02-20,2024-07-20`;
+  const template = `name,category,location,status,acquisitionDate
+Laptop Dell XPS,Computer,Office Floor 1,Operational,2024-01-15
+Printer HP LaserJet,Office Equipment,Reception,Operational,2024-02-20`;
+
 
   const blob = new Blob([template], { type: 'text/csv' });
   const url = window.URL.createObjectURL(blob);
@@ -368,11 +393,13 @@ Printer HP LaserJet,Office Equipment,Reception,Operational,2024-02-20,2024-07-20
     <Modal.Title>Bulk Upload Assets (CSV)</Modal.Title>
   </Modal.Header>
   <Modal.Body>
-    <Alert variant="info">
-      <strong>CSV Format:</strong> name, category, location, status, acquisitionDate, nextMaintenance
-      <br />
-      <small>Header row should match these column names (case sensitive)</small>
-    </Alert>
+   <Alert variant="info">
+  <strong>CSV Format:</strong> name, category, location, status, acquisitionDate
+  <br />
+  <small>Header row should match these column names (case sensitive)</small>
+  <br />
+  <small className="text-muted">Note: Next maintenance can be scheduled after upload using the "Schedule" button</small>
+</Alert>
     
     <div className="mb-3">
       <Button 
@@ -394,24 +421,7 @@ Printer HP LaserJet,Office Equipment,Reception,Operational,2024-02-20,2024-07-20
       />
     </Form.Group>
     
-    {csvPreview.length > 0 && (
-      <div>
-        <h6>Preview:</h6>
-        <Table bordered size="sm">
-          <tbody>
-            {csvPreview.map((row, index) => (
-              <tr key={index}>
-                {row.map((cell, cellIndex) => (
-                  <td key={cellIndex} className={index === 0 ? 'fw-bold bg-light' : ''}>
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </Table>
-      </div>
-    )}
+    
   </Modal.Body>
   <Modal.Footer>
     <Button variant="secondary" onClick={() => setShowBulkUploadModal(false)}>
