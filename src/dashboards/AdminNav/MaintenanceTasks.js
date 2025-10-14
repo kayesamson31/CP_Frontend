@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
-
+import { AuthUtils } from '../../utils/AuthUtils';
 export default function MaintenanceTasks() {
   // State management (same pattern as WorkOrder)
   const [activeTab, setActiveTab] = useState('Pending');
@@ -34,23 +34,30 @@ const fetchMaintenanceTasks = async () => {
     setLoading(true);
     setError(null);
     
-const { data, error } = await supabase
-  .from('maintenance_tasks')
-  .select(`
-    *,
-    assets!maintenance_tasks_asset_id_fkey(asset_id, asset_name, asset_code, location),
-    statuses(status_name, color_code),
-    priority_levels(priority_name, color_code),
-    assigned_user:users!assigned_to(full_name, email),
-    maintenance_task_extensions(
-      extension_id,
-      old_due_date,
-      new_due_date,
-      extension_reason,
-      extension_date
-    )
-  `)
-  .order('date_created', { ascending: false });
+    // Get organization_id from current user
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) {
+      throw new Error('Organization not found for current user');
+    }
+    
+    const { data, error } = await supabase
+      .from('maintenance_tasks')
+      .select(`
+        *,
+        assets!maintenance_tasks_asset_id_fkey(asset_id, asset_name, asset_code, location),
+        statuses(status_name, color_code),
+        priority_levels(priority_name, color_code),
+        assigned_user:users!assigned_to(full_name, email),
+        maintenance_task_extensions(
+          extension_id,
+          old_due_date,
+          new_due_date,
+          extension_reason,
+          extension_date
+        )
+      `)
+      .eq('organization_id', orgId) 
+      .order('date_created', { ascending: false });
     
     if (error) throw error;
          // ADD THIS - to see what we're getting
@@ -120,14 +127,21 @@ const { data, error } = await supabase
   }
 };
 
-  const fetchPersonnel = async () => {
-    // Same as WorkOrder.js
-    try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('user_id, full_name, email, role_id')
-        .eq('role_id', 3)
-        .order('full_name');
+ const fetchPersonnel = async () => {
+  try {
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) {
+      console.error('Organization not found');
+      setPersonnel([]);
+      return;
+    }
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('user_id, full_name, email, role_id')
+      .eq('organization_id', orgId)  // ← ADD THIS
+      .eq('role_id', 3)
+      .order('full_name');
 
       if (error) throw error;
 

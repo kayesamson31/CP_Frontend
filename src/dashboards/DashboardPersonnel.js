@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Col, Modal, Badge } from 'react-bootstrap';
 import { assetService } from '../services/assetService'; 
 import { supabase } from '../supabaseClient';
- 
+import { AuthUtils } from '../utils/AuthUtils';
 import { 
   Calendar as CalendarIcon,
   Clock,
@@ -271,11 +271,13 @@ const loadTasks = async () => {
     if (userError) throw userError;
         
     // Get user profile to find user_id
-    const { data: userProfile, error: profileError } = await supabase
-      .from('users')
-      .select('user_id, full_name')
-      .eq('auth_uid', userData.user.id)
-      .single();
+   const { data: userProfile, error: profileError } = await supabase
+  .from('users')
+  .select('user_id, full_name, organization_id')
+  .eq('auth_uid', userData.user.id)
+  .single();
+
+const orgId = userProfile.organization_id;
       
     if (profileError) {
       console.error('Error getting user profile:', profileError);
@@ -285,16 +287,17 @@ const loadTasks = async () => {
     // Fetch both work orders AND maintenance tasks
     const [workOrders, maintenanceTasks] = await Promise.all([
       // Work orders query
-      supabase
-        .from('work_orders')
-        .select(`
-          *,
-          priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
-          admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
-          statuses(status_name, color_code),
-          work_order_extensions(*)
-        `)
-        .eq('assigned_to', userProfile.user_id),
+     supabase
+  .from('work_orders')
+  .select(`
+    *,
+    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+    admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+    statuses(status_name, color_code),
+    work_order_extensions(*)
+  `)
+  .eq('organization_id', orgId)  
+  .eq('assigned_to', userProfile.user_id),
       
       // Maintenance tasks query using assetService
       assetService.fetchMyTasks()

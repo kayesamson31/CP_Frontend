@@ -2,16 +2,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { Row, Col, Card, Form, Button, InputGroup, Table, Spinner, Alert, Badge } from 'react-bootstrap';
-
+// Import Supabase client
+import { supabase } from '../../supabaseClient'; // Adjust path based on your folder structure
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-/**
- * Dynamic Reports Component with API Integration
- * - Fetches real data from APIs
- * - Falls back to sample data for development
- * - Supports all CRUD operations through API calls
- * - Real-time data updates
- */
+
+const getCurrentUserOrganization = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('No authenticated user');
+
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('auth_uid', user.id)
+      .single();
+
+    if (error || !userData) throw new Error('User organization not found');
+    return userData.organization_id;
+  } catch (error) {
+    console.error('Error getting user organization:', error);
+    throw error;
+  }
+};
 
 const PERIODS = [
   { value: 'today', label: 'Today' },
@@ -20,206 +33,290 @@ const PERIODS = [
   { value: 'yearly', label: 'This Year' }
 ];
 
-// API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
-const USE_SAMPLE_DATA = process.env.REACT_APP_USE_SAMPLE_DATA === 'true' || true; // Set to false when real API is ready
 
-// API Service Functions
 const apiService = {
   // Work Orders
   getWorkOrders: async (params = {}) => {
-    if (USE_SAMPLE_DATA) return getSampleWorkOrders();
     try {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`${API_BASE_URL}/work-orders?${queryString}`);
-      if (!response.ok) throw new Error('Failed to fetch work orders');
-      return await response.json();
+      const organizationId = await getCurrentUserOrganization();
+      
+      const { data, error } = await supabase
+      .from('work_orders')
+      .select(`
+        work_order_id,
+        title,
+        category,
+        status_id,
+        date_requested,
+        due_date,
+        assigned_to,
+        requested_by,
+        statuses(status_name),
+          assigned_user:users!work_orders_assigned_to_fkey(full_name),
+          requester:users!work_orders_requested_by_fkey(full_name)
+        `)
+        .eq('organization_id', organizationId)
+        .order('date_requested', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(wo => ({
+        id: `WO-${wo.work_order_id.toString().padStart(3, '0')}`,
+        title: wo.title,
+        category: wo.category || 'General',
+        status: wo.statuses?.status_name?.toLowerCase() || 'pending',
+        created_at: wo.date_requested?.split('T')[0] || '',
+        assigned: wo.assigned_user?.full_name || 'Unassigned',
+        requestee: wo.requester?.full_name || 'Unknown'
+      }));
     } catch (error) {
       console.error('Error fetching work orders:', error);
-      return getSampleWorkOrders(); // Fallback to sample data
+      return [];
     }
   },
 
   // Incident Reports
   getIncidentReports: async (params = {}) => {
-    if (USE_SAMPLE_DATA) return getSampleIncidentReports();
     try {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`${API_BASE_URL}/incident-reports?${queryString}`);
-      if (!response.ok) throw new Error('Failed to fetch incident reports');
-      return await response.json();
+      const organizationId = await getCurrentUserOrganization();
+      
+      const { data, error } = await supabase
+        .from('incident_reports')
+        .select(`
+          incident_id,
+          description,
+          status_id,
+          date_reported,
+          reported_by,
+          statuses(status_name),
+          users!incident_reports_reported_by_fkey(full_name)
+        `)
+        .eq('organization_id', organizationId)
+        .order('date_reported', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(ir => ({
+        id: `IR-${ir.incident_id.toString().padStart(3, '0')}`,
+        title: ir.description?.substring(0, 50) + '...' || 'Incident Report',
+        status: ir.statuses?.status_name?.toLowerCase() || 'submitted',
+        created_at: ir.date_reported?.split('T')[0] || '',
+        reporter: ir.users?.full_name || 'Unknown'
+      }));
     } catch (error) {
       console.error('Error fetching incident reports:', error);
-      return getSampleIncidentReports();
+      return [];
     }
   },
 
   // Maintenance Schedules
   getMaintenanceSchedules: async (params = {}) => {
-    if (USE_SAMPLE_DATA) return getSampleMaintenanceSchedules();
     try {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`${API_BASE_URL}/maintenance-schedules?${queryString}`);
-      if (!response.ok) throw new Error('Failed to fetch maintenance schedules');
-      return await response.json();
+      const organizationId = await getCurrentUserOrganization();
+      
+      const { data, error } = await supabase
+        .from('maintenance_schedules')
+        .select(`
+          schedule_id,
+          task_description,
+          scheduled_date,
+          status,
+          assigned_user_id,
+          users!maintenance_schedules_assigned_user_id_fkey(full_name)
+        `)
+        .eq('organization_id', organizationId)
+        .order('scheduled_date', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(ms => ({
+        id: `M-${ms.schedule_id.toString().padStart(3, '0')}`,
+        title: ms.task_description,
+        schedule_date: ms.scheduled_date || '',
+        status: ms.status || 'scheduled',
+        assigned: ms.users?.full_name || 'Unassigned'
+      }));
     } catch (error) {
       console.error('Error fetching maintenance schedules:', error);
-      return getSampleMaintenanceSchedules();
+      return [];
     }
   },
 
   // Assets
   getAssets: async (params = {}) => {
-    if (USE_SAMPLE_DATA) return getSampleAssets();
     try {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`${API_BASE_URL}/assets?${queryString}`);
-      if (!response.ok) throw new Error('Failed to fetch assets');
-      return await response.json();
+      const organizationId = await getCurrentUserOrganization();
+      
+      const { data, error } = await supabase
+        .from('assets')
+        .select(`
+          asset_id,
+          asset_code,
+          asset_name,
+          asset_status,
+          location,
+          asset_categories(category_name)
+        `)
+        .eq('organization_id', organizationId)
+        .order('asset_id', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map(asset => ({
+        id: asset.asset_code,
+        name: asset.asset_name || asset.asset_code,
+        status: asset.asset_status || 'active',
+        category: asset.asset_categories?.category_name || 'Unknown',
+        location: asset.location || 'N/A'
+      }));
     } catch (error) {
       console.error('Error fetching assets:', error);
-      return getSampleAssets();
+      return [];
     }
   },
 
   // Users
   getUsers: async (params = {}) => {
-    if (USE_SAMPLE_DATA) return getSampleUsers();
     try {
-      const queryString = new URLSearchParams(params).toString();
-      const response = await fetch(`${API_BASE_URL}/users?${queryString}`);
-      if (!response.ok) throw new Error('Failed to fetch users');
-      return await response.json();
+      const organizationId = await getCurrentUserOrganization();
+      
+      const { data, error } = await supabase
+        .from('users')
+        .select(`
+          user_id,
+          full_name,
+          email,
+          role_id,
+          date_created,
+          roles(role_name)
+        `)
+        .eq('organization_id', organizationId)
+        .order('date_created', { ascending: false });
+
+      if (error) throw error;
+
+      const roleMap = { 1: 'sysadmin', 2: 'admin', 3: 'personnel', 4: 'standard' };
+
+      return data.map(user => ({
+        id: `U-${user.user_id.toString().padStart(3, '0')}`,
+        name: user.full_name,
+        role: roleMap[user.role_id] || 'standard',
+        email: user.email,
+        created_at: user.date_created?.split('T')[0] || ''
+      }));
     } catch (error) {
       console.error('Error fetching users:', error);
-      return getSampleUsers();
+      return [];
     }
   },
 
-  // Dashboard Summary
-  getDashboardSummary: async (period = 'monthly') => {
-    if (USE_SAMPLE_DATA) return getSampleSummary(period);
-    try {
-      const response = await fetch(`${API_BASE_URL}/dashboard/summary?period=${period}`);
-      if (!response.ok) throw new Error('Failed to fetch dashboard summary');
-      return await response.json();
-    } catch (error) {
-      console.error('Error fetching dashboard summary:', error);
-      return getSampleSummary(period);
-    }
-  }
-};
-
-// Sample Data Functions (for development/fallback)
-const formatDate = (d) => {
-  const date = new Date(d);
-  const yyyy = date.getFullYear();
-  const mm = `${date.getMonth() + 1}`.padStart(2, '0');
-  const dd = `${date.getDate()}`.padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-};
-
-const daysAgo = (n) => {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  return formatDate(d);
-};
-
-const getSampleWorkOrders = () => [
-  { id: 'WO-001', title: 'AC not cooling', category: 'HVAC', status: 'completed', created_at: daysAgo(2), assigned: 'Tech A', requestee: 'Jane Smith' },
-  { id: 'WO-002', title: 'Light flickering - Hall A', category: 'Electrical', status: 'pending', created_at: daysAgo(7), assigned: 'Tech B', requestee: 'John Doe' },
-  { id: 'WO-003', title: 'Leaking pipe at restroom', category: 'Plumbing', status: 'overdue', created_at: daysAgo(15), assigned: 'Tech C', requestee: 'Mike Johnson' },
-  { id: 'WO-004', title: 'Broken cabinet hinge', category: 'Carpentry/Structural', status: 'cancelled', created_at: daysAgo(30), assigned: 'Tech D', requestee: 'Sarah Wilson' },
-  { id: 'WO-005', title: 'Paint peeling in corridor', category: 'Painting/Finishing', status: 'failed', created_at: daysAgo(3), assigned: 'Tech E', requestee: 'David Brown' },
-  { id: 'WO-006', title: 'Masonry crack near stairs', category: 'Masonry/Civil Works', status: 'completed', created_at: daysAgo(40), assigned: 'Tech F', requestee: 'Lisa Davis' },
-  { id: 'WO-007', title: 'Garden maintenance', category: 'Groundskeeping', status: 'completed', created_at: daysAgo(10), assigned: 'Gardener', requestee: 'Tom Miller' },
-  { id: 'WO-008', title: 'Ceiling water stain 3F', category: 'Plumbing', status: 'rejected', created_at: daysAgo(1), assigned: 'Tech C', requestee: 'Amy Taylor'}
-];
-
-const getSampleIncidentReports = () => [
-  { id: 'IR-001', title: 'Slip near entrance', status: 'resolved', created_at: daysAgo(1), reporter: 'User A' },
-  { id: 'IR-002', title: 'Unauthorized access', status: 'submitted', created_at: daysAgo(5), reporter: 'User B' },
-  { id: 'IR-003', title: 'Broken glass', status: 'resolved', created_at: daysAgo(25), reporter: 'User C' },
-  { id: 'IR-004', title: 'Equipment malfunction', status: 'pending', created_at: daysAgo(3), reporter: 'User D' },
-  { id: 'IR-005', title: 'Safety hazard report', status: 'submitted', created_at: daysAgo(8), reporter: 'User E' }
-];
-
-const getSampleMaintenanceSchedules = () => [
-  { id: 'M-001', title: 'AC routine maintenance - Building A', schedule_date: daysAgo(3), status: 'completed', assigned: 'Tech A' },
-  { id: 'M-002', title: 'Generator monthly check', schedule_date: daysAgo(10), status: 'failed', assigned: 'Tech A' },
-  { id: 'M-003', title: 'Elevator safety inspection', schedule_date: daysAgo(1), status: 'overdue', assigned: 'Tech B' },
-  { id: 'M-004', title: 'Fire system check', schedule_date: daysAgo(20), status: 'completed', assigned: 'Tech C' },
-  { id: 'M-005', title: 'CCTV system maintenance', schedule_date: daysAgo(5), status: 'pending', assigned: 'Tech D' }
-];
-
-const getSampleAssets = () => [
-  { id: 'AS-001', name: 'AC Unit - 3F-1', status: 'operational', category: 'HVAC', location: '3F' },
-  { id: 'AS-002', name: 'Generator G1', status: 'under_maintenance', category: 'Electrical', location: 'Basement' },
-  { id: 'AS-003', name: 'Boiler B2', status: 'retired', category: 'Plumbing', location: 'Boiler Room' },
-  { id: 'AS-004', name: 'Elevator E1', status: 'operational', category: 'Mechanical', location: 'Main Building' },
-  { id: 'AS-005', name: 'Security Camera C1', status: 'operational', category: 'Security', location: 'Entrance' }
-];
-
-const getSampleUsers = () => [
-  { id: 'U-001', name: 'Admin User', role: 'admin', email: 'admin@company.com', created_at: daysAgo(100) },
-  { id: 'U-002', name: 'Tech Specialist A', role: 'personnel', email: 'tech.a@company.com', created_at: daysAgo(80) },
-  { id: 'U-003', name: 'John Doe', role: 'standard', email: 'john.doe@company.com', created_at: daysAgo(60) },
-  { id: 'U-004', name: 'Jane Smith', role: 'standard', email: 'jane.smith@company.com', created_at: daysAgo(45) },
-  { id: 'U-005', name: 'Tech Specialist B', role: 'personnel', email: 'tech.b@company.com', created_at: daysAgo(30) }
-];
-
-const getSampleSummary = (period) => {
-  const workOrders = getSampleWorkOrders();
-  const incidentReports = getSampleIncidentReports();
-  const maintenanceSchedules = getSampleMaintenanceSchedules();
-  const assets = getSampleAssets();
-  const users = getSampleUsers();
-
-  const withinPeriod = (dateStr) => {
-    const d = new Date(dateStr);
+getDashboardSummary: async (period = 'monthly') => {
+  try {
+    const organizationId = await getCurrentUserOrganization();
+    
+    // Calculate date range based on period
     const now = new Date();
-    const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
-    if (period === 'today') return diffDays <= 1;
-    if (period === 'weekly') return diffDays <= 7;
-    if (period === 'monthly') return diffDays <= 31;
-    if (period === 'yearly') return diffDays <= 365;
-    return true;
-  };
-
-  const woInPeriod = workOrders.filter(w => withinPeriod(w.created_at));
-  const irInPeriod = incidentReports.filter(i => withinPeriod(i.created_at));
-  const mInPeriod = maintenanceSchedules.filter(m => withinPeriod(m.schedule_date));
-
-  return {
-    workOrders: {
-      total: woInPeriod.length,
-      completed: woInPeriod.filter(w => w.status === 'completed').length,
-      overdue: woInPeriod.filter(w => w.status === 'overdue').length,
-      pending: woInPeriod.filter(w => w.status === 'pending').length
-    },
-    incidents: {
-      total: irInPeriod.length,
-      resolved: irInPeriod.filter(i => i.status === 'resolved').length,
-      submitted: irInPeriod.filter(i => i.status === 'submitted').length
-    },
-    maintenance: {
-      total: mInPeriod.length,
-      completed: mInPeriod.filter(m => m.status === 'completed').length,
-      overdue: mInPeriod.filter(m => m.status === 'overdue').length
-    },
-    assets: {
-      total: assets.length,
-      operational: assets.filter(a => a.status === 'operational').length,
-      maintenance: assets.filter(a => a.status === 'under_maintenance').length,
-      retired: assets.filter(a => a.status === 'retired').length
-    },
-    users: {
-      total: users.length,
-      standard: users.filter(u => u.role === 'standard').length,
-      personnel: users.filter(u => u.role === 'personnel').length,
-      admin: users.filter(u => u.role === 'admin').length
+    let startDate = new Date();
+    
+    switch(period) {
+      case 'today':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'weekly':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'monthly':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'yearly':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
     }
-  };
+
+    // Fetch work orders
+    const { data: workOrders } = await supabase
+      .from('work_orders')
+      .select('status_id, due_date, statuses(status_name)')
+      .eq('organization_id', organizationId)
+      .gte('date_requested', startDate.toISOString());
+
+    // Fetch incidents
+    const { data: incidents } = await supabase
+      .from('incident_reports')
+      .select('status_id, statuses(status_name)')
+      .eq('organization_id', organizationId)
+      .gte('date_reported', startDate.toISOString());
+
+    // Fetch maintenance
+    const { data: maintenance } = await supabase
+      .from('maintenance_schedules')
+      .select('status, scheduled_date')
+      .eq('organization_id', organizationId)
+      .gte('scheduled_date', startDate.toISOString().split('T')[0]);
+
+    // Fetch assets (all, not filtered by date)
+    const { data: assets } = await supabase
+      .from('assets')
+      .select('asset_status')
+      .eq('organization_id', organizationId);
+
+    // Fetch users (all, not filtered by date)
+    const { data: users } = await supabase
+      .from('users')
+      .select('role_id')
+      .eq('organization_id', organizationId);
+
+    return {
+      workOrders: {
+        total: workOrders?.length || 0,
+        completed: workOrders?.filter(w => w.statuses?.status_name?.toLowerCase() === 'completed').length || 0,
+        overdue: workOrders?.filter(w => {
+          if (!w.due_date) return false;
+          const dueDate = new Date(w.due_date);
+          const isOverdue = dueDate < now && w.statuses?.status_name?.toLowerCase() !== 'completed';
+          return isOverdue;
+        }).length || 0,
+        pending: workOrders?.filter(w => w.statuses?.status_name?.toLowerCase() === 'pending').length || 0
+      },
+      incidents: {
+        total: incidents?.length || 0,
+        resolved: incidents?.filter(i => i.statuses?.status_name?.toLowerCase() === 'resolved').length || 0,
+        submitted: incidents?.filter(i => i.statuses?.status_name?.toLowerCase() === 'reported').length || 0
+      },
+      maintenance: {
+        total: maintenance?.length || 0,
+        completed: maintenance?.filter(m => m.status?.toLowerCase() === 'completed').length || 0,
+        overdue: maintenance?.filter(m => {
+          if (!m.scheduled_date) return false;
+          const scheduledDate = new Date(m.scheduled_date);
+          const isOverdue = scheduledDate < now && m.status?.toLowerCase() !== 'completed';
+          return isOverdue;
+        }).length || 0
+      },
+      assets: {
+        total: assets?.length || 0,
+        operational: assets?.filter(a => a.asset_status === 'active').length || 0,
+        maintenance: assets?.filter(a => a.asset_status === 'maintenance').length || 0,
+        retired: assets?.filter(a => a.asset_status === 'retired').length || 0
+      },
+      users: {
+        total: users?.length || 0,
+        standard: users?.filter(u => u.role_id === 4).length || 0,
+        personnel: users?.filter(u => u.role_id === 3).length || 0,
+        admin: users?.filter(u => u.role_id === 2).length || 0
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching dashboard summary:', error);
+    return {
+      workOrders: { total: 0, completed: 0, overdue: 0, pending: 0 },
+      incidents: { total: 0, resolved: 0, submitted: 0 },
+      maintenance: { total: 0, completed: 0, overdue: 0 },
+      assets: { total: 0, operational: 0, maintenance: 0, retired: 0 },
+      users: { total: 0, standard: 0, personnel: 0, admin: 0 }
+    };
+  }
+}
 };
 
 // Helper functions
@@ -347,6 +444,68 @@ export default function Reports() {
     return () => clearInterval(interval);
   }, [period]);
 
+  // Real-time subscriptions
+useEffect(() => {
+  const channels = [];
+
+  // Subscribe to work_orders changes
+  const workOrdersChannel = supabase
+    .channel('work_orders_changes')
+    .on('postgres_changes', 
+      { event: '*', schema: 'public', table: 'work_orders' },
+      () => {
+        console.log('Work order changed, refreshing data...');
+        refreshData();
+      }
+    )
+    .subscribe();
+  channels.push(workOrdersChannel);
+
+  // Subscribe to incident_reports changes
+  const incidentsChannel = supabase
+    .channel('incidents_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'incident_reports' },
+      () => {
+        console.log('Incident report changed, refreshing data...');
+        refreshData();
+      }
+    )
+    .subscribe();
+  channels.push(incidentsChannel);
+
+  // Subscribe to maintenance_schedules changes
+  const maintenanceChannel = supabase
+    .channel('maintenance_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'maintenance_schedules' },
+      () => {
+        console.log('Maintenance schedule changed, refreshing data...');
+        refreshData();
+      }
+    )
+    .subscribe();
+  channels.push(maintenanceChannel);
+
+  // Subscribe to assets changes
+  const assetsChannel = supabase
+    .channel('assets_changes')
+    .on('postgres_changes',
+      { event: '*', schema: 'public', table: 'assets' },
+      () => {
+        console.log('Asset changed, refreshing data...');
+        refreshData();
+      }
+    )
+    .subscribe();
+  channels.push(assetsChannel);
+
+  // Cleanup subscriptions
+  return () => {
+    channels.forEach(channel => supabase.removeChannel(channel));
+  };
+}, [period]);
+
   // Filtering logic
   const filterTable = (rows) => {
     return rows.filter(r => {
@@ -408,7 +567,7 @@ export default function Reports() {
     }
     const headers = Object.keys(tableData[0]);
     const rows = [headers, ...tableData.map(item => headers.map(h => item[h] ?? ''))];
-    const filename = `report_${activeTab}_${period}_${formatDate(new Date())}.csv`;
+    const filename = `report_${activeTab}_${period}_${new Date().toISOString().split('T')[0]}.csv`;
     downloadCSV(filename, rows);
   };
 
@@ -438,9 +597,6 @@ export default function Reports() {
               <h2 className="mb-1 fw-bold text-dark">Reports & Analytics</h2>
               <div className="d-flex align-items-center gap-3">
                 <p className="text-muted mb-0">Comprehensive overview of system performance and activities</p>
-                {USE_SAMPLE_DATA && (
-                  <span className="badge bg-warning text-dark">Using Sample Data</span>
-                )}
                 <small className="text-muted">
                   Last updated: {lastRefresh.toLocaleTimeString()}
                 </small>

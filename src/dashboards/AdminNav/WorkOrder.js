@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
-
+import { AuthUtils } from '../../utils/AuthUtils';
 export default function WorkOrder() {
   const [activeTab, setActiveTab] = useState('To Review');
   const [workOrders, setWorkOrders] = useState([]);
@@ -31,24 +31,30 @@ const [itemsPerPage] = useState(15); // 15 work orders per page
 
 
   // Fetch work orders from backend
-// Replace the fetchWorkOrders function
 const fetchWorkOrders = async () => {
   try {
     setLoading(true);
     setError(null);
     
-const { data, error } = await supabase
-  .from('work_orders')
-  .select(`
-    *,
-    users!requested_by(full_name, email),
-    statuses(status_name, color_code),
-    priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
-    admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
-    assigned_user:users!assigned_to(full_name, email),
-    work_order_extensions(*)
-  `)
-  .order('date_requested', { ascending: false });
+    // Get organization_id from current user
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) {
+      throw new Error('Organization not found for current user');
+    }
+    
+    const { data, error } = await supabase
+      .from('work_orders')
+      .select(`
+        *,
+        users!requested_by(full_name, email),
+        statuses(status_name, color_code),
+        priority_levels!work_orders_priority_id_fkey(priority_name, color_code),
+        admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name, color_code),
+        assigned_user:users!assigned_to(full_name, email),
+        work_order_extensions(*)
+      `)
+      .eq('organization_id', orgId)  // ← ADD THIS
+      .order('date_requested', { ascending: false });
   
   if (error) throw error;
     // Transform data to match your component structure
@@ -108,11 +114,18 @@ const transformedOrders = data.map(wo => {
 
 const fetchPersonnel = async () => {
   try {
-    // Fetch actual personnel from users table where role is Personnel
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) {
+      console.error('Organization not found');
+      setPersonnel([]);
+      return;
+    }
+    
     const { data, error } = await supabase
       .from('users')
       .select('user_id, full_name, email, role_id')
-      .eq('role_id', 3) // Assuming role_id 3 is Personnel based on your roles table
+      .eq('organization_id', orgId)  // ← ADD THIS
+      .eq('role_id', 3)
       .order('full_name');
 
     if (error) throw error;

@@ -6,6 +6,7 @@ import Papa from 'papaparse';
 import { PasswordUtils } from '../../utils/PasswordUtils';
 import { EmailService } from '../../utils/EmailService';
 import EmailProgressModal from '../../components/EmailProgressModal';
+import { AuditLogger } from '../../utils/AuditLogger';
 
 export default function SysAdUserManagement() {
   const [users, setUsers] = useState([]);
@@ -114,20 +115,27 @@ const fetchUsers = async () => {
     setLoading(true);
     setError(null);
     
-    const { data, error } = await supabase
-      .from('users')
-      .select(`
-        user_id,
-        username,
-        full_name,
-        email,
-        role_id,
-        user_status,
-        date_created,
-        job_position,
-        roles (role_name)
-      `)
-      .order('date_created', { ascending: false });
+// ✅ Get current user's organization
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+if (!currentUser || !currentUser.organizationId) {
+  throw new Error('Session expired. Please log in again.');
+}
+
+const { data, error } = await supabase
+  .from('users')
+  .select(`
+    user_id,
+    username,
+    full_name,
+    email,
+    role_id,
+    user_status,
+    date_created,
+    job_position,
+    roles (role_name)
+  `)
+  .eq('organization_id', currentUser.organizationId)  // Filter by org
+  .order('date_created', { ascending: false });
     
     if (error) throw error;
     
@@ -211,7 +219,13 @@ const updateUser = async (userId, userData) => {
     }
 
     console.log('✓ User updated successfully:', data);
-    
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    await AuditLogger.logWithIP({
+      userId: currentUser.id,
+      actionTaken: `Updated user: ${userData.name} (${userData.email})`,
+      tableAffected: 'users',
+      recordId: userId
+    });
     // Refresh user list
     await fetchUsers();
     
@@ -244,7 +258,14 @@ const updateUser = async (userId, userData) => {
     }
 
     console.log('✓ User permanently deleted');
-    
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    await AuditLogger.logWithIP({
+      userId: currentUser.id,
+      actionTaken: `Deleted user permanently (ID: ${userId})`,
+      tableAffected: 'users',
+      recordId: userId
+    });
+
     // Refresh user list
     await fetchUsers();
     
@@ -367,21 +388,42 @@ const handleAddUser = async (e) => {
     const orgId = userData.organization_id;
 
     // Generate password
-    const tempPassword = PasswordUtils.generateSecurePassword(10);
-    const hashedPassword = PasswordUtils.hashPassword(tempPassword);
+// Generate password
+const tempPassword = PasswordUtils.generateSecurePassword(10);
 
-    // Prepare user data
-    const newUserData = {
-      full_name: newUser.name.trim(),
-      email: newUser.email.trim().toLowerCase(),
-      user_status: newUser.status === 'Active' ? 'pending_activation' : 'inactive',
-      role_id: getRoleIdFromRole(newUser.role),
-      organization_id: orgId,
-      username: PasswordUtils.generateUsername(newUser.email),
-      password_hash: hashedPassword,
-      auth_uid: null,
-       job_position: newUser.role === 'Personnel' ? (newUser.jobPosition || null) : null
-    };
+// 🎯 CREATE SUPABASE AUTH USER FIRST (BEFORE database insert)
+console.log(`Creating Supabase Auth account for: ${newUser.email.trim().toLowerCase()}`);
+
+const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+  email: newUser.email.trim().toLowerCase(),
+  password: tempPassword,
+  email_confirm: true, // Auto-confirm email
+  user_metadata: {
+    full_name: newUser.name.trim(),
+    role_id: getRoleIdFromRole(newUser.role),
+    organization_id: orgId
+  }
+});
+
+if (authError) {
+  console.error('Failed to create auth account:', authError);
+  throw new Error(`Failed to create authentication account: ${authError.message}`);
+}
+
+console.log('✅ Supabase Auth user created successfully');
+
+// Prepare user data (NOW WITH auth_uid)
+const newUserData = {
+  full_name: newUser.name.trim(),
+  email: newUser.email.trim().toLowerCase(),
+  user_status: newUser.status === 'Active' ? 'active' : 'inactive',
+  role_id: getRoleIdFromRole(newUser.role),
+  organization_id: orgId,
+  username: PasswordUtils.generateUsername(newUser.email),
+  password_hash: null, // ✅ Set to null, Supabase Auth handles password now
+  auth_uid: authData.user.id,
+  job_position: newUser.role === 'Personnel' ? (newUser.jobPosition || null) : null
+};
 
     console.log('Creating user:', { ...newUserData, password_hash: '[HIDDEN]' });
 
@@ -399,6 +441,14 @@ const handleAddUser = async (e) => {
 
     console.log('✓ User created successfully in database');
 
+    // ✅ ADD AUDIT LOG HERE
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+await AuditLogger.logWithIP({
+  userId: currentUser.id,
+  actionTaken: `Created new user: ${newUserData.full_name} (${newUserData.email})`,
+  tableAffected: 'users',
+  recordId: insertResult.user_id
+});
     // Refresh user list
     await fetchUsers();
 

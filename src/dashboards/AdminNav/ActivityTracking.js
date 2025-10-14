@@ -150,7 +150,7 @@ const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
     <option value="all">All Roles</option>
     <option value="Admin">Admin</option>
     <option value="Personnel">Personnel</option>
-    <option value="System Admin">System Admin</option>
+    <option value="Standard User">Standard User</option>
   </Form.Select>
 
   <Form.Select

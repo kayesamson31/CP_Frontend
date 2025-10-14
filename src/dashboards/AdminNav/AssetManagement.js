@@ -62,15 +62,7 @@ const [newAsset, setNewAsset] = useState({
 const [csvFile, setCsvFile] = useState(null);
 const [csvPreview, setCsvPreview] = useState([]);
 
-// Add these after the existing state variables
-const [showMaintenanceScheduleModal, setShowMaintenanceScheduleModal] = useState(false);
-const [nextMaintenanceSchedule, setNextMaintenanceSchedule] = useState({
-  assetId: '',
-  assigneeId: '',
-  scheduledDate: '',
-  scheduledTime: '',
-  repeat: 'none'
-});
+
 
 const [showIncidentDetailsModal, setShowIncidentDetailsModal] = useState(false);
 const [selectedIncident, setSelectedIncident] = useState(null);
@@ -94,7 +86,8 @@ const [newTask, setNewTask] = useState({
   dueDate: '',
   dueTime: '',
   taskType: 'predefined',
-  status: 'pending'
+  status: 'pending',
+  repeat: 'none'
 });
 
 
@@ -115,6 +108,15 @@ const [newTask, setNewTask] = useState({
     
     return schedule.status;
   };
+
+  const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}-${day}-${year}`;
+};
 
   // Sample hardcoded data for visualization with maintenance schedules
 
@@ -275,35 +277,6 @@ const handleUpdateAsset = async () => {
   }
 };
   
-// Handle next maintenance scheduling
-const handleScheduleNextMaintenance = async () => {
-  if (nextMaintenanceSchedule.scheduledDate && nextMaintenanceSchedule.assigneeId) {
-    try {
-      await assetService.scheduleMaintenanceTask(nextMaintenanceSchedule);
-      
-      // Refresh assets to get updated data
-      await fetchAssets();
-      
-      setShowMaintenanceScheduleModal(false);
-      alert('Next maintenance scheduled successfully!');
-      
-      // Reset form
-      setNextMaintenanceSchedule({
-        assetId: '',
-        assigneeId: '',
-        scheduledDate: '',
-        scheduledTime: '',
-        repeat: 'none'
-      });
-      
-    } catch (err) {
-      console.error('Error scheduling maintenance:', err);
-      alert('Failed to schedule maintenance. Please try again.');
-    }
-  } else {
-    alert('Please fill in the required fields.');
-  }
-};
 
 // Handle manual asset addition
 const handleAddAsset = async () => {
@@ -523,16 +496,17 @@ const handleCreateTask = async () => {
       
       // Reset form
       setNewTask({
-        assetId: '',
-        assigneeId: '',
-        title: '',
-        description: '',
-        priority: 'medium',
-        dueDate: '',
-        dueTime: '',
-        taskType: 'predefined',
-        status: 'pending'
-      });
+  assetId: '',
+  assigneeId: '',
+  title: '',
+  description: '',
+  priority: 'medium',
+  dueDate: '',
+  dueTime: '',
+  taskType: 'predefined',
+  status: 'pending',
+  repeat: 'none'  
+});
       
       setShowTaskModal(false);
       alert('Task assigned successfully!');
@@ -562,6 +536,7 @@ const handleCreateTask = async () => {
   // Format date and time
   const formatDateTime = (dateTime) => {
     return new Date(dateTime).toLocaleString('en-US', {
+      
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -1019,26 +994,7 @@ const handleCreateTask = async () => {
 
  <div className="col-md-12">
   <Form.Group>
-    <div className="d-flex justify-content-between align-items-center mb-2">
-      <Form.Label className="mb-0"><strong>Next Maintenance:</strong></Form.Label>
-      <Button 
-        variant="outline-primary" 
-        size="sm"
-        onClick={() => {
-          setNextMaintenanceSchedule({
-            assetId: selectedAsset.id,
-            assigneeId: '',
-            scheduledDate: '',
-            scheduledTime: '',
-            repeat: 'none'
-          });
-          setShowMaintenanceScheduleModal(true);
-        }}
-      >
-        <i className="fas fa-calendar-plus me-1"></i>
-        Schedule
-      </Button>
-    </div>
+  <Form.Label><strong>Next Maintenance:</strong></Form.Label>
     <Form.Control 
       type="text" 
       value={selectedAsset.nextMaintenance || 'Not scheduled'} 
@@ -1177,7 +1133,7 @@ const handleCreateTask = async () => {
                           {selectedAsset.maintenanceHistory?.length > 0 ? (
                             selectedAsset.maintenanceHistory.map((entry, idx) => (
                               <tr key={idx}>
-                                <td>{entry.date}</td>
+                                <td>{formatDate(entry.date)}</td>
                                 <td>{entry.task}</td>
                                 <td>{entry.assigned}</td>
                                 <td>
@@ -1215,31 +1171,31 @@ const handleCreateTask = async () => {
           <th>Status</th>
         </tr>
       </thead>
-      <tbody>
-        {selectedAsset.incidentHistory.map((incident, idx) => (
-          <tr key={idx}>
-            <td>{new Date(incident.reportedAt).toLocaleDateString()}</td>
-            <td>{incident.type}</td>
-            <td>
-              <Badge bg={
-                incident.severity === 'Critical' ? 'danger' :
-                incident.severity === 'Major' ? 'warning' : 'info'
-              }>
-                {incident.severity}
-              </Badge>
-            </td>
-            <td>{incident.reportedBy}</td>
-            <td>
-              <Badge bg={
-                incident.status === 'Reported' ? 'danger' : 
-                incident.status === 'Resolved' ? 'success' : 'secondary'
-              }>
-                {incident.status}
-              </Badge>
-            </td>
-          </tr>
-        ))}
-      </tbody>
+     <tbody>
+  {selectedAsset.incidentHistory.map((incident, idx) => (
+    <tr key={idx}>
+      <td>{formatDate(incident.reportedAt)}</td>  {/* <-- CHANGED THIS LINE */}
+      <td>{incident.type}</td>
+      <td>
+        <Badge bg={
+          incident.severity === 'Critical' ? 'danger' :
+          incident.severity === 'Major' ? 'warning' : 'info'
+        }>
+          {incident.severity}
+        </Badge>
+      </td>
+      <td>{incident.reportedBy}</td>
+      <td>
+        <Badge bg={
+          incident.status === 'Reported' ? 'danger' : 
+          incident.status === 'Resolved' ? 'success' : 'secondary'
+        }>
+          {incident.status}
+        </Badge>
+      </td>
+    </tr>
+  ))}
+</tbody>
     </Table>
   </div>
 )}
@@ -1331,21 +1287,21 @@ const handleCreateTask = async () => {
       {selectedAsset.incidentReports?.length > 0 ? (
        selectedAsset.incidentReports.map((incident, index) => (
   <div key={index} className="mb-3 p-3 border rounded shadow-sm bg-white">
-            <div className="d-flex justify-content-between align-items-start mb-2">
-              <div>
-                <strong className="text-danger">{incident.reportedBy}</strong>
-                <div>
-                  <small className="text-muted">
-                    {new Date(incident.reportedAt).toLocaleDateString()}
-                  </small>
-                </div>
-              </div>
-              <div className="text-end">
-                <Badge bg={incident.status === 'Open' ? 'danger' : incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
-                  {incident.status}
-                </Badge>
-              </div>
-            </div>
+        <div className="d-flex justify-content-between align-items-start mb-2">
+  <div>
+    <strong className="text-danger">{incident.reportedBy}</strong>
+    <div>
+      <small className="text-muted">
+        {formatDate(incident.reportedAt)} 
+      </small>
+    </div>
+  </div>
+  <div className="text-end">
+    <Badge bg={incident.status === 'Open' ? 'danger' : incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
+      {incident.status}
+    </Badge>
+  </div>
+</div>
             
             <div className="mb-2">
               <span className="fw-bold">{incident.type}</span>
@@ -1569,6 +1525,42 @@ const handleCreateTask = async () => {
           </Form.Group>
         </Col>
       </Row>
+      <Col xs={12}>
+  <hr className="my-3" />
+  <h6 className="mb-3">
+    <i className="fas fa-repeat me-2"></i>
+    Recurring Maintenance (Optional)
+  </h6>
+</Col>
+
+<Col xs={12}>
+  <Form.Group>
+    <Form.Label>Repeat Schedule</Form.Label>
+    <Form.Select
+      value={newTask.repeat || 'none'}
+      onChange={(e) => setNewTask({...newTask, repeat: e.target.value})}
+    >
+      <option value="none">No Repeat</option>
+      <option value="weekly">Weekly</option>
+      <option value="monthly">Monthly</option>
+      <option value="yearly">Yearly</option>
+    </Form.Select>
+    <Form.Text className="text-muted">
+      Set up recurring maintenance for this asset
+    </Form.Text>
+  </Form.Group>
+</Col>
+
+{newTask.repeat !== 'none' && (
+  <Col xs={12}>
+    <Alert variant="info">
+      <small>
+        <i className="fas fa-info-circle me-1"></i> 
+        This task will repeat automatically. Personnel can view it in their task dashboard.
+      </small>
+    </Alert>
+  </Col>
+)}
     </Modal.Body>
     <Modal.Footer>
       <Button variant="secondary" onClick={() => setShowTaskModal(false)}>
@@ -1577,99 +1569,6 @@ const handleCreateTask = async () => {
       <Button variant="primary" onClick={handleCreateTask}>
         <i className="fas fa-plus me-2"></i>
         Assign Task
-      </Button>
-    </Modal.Footer>
-  </Modal>
-)}
-
-
-{/* Next Maintenance Schedule Modal */}
-{showMaintenanceScheduleModal && (
-  <Modal show={showMaintenanceScheduleModal} onHide={() => setShowMaintenanceScheduleModal(false)} size="md">
-    <Modal.Header closeButton>
-      <Modal.Title>Schedule Next Maintenance</Modal.Title>
-    </Modal.Header>
-    <Modal.Body>
-      <Row className="g-3">
-        <Col xs={12}>
-          <Alert variant="info">
-            <strong>Asset:</strong> {assets.find(a => a.id === nextMaintenanceSchedule.assetId)?.name}
-          </Alert>
-        </Col>
-        <Col xs={12}>
-          <Form.Group>
-            <Form.Label>Assign To *</Form.Label>
-            <Form.Select
-              value={nextMaintenanceSchedule.assigneeId}
-              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, assigneeId: e.target.value})}
-              required
-            >
-              <option value="">Select Personnel</option>
-              {personnel.map(person => (
-                <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
-              ))}
-            </Form.Select>
-          </Form.Group>
-        </Col>
-        <Col md={6}>
-          <Form.Group>
-            <Form.Label>Scheduled Date *</Form.Label>
-            <Form.Control
-              type="date"
-              value={nextMaintenanceSchedule.scheduledDate}
-              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, scheduledDate: e.target.value})}
-              required
-            />
-          </Form.Group>
-        </Col>
-        <Col md={6}>
-          <Form.Group>
-            <Form.Label>Scheduled Time</Form.Label>
-            <Form.Control
-              type="time"
-              value={nextMaintenanceSchedule.scheduledTime}
-              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, scheduledTime: e.target.value})}
-            />
-          </Form.Group>
-        </Col>
-        <Col xs={12}>
-          <Form.Group>
-            <Form.Label>Repeat Schedule</Form.Label>
-            <Form.Select
-              value={nextMaintenanceSchedule.repeat}
-              onChange={(e) => setNextMaintenanceSchedule({...nextMaintenanceSchedule, repeat: e.target.value})}
-            >
-              <option value="none">No Repeat</option>
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
-              <option value="custom">Custom Interval</option>
-            </Form.Select>
-          </Form.Group>
-        </Col>
-        {nextMaintenanceSchedule.repeat === 'custom' && (
-          <Col xs={12}>
-            <Alert variant="warning">
-              <small><strong>Note:</strong> Custom interval settings will be configured after saving this schedule.</small>
-            </Alert>
-          </Col>
-        )}
-        {nextMaintenanceSchedule.repeat !== 'none' && (
-          <Col xs={12}>
-            <Alert variant="success">
-              <small><i className="fas fa-bell me-1"></i> Notifications will be sent to admin and assigned personnel based on the repeat schedule.</small>
-            </Alert>
-          </Col>
-        )}
-      </Row>
-    </Modal.Body>
-    <Modal.Footer>
-      <Button variant="secondary" onClick={() => setShowMaintenanceScheduleModal(false)}>
-        Cancel
-      </Button>
-      <Button variant="primary" onClick={handleScheduleNextMaintenance}>
-        <i className="fas fa-calendar-check me-2"></i>
-        Schedule Maintenance
       </Button>
     </Modal.Footer>
   </Modal>
@@ -1684,28 +1583,16 @@ const handleCreateTask = async () => {
     {selectedIncident && (
       <>
         <Row className="mb-3">
-          <Col md={6}>
-            <strong>Incident ID:</strong>
-            <p>{selectedIncident.id}</p>
-          </Col>
-          <Col md={6}>
-            <strong>Status:</strong>
-            <Badge bg={selectedIncident.status === 'Open' ? 'danger' : selectedIncident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
-              {selectedIncident.status}
-            </Badge>
-          </Col>
-        </Row>
+  <Col md={6}>
+    <strong>Reported By:</strong>
+    <p>{selectedIncident.reportedBy}</p>
+  </Col>
+  <Col md={6}>
+    <strong>Date Reported:</strong>
+    <p>{formatDate(selectedIncident.reportedAt)}</p>  
+  </Col>
+</Row>
         
-        <Row className="mb-3">
-          <Col md={6}>
-            <strong>Reported By:</strong>
-            <p>{selectedIncident.reportedBy}</p>
-          </Col>
-          <Col md={6}>
-            <strong>Date Reported:</strong>
-            <p>{new Date(selectedIncident.reportedAt).toLocaleString()}</p>
-          </Col>
-        </Row>
         
         <Row className="mb-3">
           <Col md={6}>

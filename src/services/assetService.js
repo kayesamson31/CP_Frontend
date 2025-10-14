@@ -42,6 +42,7 @@ async fetchAssets() {
     const { data: failedTasks } = await supabase
       .from('maintenance_tasks')
       .select('asset_id, status_id')
+      .eq('organization_id', organizationId) 
       .eq('status_id', 11);
 
     const failedCountMap = {};
@@ -64,6 +65,7 @@ async fetchAssets() {
         statuses(status_name),
         users!assigned_to(full_name)
       `)
+      .eq('organization_id', organizationId)
       .in('asset_id', assets.map(a => a.asset_id))
       .order('due_date', { ascending: false });
 
@@ -96,6 +98,7 @@ async fetchAssets() {
         statuses(status_name),
         users!reported_by(full_name)
       `)
+      .eq('organization_id', organizationId)
       .in('asset_id', assets.map(a => a.asset_id))
       .order('date_reported', { ascending: false });
 
@@ -255,9 +258,11 @@ async getCurrentUserOrganization() {
   // Kailangan ko ito para ma-assign yung mga maintenance tasks.
 async fetchUsers() {
   try {
+    const organizationId = await this.getCurrentUserOrganization();
     const { data, error } = await supabase
       .from('users')
       .select('user_id, username, full_name, email, role_id, job_position')
+      .eq('organization_id', organizationId) 
       .eq('user_status', 'active')
       .eq('role_id', 3) // Personnel role only
       .order('full_name', { ascending: true });
@@ -526,16 +531,20 @@ async createMaintenanceTask(taskData) {
     const priorityMap = { 'low': 1, 'medium': 2, 'high': 3 };
     
     // Create ONLY maintenance task (no work order)
-   const taskInsert = {
+  // Get organization_id from current user
+const organizationId = await this.getCurrentUserOrganization();
+
+const taskInsert = {
   task_name: taskData.title,
   description: taskData.description || '',
   priority_id: priorityMap[taskData.priority] || 2,
-  status_id: 1, // Pending
+  status_id: 1,
   work_order_id: null,
   asset_id: assetData.asset_id, 
   due_date: taskData.dueDate,
   assigned_to: parseInt(taskData.assigneeId),
-  incident_id: taskData.incidentId || null  
+  incident_id: taskData.incidentId || null,
+  organization_id: organizationId  // ← ADD THIS
 };
     
 const { data: taskResult, error: taskError } = await supabase
@@ -744,15 +753,23 @@ async createIncidentReport(incidentData) {
       'High': 3
     };
 
-    const insertData = {
-      asset_id: assetData.asset_id,
-      incident_type_id: incidentTypeMap[incidentData.type] || 1,
-      description: incidentData.description,
-      severity_id: severityMap[incidentData.severity] || 2,
-      reported_by: currentUser.user_id,
-      status_id: 4,
-      date_reported: new Date().toISOString()
-    };
+  // Get organization_id from asset
+const { data: assetOrg } = await supabase
+  .from('assets')
+  .select('organization_id')
+  .eq('asset_id', assetData.asset_id)
+  .single();
+
+const insertData = {
+  asset_id: assetData.asset_id,
+  incident_type_id: incidentTypeMap[incidentData.type] || 1,
+  description: incidentData.description,
+  severity_id: severityMap[incidentData.severity] || 2,
+  reported_by: currentUser.user_id,
+  status_id: 4,
+  date_reported: new Date().toISOString(),
+  organization_id: assetOrg.organization_id  // ← ADD THIS
+};
 
     console.log('Insert data:', insertData);
 

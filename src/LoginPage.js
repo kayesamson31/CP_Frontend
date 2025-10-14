@@ -150,7 +150,7 @@ const handleLogin = async (e) => {
 };
 
 // Keep your existing handleSuccessfulLogin logic or use this:
-const handleSuccessfulLogin = (userData) => {
+const handleSuccessfulLogin = async (userData) => {
   // Your existing user role and redirect logic here
   let userRole = "";
   switch (userData.role_id) {
@@ -173,6 +173,13 @@ const handleSuccessfulLogin = (userData) => {
 
   // Your existing redirect logic
 if (userData.first_login === true) {
+    await supabase
+      .from('users')
+      .update({ 
+        user_status: 'active',
+        first_login: false 
+      })
+      .eq('user_id', userData.user_id);
     alert("Welcome! Please change your temporary password to continue.");
     switch (userRole) {
       case "sysadmin": navigate("/dashboard-sysadmin/profile"); return;

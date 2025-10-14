@@ -11,6 +11,7 @@ import {
   Clock,
   MapPin
 } from 'lucide-react';
+import{AuthUtils} from '../utils/AuthUtils'
 
 export default function DashboardAdmin() {
   const navigate = useNavigate();
@@ -68,11 +69,11 @@ useEffect(() => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: userData } = await supabase
-        .from('users')
-        .select('full_name')
-        .eq('auth_uid', user.id)
-        .single();
+const { data: userData } = await supabase
+  .from('users')
+  .select('full_name, organization_id')
+  .eq('auth_uid', user.id)
+  .single();
 
       if (userData) {
         setAdminName(userData.full_name);
@@ -91,31 +92,34 @@ useEffect(() => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // 1. Pending Approvals - work orders with status "pending" or "to review"
-      const { count: pendingCount } = await supabase
-        .from('work_orders')
-        .select('*', { count: 'exact', head: true })
-        .in('status_id', [1, 6]); // 1=Pending, 6=To Review
+const orgId = AuthUtils.getCurrentOrganizationId();
+const { count: pendingCount } = await supabase
+  .from('work_orders')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', orgId)
+  .in('status_id', [1, 6]);
 
       // 2. Overdue Tasks - maintenance tasks past due date
-      const { count: overdueCount } = await supabase
-        .from('maintenance_tasks')
-        .select('*', { count: 'exact', head: true })
-        .lt('due_date', new Date().toISOString())
-        .neq('status_id', 3); // 3=Completed
+     const { count: overdueCount } = await supabase
+  .from('maintenance_tasks')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', orgId)  // ← ADD THIS
+  .lt('due_date', new Date().toISOString())
+  .neq('status_id', 3);
 
-      // 3. Extended Tasks - tasks extended today
-      const { count: extendedCount } = await supabase
-        .from('maintenance_task_extensions')
-        .select('*', { count: 'exact', head: true })
-        .gte('extension_date', today.toISOString());
+    const { count: extendedCount } = await supabase
+  .from('maintenance_task_extensions')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', orgId)  // ← ADD THIS
+  .gte('extension_date', today.toISOString());
 
       // 4. Asset Maintenance - assets needing maintenance today
-      const { count: assetCount } = await supabase
-        .from('assets')
-        .select('*', { count: 'exact', head: true })
-        .lte('next_maintenance', new Date().toISOString())
-        .eq('asset_status', 'active');
+    const { count: assetCount } = await supabase
+  .from('assets')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', orgId)  // ← ADD THIS
+  .lte('next_maintenance', new Date().toISOString())
+  .eq('asset_status', 'active');
 
       setStatsData([
         {
@@ -163,48 +167,57 @@ useEffect(() => {
 useEffect(() => {
   const fetchPipelineData = async () => {
     try {
+      const orgId = AuthUtils.getCurrentOrganizationId();
       // To Review (status_id = 6)
       const { count: toReviewWO } = await supabase
-        .from('work_orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('status_id', 6);
+  .from('work_orders')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', orgId)  // ← ADD
+  .eq('status_id', 6);
       
-      const { count: toReviewMT } = await supabase
-        .from('maintenance_tasks')
-        .select('*', { count: 'exact', head: true })
-        .eq('status_id', 6);
+    const { count: toReviewMT } = await supabase
+  .from('maintenance_tasks')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', orgId)  // ← ADD
+  .eq('status_id', 6);
       
       // Pending/Assigned (status_id = 1)
       const { count: pendingWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 1);
       
       const { count: pendingMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 1);
       
       // In Progress (status_id = 2)
       const { count: progressWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 2);
       
       const { count: progressMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 2);
       
       // Completed (status_id = 3)
       const { count: completedWO } = await supabase
         .from('work_orders')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 3);
       
       const { count: completedMT } = await supabase
         .from('maintenance_tasks')
         .select('*', { count: 'exact', head: true })
+        .eq('organization_id', orgId)
         .eq('status_id', 3);
 
       setPipelineData([
@@ -225,6 +238,7 @@ useEffect(() => {
 useEffect(() => {
   const fetchRecentActivity = async () => {
     try {
+      const orgId = AuthUtils.getCurrentOrganizationId();
       const { data: activities, error } = await supabase
         .from('activity_tracking')
         .select(`
@@ -235,6 +249,7 @@ useEffect(() => {
           user_id,
           users!activity_tracking_user_id_fkey (full_name)
         `)
+        .eq('organization_id', orgId) 
         .order('timestamp', { ascending: false })
         .limit(5);
 
@@ -261,12 +276,14 @@ useEffect(() => {
   const fetchAvailablePersonnel = async () => {
     try {
       // Fetch users with role_id 3 (personnel) who are active
-      const { data: personnel, error } = await supabase
-        .from('users')
-        .select('user_id, full_name, job_position, user_status')
-        .eq('role_id', 3)
-        .eq('user_status', 'active')
-        .order('full_name', { ascending: true });
+    const orgId = AuthUtils.getCurrentOrganizationId();
+const { data: personnel, error } = await supabase
+  .from('users')
+  .select('user_id, full_name, job_position, user_status')
+  .eq('organization_id', orgId)  // ← ADD THIS
+  .eq('role_id', 3)
+  .eq('user_status', 'active')
+  .order('full_name', { ascending: true });
 
       if (error) throw error;
 

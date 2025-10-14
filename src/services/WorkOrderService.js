@@ -52,18 +52,19 @@ static async submitWorkOrder(workOrderData) {
     }
 
     // Prepare work order data - NO asset handling, just set to null
-    const workOrder = {
-      title: workOrderData.title.trim(),
-      description: workOrderData.description ? workOrderData.description.trim() : '',
-      priority_id: priorityData.priority_id,
-      status_id: statusData.status_id,
-      asset_text: workOrderData.asset ? workOrderData.asset.trim() : null, // NEW FIELD
-      date_requested: new Date().toISOString(),
-      due_date: workOrderData.dateNeeded ? new Date(workOrderData.dateNeeded).toISOString() : null,
-      requested_by: currentUser.id,
-      category: workOrderData.category,
-      location: workOrderData.location.trim()
-    };
+const workOrder = {
+  title: workOrderData.title.trim(),
+  description: workOrderData.description ? workOrderData.description.trim() : '',
+  priority_id: priorityData.priority_id,
+  status_id: statusData.status_id,
+  asset_text: workOrderData.asset ? workOrderData.asset.trim() : null,
+  date_requested: new Date().toISOString(),
+  due_date: workOrderData.dateNeeded ? new Date(workOrderData.dateNeeded).toISOString() : null,
+  requested_by: currentUser.id,
+  category: workOrderData.category,
+  location: workOrderData.location.trim(),
+  organization_id: currentUser.organizationId  // ← ADD THIS
+};
 
     console.log('Submitting work order:', workOrder);
 
@@ -341,11 +342,17 @@ static async getStatusCounts() {
 
 // Activity logger – ginawa ko ito para lahat ng ginawa ng user
   // (like create, cancel, etc.) may record sa "activity_tracking" table.
-  static async logActivity(activityData) {
-    try {
-      const { error } = await supabase
-        .from('activity_tracking')
-        .insert(activityData);
+ static async logActivity(activityData) {
+  try {
+    const currentUser = this.getCurrentUser();
+    const activityWithOrg = {
+      ...activityData,
+      organization_id: currentUser?.organizationId  // ← ADD THIS
+    };
+    
+    const { error } = await supabase
+      .from('activity_tracking')
+      .insert(activityWithOrg);
 
       if (error) {
         console.warn('Failed to log activity:', error);
