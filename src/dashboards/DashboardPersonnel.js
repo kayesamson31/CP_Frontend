@@ -3,6 +3,7 @@ import { Col, Modal, Badge } from 'react-bootstrap';
 import { assetService } from '../services/assetService'; 
 import { supabase } from '../supabaseClient';
 import { AuthUtils } from '../utils/AuthUtils';
+import { logActivity } from '../utils/ActivityLogger';
 import { 
   Calendar as CalendarIcon,
   Clock,
@@ -74,8 +75,28 @@ if (taskType === 'maintenance_task') {
 
     if (error) throw error;
     
+    try {
+      await supabase.from('notifications').insert({
+        notification_type_id: 3, // maintenance_task_update
+        created_by: userProfile.user_id,
+        title: 'Maintenance Task Extended',
+        message: `Personnel extended maintenance task #${taskId} due date from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`,
+        target_roles: '2', // Admin role
+        priority_id: 2, // Medium priority
+        related_table: 'maintenance_tasks',
+        related_id: taskId,
+        is_active: true
+      });
+      console.log('✅ Admin notified about task extension');
+    } catch (notifError) {
+      console.error('❌ Failed to notify admin about extension:', notifError);
+    }
 
     return { success: true, data: data?.[0] };
+    // Log activity - Task extension request
+await logActivity('request_task_extension', `Requested extension for maintenance task #${taskId} from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
+    // Log activity - Maintenance task status update
+await logActivity('update_task_status', `Updated maintenance task #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);    
   }
 
   // Regular status update for maintenance tasks (non-extension)
@@ -116,7 +137,6 @@ if (status === 'completed' && data?.[0]?.asset_id) {
   }
 }
 
-// âœ… NOTIFY ADMIN about incident task update (OUTSIDE the completed check!)
 if (data[0]?.incident_id) {
   try {
     const statusMessage = status === 'completed' 
@@ -139,6 +159,32 @@ if (data[0]?.incident_id) {
   } catch (notifError) {
     console.error('Failed to create admin notification:', notifError);
   }
+}
+// ✅ NOTIFY ADMIN about maintenance task update
+try {
+  const statusMessage = status === 'completed' 
+    ? `Personnel completed maintenance task #${taskId}` 
+    : status === 'failed'
+    ? `Personnel marked maintenance task #${taskId} as failed${reason ? ': ' + reason : ''}`
+    : status === 'in-progress'
+    ? newDate 
+      ? `Personnel extended maintenance task #${taskId} due date to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`
+      : `Personnel started working on maintenance task #${taskId}`
+    : `Personnel updated maintenance task #${taskId} to ${status}`;
+
+  await supabase.from('notifications').insert({
+    notification_type_id: 3, // maintenance_task_update
+    created_by: userProfile.user_id,
+    title: `Maintenance Task ${status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : status === 'in-progress' ? 'Updated' : 'Status Changed'}`,
+    message: statusMessage,
+    target_roles: '2', // Admin role
+    priority_id: status === 'failed' ? 3 : 2,
+    related_table: 'maintenance_tasks',
+    related_id: taskId,
+    is_active: true
+  });
+} catch (notifError) {
+  console.error('Failed to create admin notification:', notifError);
 }
 
 return { success: true, data: data?.[0] };
@@ -183,6 +229,8 @@ return { success: true, data: data?.[0] };
 
       if (workOrderError) throw workOrderError;
       return { success: true, data: workOrderData?.[0] };
+      // Log activity - Task extension request
+    await logActivity('request_task_extension', `Requested extension for work order #${taskId} from ${new Date(currentWO.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
     }
 
     // Regular status update (not extension)
@@ -215,7 +263,8 @@ return { success: true, data: data?.[0] };
     }
 
     return { success: true, data: workOrderData?.[0] || workOrderData };
-  } catch (error) {
+    // Log activity - Work order status update
+await logActivity('update_task_status', `Updated work order #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);  } catch (error) {
     console.error('Error updating task status:', error);
     return { success: false, error: error.message };
   }

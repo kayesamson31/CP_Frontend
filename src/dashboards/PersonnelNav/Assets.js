@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { assetService } from '../../services/assetService';
+import { logActivity } from '../../utils/ActivityLogger';
 import {
   Container,
   Row,
@@ -243,6 +244,8 @@ const handleSubmitIncident = async () => {
     setIncidentAsset(null);
     
     alert('Incident report submitted successfully!');
+    // Log activity
+await logActivity('submit_incident_report', `Submitted incident report: ${incidentForm.type} - Severity: ${incidentForm.severity} for asset ${incidentAsset.name}`);
   } catch (err) {
     console.error('Error submitting incident:', err);
     alert('Failed to submit incident report. Please try again.');

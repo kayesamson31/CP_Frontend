@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
 import { AuthUtils } from '../../utils/AuthUtils';
+import { logActivity } from '../../utils/ActivityLogger';
 export default function WorkOrder() {
   const [activeTab, setActiveTab] = useState('To Review');
   const [workOrders, setWorkOrders] = useState([]);
@@ -53,7 +54,7 @@ const fetchWorkOrders = async () => {
         assigned_user:users!assigned_to(full_name, email),
         work_order_extensions(*)
       `)
-      .eq('organization_id', orgId)  // ← ADD THIS
+      .eq('organization_id', orgId)  // â† ADD THIS
       .order('date_requested', { ascending: false });
   
   if (error) throw error;
@@ -124,7 +125,7 @@ const fetchPersonnel = async () => {
     const { data, error } = await supabase
       .from('users')
       .select('user_id, full_name, email, role_id')
-      .eq('organization_id', orgId)  // ← ADD THIS
+      .eq('organization_id', orgId)  // â† ADD THIS
       .eq('role_id', 3)
       .order('full_name');
 
@@ -263,7 +264,10 @@ const confirmAssignment = async () => {
 
     // Reload work orders
     await fetchWorkOrders();
-
+    // Log activity
+await logActivity('assign_work_order', `Assigned work order ${selectedOrder.id} to ${assignedPersonnel}${adminPriority ? ` with ${adminPriority} priority` : ''}`);
+// Log activity
+await logActivity('reject_work_order', `Rejected work order ${selectedOrder.id} - Reason: ${rejectReason}`);
     // Reset modal states
     setShowAssignModal(false);
     setAssignedPersonnel('');
@@ -348,7 +352,7 @@ const getPriorityBadge = (priority) => {
     'Medium': 'text-warning', 
     'Low': 'text-success'
   };
-  return <span className={priorityColors[priority] || 'text-muted'} style={{ fontSize: '0.85rem' }}>● {priority}</span>;
+  return <span className={priorityColors[priority] || 'text-muted'} style={{ fontSize: '0.85rem' }}>â— {priority}</span>;
 };
 
   const formatDate = (dateString) => {
@@ -785,46 +789,83 @@ const getPriorityBadge = (priority) => {
     </div>
   </div>
 )}
-{/* Extension History Display */}
+{/* Extension History - IMPROVED COLLAPSIBLE */}
 {selectedOrder.extensionHistory?.length > 0 && (
   <div className="mb-4">
-    <label className="form-label fw-bold text-muted small">Extension History:</label>
-    <div className="p-3 bg-warning-subtle rounded border border-warning-subtle">
-      <div className="mb-2">
-        <strong className="text-warning">
-          Total Extensions: {selectedOrder.extensionCount} 
-          {selectedOrder.extensionCount > 0 && (
-            <span className="ms-2 small">
-              (Original due: {formatDate(selectedOrder.originalDueDate)})
-            </span>
-          )}
-        </strong>
-      </div>
-      {selectedOrder.extensionHistory.map((ext, i) => (
-        <div key={i} className="border p-2 mb-2 bg-white rounded">
-          <div className="row">
-            <div className="col-6">
-              <small className="text-muted fw-bold">From:</small>
-              <div>{formatDate(ext.old_due_date)}</div>
-            </div>
-            <div className="col-6">
-              <small className="text-muted fw-bold">To:</small>
-              <div>{formatDate(ext.new_due_date)}</div>
-            </div>
-          </div>
-          <div className="mt-1">
-            <small className="text-muted fw-bold">Reason:</small>
-            <div className="small">{ext.extension_reason}</div>
-          </div>
-          <div className="mt-1">
-            <small className="text-muted">Extended on: {new Date(ext.extension_date).toLocaleDateString()}</small>
-          </div>
-        </div>
-      ))}
+    {/* Header with View All button */}
+    <div className="d-flex justify-content-between align-items-center mb-2">
+      <label className="form-label fw-bold text-muted small text-uppercase mb-0" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
+        Extension History ({selectedOrder.extensionCount})
+      </label>
+      
+      {selectedOrder.extensionHistory.length > 1 && (
+        <button 
+          className="btn btn-link btn-sm text-muted p-0 text-decoration-none" 
+          style={{fontSize: '0.75rem'}}
+          onClick={(e) => {
+            const content = e.target.closest('.mb-4').querySelector('#extensionHistoryContent');
+            const icon = e.target.querySelector('.bi') || e.target;
+            if (content.style.display === 'none') {
+              content.style.display = 'block';
+              icon.classList.remove('bi-chevron-down');
+              icon.classList.add('bi-chevron-up');
+            } else {
+              content.style.display = 'none';
+              icon.classList.remove('bi-chevron-up');
+              icon.classList.add('bi-chevron-down');
+            }
+          }}
+        >
+          View all <i className="bi bi-chevron-down"></i>
+        </button>
+      )}
     </div>
+    
+    {/* Latest Extension - Always Visible */}
+    <div className="border rounded p-3" style={{backgroundColor: '#fffbf0', borderLeft: '3px solid #ffc107'}}>
+      <div className="d-flex align-items-start gap-2">
+        <div className="text-warning" style={{fontSize: '1.1rem', lineHeight: '1'}}>
+          <i className="bi bi-clock"></i>
+        </div>
+        <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
+          <div className="d-flex justify-content-between align-items-start mb-1">
+            <span className="fw-semibold text-dark">
+              {formatDate(selectedOrder.extensionHistory[selectedOrder.extensionHistory.length - 1].old_due_date)} → {formatDate(selectedOrder.extensionHistory[selectedOrder.extensionHistory.length - 1].new_due_date)}
+            </span>
+            <small className="text-muted">{formatDate(selectedOrder.extensionHistory[selectedOrder.extensionHistory.length - 1].extension_date)}</small>
+          </div>
+          <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
+            {selectedOrder.extensionHistory[selectedOrder.extensionHistory.length - 1].extension_reason || 'No reason provided'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* Previous Extensions - Collapsible Content */}
+    {selectedOrder.extensionHistory.length > 1 && (
+      <div className="mt-2 border rounded p-2" style={{backgroundColor: '#f8f9fa', display: 'none'}} id="extensionHistoryContent">
+        {selectedOrder.extensionHistory.slice(0, -1).reverse().map((ext, index) => (
+          <div key={index} className={`d-flex align-items-start gap-2 p-2 ${index !== selectedOrder.extensionHistory.length - 2 ? 'mb-2 border-bottom' : ''}`}>
+            <div className="text-muted" style={{fontSize: '1rem', lineHeight: '1'}}>
+              <i className="bi bi-clock"></i>
+            </div>
+            <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
+              <div className="d-flex justify-content-between align-items-start mb-1">
+                <span className="fw-semibold">
+                  {formatDate(ext.old_due_date)} → {formatDate(ext.new_due_date)}
+                </span>
+                <small className="text-muted">{formatDate(ext.extension_date)}</small>
+              </div>
+              <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
+                {ext.extension_reason || 'No reason provided'}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 )}
-
 
                   {/* Admin Priority Control */}
                   {selectedOrder.status === 'To Review' && (

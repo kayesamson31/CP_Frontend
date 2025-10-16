@@ -383,15 +383,20 @@ const getStatusBadge = (status) => {
                       <td>{task.location || '-'}</td>
                       <td>{getStatusBadge(task.status)}</td>
                       <td>
-                        <div className="d-flex align-items-center gap-2">
-                          {getPriorityBadge(task.priority)}
-                          {task.isOverdue && (
-                            <span className="badge bg-danger" style={{ fontSize: '0.7rem' }}>
-                              OVERDUE
-                            </span>
-                          )}
-                        </div>
-                      </td>
+  <div className="d-flex align-items-center gap-2">
+    {getPriorityBadge(task.priority)}
+    {task.isOverdue && (
+      <span className="badge bg-danger" style={{ fontSize: '0.7rem' }}>
+        OVERDUE
+      </span>
+    )}
+    {task.extensionCount > 0 && (
+      <span className="badge bg-warning text-dark" style={{ fontSize: '0.7rem' }}>
+        EXTENDED ({task.extensionCount}x)
+      </span>
+    )}
+  </div>
+</td>
                       <td>{formatDate(task.dueDate)}</td>
                       <td>{task.assignedTo || 'Unassigned'}</td>
                       <td>
@@ -512,38 +517,81 @@ const getStatusBadge = (status) => {
     </div>
   </div>
 
-  {/* Extension History */}
-{/* Extension History */}
+{/* Extension History - IMPROVED COLLAPSIBLE */}
 {selectedTask.extensionCount > 0 && selectedTask.extensionHistory && selectedTask.extensionHistory.length > 0 && (
   <div className="mb-4">
-    <label className="form-label fw-bold text-muted small text-uppercase mb-3" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-      Extension History ({selectedTask.extensionCount} extensions)
-    </label>
-    <div className="alert alert-warning" role="alert" style={{backgroundColor: '#fff3cd', border: '1px solid #ffc107'}}>
-      {selectedTask.extensionHistory.map((ext, index) => (
-        <div key={index} className="bg-white p-3 rounded border mb-2">
-          <div className="row">
-            <div className="col-6">
-              <strong className="small text-muted text-uppercase" style={{fontSize: '0.75rem'}}>From:</strong>
-              <p className="mb-0" style={{fontSize: '0.9rem'}}>{formatDate(ext.old_due_date)}</p>
-            </div>
-            <div className="col-6">
-              <strong className="small text-muted text-uppercase" style={{fontSize: '0.75rem'}}>To:</strong>
-              <p className="mb-0" style={{fontSize: '0.9rem'}}>{formatDate(ext.new_due_date)}</p>
-            </div>
-          </div>
-          <div className="mt-2">
-            <strong className="small text-muted text-uppercase" style={{fontSize: '0.75rem'}}>Reason:</strong>
-            <p className="mb-0" style={{fontSize: '0.9rem'}}>{ext.extension_reason || 'No reason provided'}</p>
-          </div>
-          <div className="mt-1">
-            <small className="text-muted" style={{fontSize: '0.8rem'}}>
-              Extended on: {formatDate(ext.extension_date)}
-            </small>
-          </div>
-        </div>
-      ))}
+    {/* Header with View All button */}
+    <div className="d-flex justify-content-between align-items-center mb-2">
+      <label className="form-label fw-bold text-muted small text-uppercase mb-0" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
+        Extension History ({selectedTask.extensionCount})
+      </label>
+      
+      {selectedTask.extensionHistory.length > 1 && (
+        <button 
+          className="btn btn-link btn-sm text-muted p-0 text-decoration-none" 
+          style={{fontSize: '0.75rem'}}
+          onClick={(e) => {
+            const content = e.target.closest('.mb-4').querySelector('#extensionHistoryContent');
+            const icon = e.target.querySelector('.bi') || e.target;
+            if (content.style.display === 'none') {
+              content.style.display = 'block';
+              icon.classList.remove('bi-chevron-down');
+              icon.classList.add('bi-chevron-up');
+            } else {
+              content.style.display = 'none';
+              icon.classList.remove('bi-chevron-up');
+              icon.classList.add('bi-chevron-down');
+            }
+          }}
+        >
+          View all <i className="bi bi-chevron-down"></i>
+        </button>
+      )}
     </div>
+    
+    {/* Latest Extension - Always Visible */}
+    <div className="border rounded p-3" style={{backgroundColor: '#fffbf0', borderLeft: '3px solid #ffc107'}}>
+      <div className="d-flex align-items-start gap-2">
+        <div className="text-warning" style={{fontSize: '1.1rem', lineHeight: '1'}}>
+          <i className="bi bi-clock"></i>
+        </div>
+        <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
+          <div className="d-flex justify-content-between align-items-start mb-1">
+            <span className="fw-semibold text-dark">
+              {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].old_due_date)} → {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].new_due_date)}
+            </span>
+            <small className="text-muted">{formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_date)}</small>
+          </div>
+          <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
+            {selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_reason || 'No reason provided'}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    {/* Previous Extensions - Collapsible Content */}
+    {selectedTask.extensionHistory.length > 1 && (
+      <div className="mt-2 border rounded p-2" style={{backgroundColor: '#f8f9fa', display: 'none'}} id="extensionHistoryContent">
+        {selectedTask.extensionHistory.slice(0, -1).reverse().map((ext, index) => (
+          <div key={index} className={`d-flex align-items-start gap-2 p-2 ${index !== selectedTask.extensionHistory.length - 2 ? 'mb-2 border-bottom' : ''}`}>
+            <div className="text-muted" style={{fontSize: '1rem', lineHeight: '1'}}>
+              <i className="bi bi-clock"></i>
+            </div>
+            <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
+              <div className="d-flex justify-content-between align-items-start mb-1">
+                <span className="fw-semibold">
+                  {formatDate(ext.old_due_date)} → {formatDate(ext.new_due_date)}
+                </span>
+                <small className="text-muted">{formatDate(ext.extension_date)}</small>
+              </div>
+              <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
+                {ext.extension_reason || 'No reason provided'}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
   </div>
 )}
 

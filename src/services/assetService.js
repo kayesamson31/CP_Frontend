@@ -575,18 +575,23 @@ try {
     related_id: taskResult.task_id,
     is_active: true,
     created_at: new Date().toISOString()
+    
   };
+  
 
   console.log('🔔 Creating notification:', notificationInsert);
 
-  const { data: notifResult, error: notifError } = await supabase
+const { data: notifResult, error: notifError } = await supabase
     .from('notifications')
-    .insert([notificationInsert]);
+    .insert([notificationInsert])
+    .select(); // Add .select() to get the inserted data
 
   if (notifError) {
     console.error('❌ Notification error:', notifError);
+    console.error('❌ Insert data was:', notificationInsert);
+    console.error('❌ Full error details:', JSON.stringify(notifError, null, 2));
   } else {
-    console.log('✅ Notification created successfully');
+    console.log('✅ Notification created successfully:', notifResult);
   }
 } catch (notifErr) {
   console.error('❌ Notification creation failed:', notifErr);

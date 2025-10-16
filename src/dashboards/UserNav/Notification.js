@@ -267,24 +267,26 @@ useEffect(() => {
      cleanupOldNotifications();
     
     // Set up real-time subscription for new notifications
-    const channel = supabase
-      .channel('notifications-channel')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications'
-        },
-        (payload) => {
-          console.log('New notification received:', payload);
-          const roleId = getRoleId(role);
-          if (payload.new.target_roles === roleId.toString()) {
-            fetchNotifications();
-          }
-        }
-      )
-      .subscribe();
+const channel = supabase
+  .channel('notifications-channel')
+  .on(
+    'postgres_changes',
+    {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'notifications'
+    },
+    (payload) => {
+      console.log('New notification received:', payload);
+      const roleId = getRoleId(role);
+      // Check both role AND user_id
+      if (payload.new.target_roles === roleId.toString() || 
+          payload.new.target_user_id === userId) {
+        fetchNotifications();
+      }
+    }
+  )
+  .subscribe();
 
     // Refresh every 30 seconds as fallback
     const intervalId = setInterval(() => {

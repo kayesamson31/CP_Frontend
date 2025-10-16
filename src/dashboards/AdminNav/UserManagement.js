@@ -6,6 +6,8 @@ import Papa from 'papaparse';
 import { PasswordUtils } from '../../utils/PasswordUtils';
 import { EmailService } from '../../utils/EmailService';
 import EmailProgressModal from '../../components/EmailProgressModal';
+import { logActivity } from '../../utils/ActivityLogger';
+import { AuthUtils } from '../../utils/AuthUtils';
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -83,7 +85,11 @@ const handleEmailProgressClose = () => {
   try {
     setLoading(true);
     setError(null);
-    
+    // Get organization_id from current user
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) {
+      throw new Error('Organization not found for current user');
+    }
     const { data, error } = await supabase
       .from('users')
       .select(`
@@ -97,6 +103,7 @@ const handleEmailProgressClose = () => {
         job_position,
         roles (role_name)
       `)
+      .eq('organization_id', orgId)
       .in('role_id', [3, 4]) // Only fetch Personnel and Standard User
       .order('date_created', { ascending: false });
     
@@ -200,7 +207,10 @@ const createUser = async (userData) => {
 
     // Refresh user list
     await fetchUsers();
-
+    // Log activity
+await logActivity('edit_user', `Updated user: ${editingUser.name} - Changed role to ${editingUser.role}`);
+    // Log activity
+    await logActivity('add_user', `Added user: ${newUser.name} (${newUser.email}) as ${newUser.role}`);
     // Show email progress modal
     setEmailProgress({
       isVisible: true,
@@ -288,6 +298,12 @@ const updateUser = async (userId, userData) => {
   try {
     setLoading(true);
     
+    // Get organization_id to verify user belongs to same org
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) {
+      throw new Error('Organization not found');
+    }
+    
     // Prepare the update data
     const updateData = {
       full_name: userData.name,
@@ -299,11 +315,12 @@ const updateUser = async (userId, userData) => {
 
     console.log('Updating user:', userId, updateData);
 
-    // Update in database
+    // Update in database - verify organization_id
     const { data, error } = await supabase
       .from('users')
       .update(updateData)
       .eq('user_id', userId)
+      .eq('organization_id', orgId)  // ← ADD THIS for security
       .select();
     
     if (error) {
@@ -702,7 +719,8 @@ const usersWithPasswords = csvRows.map((row) => {
         }
 
         console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
-
+          // Log bulk activity
+await logActivity('bulk_add_users', `Bulk uploaded ${insertedCount} users to system`);
       } catch (error) {
         console.error('Error processing CSV:', error);
         alert(`Error: ${error.message}`);

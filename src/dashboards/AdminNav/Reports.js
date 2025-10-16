@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { Row, Col, Card, Form, Button, InputGroup, Table, Spinner, Alert, Badge } from 'react-bootstrap';
-// Import Supabase client
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';// Import Supabase client
 import { supabase } from '../../supabaseClient'; // Adjust path based on your folder structure
 import 'bootstrap/dist/css/bootstrap.min.css';
 
@@ -32,6 +32,7 @@ const PERIODS = [
   { value: 'monthly', label: 'This Month' },
   { value: 'yearly', label: 'This Year' }
 ];
+const CHART_COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D'];
 
 
 const apiService = {
@@ -316,8 +317,171 @@ getDashboardSummary: async (period = 'monthly') => {
       users: { total: 0, standard: 0, personnel: 0, admin: 0 }
     };
   }
+},
+// Add this inside apiService object, after getDashboardSummary
+
+// Get analytics data for charts
+getAnalyticsData: async (period = 'monthly') => {
+  try {
+    const organizationId = await getCurrentUserOrganization();
+    
+    // Calculate date range
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch(period) {
+      case 'today':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'weekly':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'monthly':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'yearly':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+    }
+
+    // Fetch work orders with detailed info for analytics
+    const { data: workOrders } = await supabase
+      .from('work_orders')
+      .select(`
+        work_order_id,
+        category,
+        status_id,
+        date_requested,
+        date_resolved,
+        due_date,
+        statuses(status_name)
+      `)
+      .eq('organization_id', organizationId)
+      .gte('date_requested', startDate.toISOString());
+
+    // Fetch incidents with detailed info
+    const { data: incidents } = await supabase
+      .from('incident_reports')
+      .select(`
+        incident_id,
+        date_reported,
+        date_resolved,
+        severity_id,
+        asset_id,
+        statuses(status_name)
+      `)
+      .eq('organization_id', organizationId)
+      .gte('date_reported', startDate.toISOString());
+
+    // Fetch assets with incident count
+    const { data: assets } = await supabase
+      .from('assets')
+      .select(`
+        asset_id,
+        asset_code,
+        asset_name,
+        asset_status
+      `)
+      .eq('organization_id', organizationId);
+
+    return {
+      workOrders: workOrders || [],
+      incidents: incidents || [],
+      assets: assets || []
+    };
+  } catch (error) {
+    console.error('Error fetching analytics data:', error);
+    return { workOrders: [], incidents: [], assets: [] };
+  }
+},
+
+// Calculate performance metrics
+getPerformanceMetrics: async (period = 'monthly') => {
+  try {
+    const organizationId = await getCurrentUserOrganization();
+    
+    const now = new Date();
+    let startDate = new Date();
+    
+    switch(period) {
+      case 'today':
+        startDate.setHours(0, 0, 0, 0);
+        break;
+      case 'weekly':
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'monthly':
+        startDate.setMonth(now.getMonth() - 1);
+        break;
+      case 'yearly':
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+    }
+
+    // Fetch completed work orders with resolution time
+    const { data: completedWorkOrders } = await supabase
+      .from('work_orders')
+      .select('date_requested, date_resolved, due_date')
+      .eq('organization_id', organizationId)
+      .eq('status_id', 3) // Completed status
+      .not('date_resolved', 'is', null)
+      .gte('date_requested', startDate.toISOString());
+
+    // Calculate average resolution time
+    let totalResolutionTime = 0;
+    let onTimeCount = 0;
+    
+    completedWorkOrders?.forEach(wo => {
+      const requested = new Date(wo.date_requested);
+      const resolved = new Date(wo.date_resolved);
+      const diffTime = Math.abs(resolved - requested);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      totalResolutionTime += diffDays;
+      
+      // Check if resolved on time
+      if (wo.due_date) {
+        const dueDate = new Date(wo.due_date);
+        if (resolved <= dueDate) onTimeCount++;
+      }
+    });
+
+    const avgResolutionTime = completedWorkOrders?.length 
+      ? (totalResolutionTime / completedWorkOrders.length).toFixed(1)
+      : 0;
+    
+    const onTimeRate = completedWorkOrders?.length
+      ? ((onTimeCount / completedWorkOrders.length) * 100).toFixed(0)
+      : 0;
+
+    // Get total counts
+    const { data: allWorkOrders } = await supabase
+      .from('work_orders')
+      .select('status_id, statuses(status_name)')
+      .eq('organization_id', organizationId)
+      .gte('date_requested', startDate.toISOString());
+
+    const completionRate = allWorkOrders?.length
+      ? ((completedWorkOrders?.length / allWorkOrders.length) * 100).toFixed(0)
+      : 0;
+
+    return {
+      avgResolutionTime: parseFloat(avgResolutionTime),
+      completionRate: parseFloat(completionRate),
+      onTimeRate: parseFloat(onTimeRate),
+      totalCompleted: completedWorkOrders?.length || 0
+    };
+  } catch (error) {
+    console.error('Error fetching performance metrics:', error);
+    return {
+      avgResolutionTime: 0,
+      completionRate: 0,
+      onTimeRate: 0,
+      totalCompleted: 0
+    };
+  }
 }
 };
+
 
 // Helper functions
 const downloadCSV = (filename, rows) => {
@@ -354,6 +518,115 @@ const getStatusBadgeVariant = (status) => {
     default: return 'secondary';
   }
 };
+// Add these helper functions after getStatusBadgeVariant and before export default function Reports()
+
+// Process work orders by category for bar chart
+const processWorkOrdersByCategory = (workOrders) => {
+  const categoryCount = {};
+  workOrders.forEach(wo => {
+    const category = wo.category || 'General';
+    categoryCount[category] = (categoryCount[category] || 0) + 1;
+  });
+  
+  return Object.entries(categoryCount)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5); // Top 5 categories
+};
+
+// Process status distribution for pie chart
+const processStatusDistribution = (workOrders) => {
+  const statusCount = {};
+  workOrders.forEach(wo => {
+    const status = wo.statuses?.status_name || 'Unknown';
+    statusCount[status] = (statusCount[status] || 0) + 1;
+  });
+  
+  return Object.entries(statusCount).map(([name, value]) => ({ name, value }));
+};
+
+// Process trend data for line chart (last 7 days or periods)
+const processTrendData = (workOrders, period) => {
+  const trendData = [];
+  const now = new Date();
+  
+  if (period === 'weekly' || period === 'today') {
+    // Last 7 days
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      const dateStr = date.toISOString().split('T')[0];
+      
+      const count = workOrders.filter(wo => 
+        wo.date_requested?.split('T')[0] === dateStr
+      ).length;
+      
+      trendData.push({
+        date: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        count
+      });
+    }
+  } else if (period === 'monthly') {
+    // Last 4 weeks
+    for (let i = 3; i >= 0; i--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - (i * 7 + 6));
+      const weekEnd = new Date(now);
+      weekEnd.setDate(weekEnd.getDate() - (i * 7));
+      
+      const count = workOrders.filter(wo => {
+        const woDate = new Date(wo.date_requested);
+        return woDate >= weekStart && woDate <= weekEnd;
+      }).length;
+      
+      trendData.push({
+        date: `Week ${4 - i}`,
+        count
+      });
+    }
+  } else {
+    // Last 12 months
+    for (let i = 11; i >= 0; i--) {
+      const month = new Date(now);
+      month.setMonth(month.getMonth() - i);
+      const monthStr = month.toLocaleDateString('en-US', { month: 'short' });
+      
+      const count = workOrders.filter(wo => {
+        const woDate = new Date(wo.date_requested);
+        return woDate.getMonth() === month.getMonth() && 
+               woDate.getFullYear() === month.getFullYear();
+      }).length;
+      
+      trendData.push({
+        date: monthStr,
+        count
+      });
+    }
+  }
+  
+  return trendData;
+};
+
+// Process top problematic assets
+const processProblematicAssets = (incidents, assets) => {
+  const assetIncidentCount = {};
+  
+  incidents.forEach(incident => {
+    const assetId = incident.asset_id;
+    assetIncidentCount[assetId] = (assetIncidentCount[assetId] || 0) + 1;
+  });
+  
+  return Object.entries(assetIncidentCount)
+    .map(([assetId, count]) => {
+      const asset = assets.find(a => a.asset_id === parseInt(assetId));
+      return {
+        name: asset?.asset_name || asset?.asset_code || `Asset ${assetId}`,
+        incidents: count
+      };
+    })
+    .sort((a, b) => b.incidents - a.incidents)
+    .slice(0, 5); // Top 5 problematic assets
+};
 
 export default function Reports() {
   // State management
@@ -367,60 +640,66 @@ export default function Reports() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-
-  // Data state
-  const [data, setData] = useState({
-    workOrders: [],
-    incidentReports: [],
-    maintenanceSchedules: [],
-    assets: [],
-    users: [],
-    summary: null
-  });
+// Data state
+const [data, setData] = useState({
+  workOrders: [],
+  incidentReports: [],
+  maintenanceSchedules: [],
+  assets: [],
+  users: [],
+  summary: null,
+  analytics: null,
+  performanceMetrics: null
+});
 
   // Pagination
   const [pageSize] = useState(10);
   const [page, setPage] = useState(1);
 
-  // Data fetching functions
-  const fetchAllData = async (showLoading = true) => {
-    if (showLoading) setIsLoading(true);
-    setError(null);
-    
-    try {
-      const [
-        workOrders,
-        incidentReports, 
-        maintenanceSchedules,
-        assets,
-        users,
-        summary
-      ] = await Promise.all([
-        apiService.getWorkOrders(),
-        apiService.getIncidentReports(),
-        apiService.getMaintenanceSchedules(),
-        apiService.getAssets(),
-        apiService.getUsers(),
-        apiService.getDashboardSummary(period)
-      ]);
+const fetchAllData = async (showLoading = true) => {
+  if (showLoading) setIsLoading(true);
+  setError(null);
+  
+  try {
+    const [
+      workOrders,
+      incidentReports, 
+      maintenanceSchedules,
+      assets,
+      users,
+      summary,
+      analytics,
+      performanceMetrics
+    ] = await Promise.all([
+      apiService.getWorkOrders(),
+      apiService.getIncidentReports(),
+      apiService.getMaintenanceSchedules(),
+      apiService.getAssets(),
+      apiService.getUsers(),
+      apiService.getDashboardSummary(period),
+      apiService.getAnalyticsData(period),
+      apiService.getPerformanceMetrics(period)
+    ]);
 
-      setData({
-        workOrders,
-        incidentReports,
-        maintenanceSchedules,
-        assets,
-        users,
-        summary
-      });
-      
-      setLastRefresh(new Date());
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setError('Failed to load data. Please try again.');
-    } finally {
-      if (showLoading) setIsLoading(false);
-    }
-  };
+    setData({
+      workOrders,
+      incidentReports,
+      maintenanceSchedules,
+      assets,
+      users,
+      summary,
+      analytics,
+      performanceMetrics
+    });
+    
+    setLastRefresh(new Date());
+  } catch (err) {
+    console.error('Error fetching data:', err);
+    setError('Failed to load data. Please try again.');
+  } finally {
+    if (showLoading) setIsLoading(false);
+  }
+};
 
   const refreshData = () => {
     fetchAllData(false); // Don't show loading spinner for refresh
@@ -573,7 +852,16 @@ useEffect(() => {
 
   // Get unique categories for filter
   const categoryOptions = Array.from(new Set(data.workOrders.map(w => w.category))).filter(Boolean);
-
+const chartData = useMemo(() => {
+  if (!data.analytics) return null;
+  
+  return {
+    categoryData: processWorkOrdersByCategory(data.analytics.workOrders),
+    statusData: processStatusDistribution(data.analytics.workOrders),
+    trendData: processTrendData(data.analytics.workOrders, period),
+    problematicAssets: processProblematicAssets(data.analytics.incidents, data.analytics.assets)
+  };
+}, [data.analytics, period]);
   if (isLoading) {
     return (
       <SidebarLayout role="admin">
@@ -728,462 +1016,255 @@ useEffect(() => {
           </Row>
         )}
 
-        {/* Global Search Bar */}
-        <div className="mb-3">
-          <Row className="align-items-center">
-            <Col lg={6}>
-              <Form.Control 
-                placeholder="Search across all data..." 
-                value={search} 
-                onChange={(e) => setSearch(e.target.value)}
-                className="border shadow-sm"
-                style={{ borderColor: '#ced4da !important', fontSize: '0.95rem', padding: '12px 16px' }}
-              />
+{/* Performance Metrics Cards */}
+        {data.performanceMetrics && (
+          <Row className="g-3 mb-4">
+            <Col xl={3} lg={6} md={6}>
+              <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                <Card.Body className="p-3 text-white">
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <p className="mb-1 opacity-75" style={{ fontSize: '0.85rem' }}>Avg Resolution Time</p>
+                      <h2 className="mb-0 fw-bold">{data.performanceMetrics.avgResolutionTime} days</h2>
+                    </div>
+                    <div className="p-3 rounded-circle" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                      <i className="fas fa-clock fs-4"></i>
+                    </div>
+                  </div>
+                </Card.Body>
+              </Card>
             </Col>
-            <Col lg={3}>
-              <Form.Select 
-                value={statusFilter} 
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="border shadow-sm"
-                style={{ borderColor: '#ced4da !important', fontSize: '0.95rem' }}
-              >
-                <option value="all">All Statuses</option>
-                <option value="completed">Completed</option>
-                <option value="pending">Pending</option>
-                <option value="overdue">Overdue</option>
-                <option value="cancelled">Cancelled</option>
-                <option value="rejected">Rejected</option>
-                <option value="failed">Failed</option>
-                <option value="submitted">Submitted</option>
-                <option value="resolved">Resolved</option>
-                <option value="operational">Operational</option>
-                <option value="under_maintenance">Under Maintenance</option>
-                <option value="retired">Retired</option>
-                <option value="admin">Admin</option>
-                <option value="personnel">Personnel</option>
-                <option value="standard">Standard</option>
-              </Form.Select>
+
+            <Col xl={3} lg={6} md={6}>
+              <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px', background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
+                <Card.Body className="p-3 text-white">
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <p className="mb-1 opacity-75" style={{ fontSize: '0.85rem' }}>Completion Rate</p>
+                      <h2 className="mb-0 fw-bold">{data.performanceMetrics.completionRate}%</h2>
+                    </div>
+                    <div className="p-3 rounded-circle" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                      <i className="fas fa-check-circle fs-4"></i>
+                    </div>
+                  </div>
+                </Card.Body>
+              </Card>
             </Col>
-            <Col lg={3}>
-              <Form.Select 
-                value={categoryFilter} 
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="border shadow-sm"
-                style={{ borderColor: '#ced4da !important', fontSize: '0.95rem' }}
-              >
-                <option value="all">All Categories</option>
-                {categoryOptions.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-              </Form.Select>
+
+            <Col xl={3} lg={6} md={6}>
+              <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px', background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
+                <Card.Body className="p-3 text-white">
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <p className="mb-1 opacity-75" style={{ fontSize: '0.85rem' }}>On-Time Rate</p>
+                      <h2 className="mb-0 fw-bold">{data.performanceMetrics.onTimeRate}%</h2>
+                    </div>
+                    <div className="p-3 rounded-circle" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                      <i className="fas fa-thumbs-up fs-4"></i>
+                    </div>
+                  </div>
+                </Card.Body>
+              </Card>
+            </Col>
+
+            <Col xl={3} lg={6} md={6}>
+              <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px', background: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' }}>
+                <Card.Body className="p-3 text-white">
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <p className="mb-1 opacity-75" style={{ fontSize: '0.85rem' }}>Tasks Completed</p>
+                      <h2 className="mb-0 fw-bold">{data.performanceMetrics.totalCompleted}</h2>
+                    </div>
+                    <div className="p-3 rounded-circle" style={{ backgroundColor: 'rgba(255,255,255,0.2)' }}>
+                      <i className="fas fa-tasks fs-4"></i>
+                    </div>
+                  </div>
+                </Card.Body>
+              </Card>
             </Col>
           </Row>
-        </div>
+        )}
 
-        {/* Tabs Section */}
-       {/* Tabs */}
-        <div className="mb-3">
-          <div className="d-flex p-3 bg-white rounded-3 shadow-sm border">
-            {[
-              { key: 'workorders', name: 'Work Orders', count: tables.workorders.length },
-              { key: 'incidents', name: 'Incident Reports', count: tables.incidents.length },
-              { key: 'maintenance', name: 'Maintenance', count: tables.maintenance.length },
-              { key: 'assets', name: 'Assets', count: tables.assets.length },
-              { key: 'users', name: 'Users', count: tables.users.length }
-            ].map(tab => (
-              <button 
-                key={tab.key}
-                className={`btn position-relative px-3 py-2 rounded-pill fw-semibold flex-fill me-2 ${
-                  activeTab === tab.key 
-                    ? 'btn-primary text-white shadow-sm' 
-                    : 'btn-outline-secondary text-muted'
-                }`}
-                onClick={() => setActiveTab(tab.key)}
-                style={{
-                  border: activeTab === tab.key ? 'none' : '1.5px solid #e5e7eb',
-                  transition: 'all 0.2s ease',
-                  fontSize: '0.85rem',
-                  minWidth: '0'
-                }}
-              >
-                <div className="d-flex align-items-center justify-content-center">
-                  <span className="text-truncate">{tab.name}</span>
-                  <span 
-                    className={`badge rounded-pill ms-2 ${
-                      activeTab === tab.key 
-                        ? 'bg-white text-primary' 
-                        : 'bg-light text-muted'
-                    }`}
-                    style={{fontSize: '0.7rem'}}
-                  >
-                    {tab.count}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-              {/* WORK ORDERS TAB */}
-              {activeTab === 'workorders' && (
-                <div className="bg-white rounded shadow-sm" style={{ padding: '0' }}>
-                <div className="table-responsive">
-                  <table className="table table-hover table-sm mb-0">
-                      <thead className="table-light">
-                          <tr>
-                          <th>ID</th>
-                          <th>Title</th>
-                          <th>Category</th>
-                          <th>Status</th>
-                          <th>Created</th>
-                          <th>Assigned</th>
-                          <th>Requestee</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginated(tables.workorders).map(w => (
-                          <tr key={w.id}>
-                            <td>{w.id}</td>
-                            <td>{w.title}</td>
-                            <td>{w.category}</td>
-                            <td className="py-2">
-                              <Badge bg={getStatusBadgeVariant(w.status)}>
-                            {w.status}
-                          </Badge>
-                            </td>
-                            <td className="py-2 text-muted">{w.created_at}</td>
-                            <td className="py-2">{w.assigned}</td>
-                            <td className="py-2">{w.requestee}</td>
-                          </tr>
-                        ))}
-                        {tables.workorders.length === 0 && (
-                          <tr>
-                            <td colSpan="7" className="text-center py-4 text-muted">
-                              <i className="fas fa-inbox fa-2x mb-2 d-block"></i>
-                              No work orders found for the selected filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
+        {/* Charts Section */}
+        {chartData && (
+          <>
+            <Row className="g-3 mb-4">
+              {/* Work Order Trends Chart */}
+              <Col lg={8}>
+                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px' }}>
+                  <Card.Body className="p-4">
+                    <div className="d-flex justify-content-between align-items-center mb-3">
+                      <h5 className="mb-0 fw-semibold">Work Order Trends</h5>
+                      <Badge bg="primary" className="px-3 py-2">{period === 'today' || period === 'weekly' ? 'Daily' : period === 'monthly' ? 'Weekly' : 'Monthly'}</Badge>
+                    </div>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <LineChart data={chartData.trendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="date" stroke="#666" style={{ fontSize: '0.85rem' }} />
+                        <YAxis stroke="#666" style={{ fontSize: '0.85rem' }} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#fff', 
+                            border: '1px solid #e0e0e0', 
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }} 
+                        />
+                        <Legend />
+                        <Line 
+                          type="monotone" 
+                          dataKey="count" 
+                          name="Work Orders"
+                          stroke="#0088FE" 
+                          strokeWidth={3}
+                          dot={{ fill: '#0088FE', r: 5 }}
+                          activeDot={{ r: 7 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </Card.Body>
+                </Card>
+              </Col>
+
+              {/* Status Distribution Pie Chart */}
+              <Col lg={4}>
+                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px' }}>
+                  <Card.Body className="p-4">
+                    <h5 className="mb-3 fw-semibold">Status Distribution</h5>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={chartData.statusData}
+                          cx="50%"
+                          cy="50%"
+                          labelLine={false}
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                          outerRadius={80}
+                          fill="#8884d8"
+                          dataKey="value"
+                        >
+                          {chartData.statusData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            <Row className="g-3 mb-4">
+              {/* Top Categories Bar Chart */}
+              <Col lg={6}>
+                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px' }}>
+                  <Card.Body className="p-4">
+                    <h5 className="mb-3 fw-semibold">Top Work Order Categories</h5>
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={chartData.categoryData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="name" stroke="#666" style={{ fontSize: '0.85rem' }} />
+                        <YAxis stroke="#666" style={{ fontSize: '0.85rem' }} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#fff', 
+                            border: '1px solid #e0e0e0', 
+                            borderRadius: '8px',
+                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                          }} 
+                        />
+                        <Bar dataKey="value" fill="#00C49F" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </Card.Body>
+                </Card>
+              </Col>
+
+              {/* Top Problematic Assets */}
+              <Col lg={6}>
+                <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px' }}>
+                  <Card.Body className="p-4">
+                    <h5 className="mb-3 fw-semibold">Assets Requiring Attention</h5>
+                    {chartData.problematicAssets.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={chartData.problematicAssets} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis type="number" stroke="#666" style={{ fontSize: '0.85rem' }} />
+                          <YAxis dataKey="name" type="category" width={120} stroke="#666" style={{ fontSize: '0.85rem' }} />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#fff', 
+                              border: '1px solid #e0e0e0', 
+                              borderRadius: '8px',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                            }} 
+                          />
+                          <Bar dataKey="incidents" fill="#FF8042" radius={[0, 8, 8, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="d-flex flex-column align-items-center justify-content-center" style={{ height: '300px' }}>
+                        <i className="fas fa-check-circle text-success fa-3x mb-3"></i>
+                        <p className="text-muted">No problematic assets found</p>
+                      </div>
+                    )}
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+          </>
+        )}
+
+        {/* Export Section */}
+        <Row className="g-3 mb-4">
+          <Col>
+            <Card className="border-0 shadow-sm" style={{ borderRadius: '12px' }}>
+              <Card.Body className="p-4">
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h5 className="mb-1 fw-semibold">Export Reports</h5>
+                    <p className="text-muted mb-0" style={{ fontSize: '0.9rem' }}>Download comprehensive reports of your data</p>
                   </div>
-
-                  {/* Pagination */}
-                  <div className="d-flex justify-content-between align-items-center mt-4">
-                    <div className="text-muted">
-                      Showing {Math.min(pageSize, tables.workorders.length - (page - 1) * pageSize)} of {tables.workorders.length} entries
-                    </div>
-                    <div className="d-flex gap-2">
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={page === 1} 
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        className="border-0"
-                      >
-                        Previous
-                      </Button>
-                      <span className="align-self-center px-3">
-                        Page {page} of {Math.ceil(tables.workorders.length / pageSize) || 1}
-                      </span>
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={(page * pageSize) >= tables.workorders.length} 
-                        onClick={() => setPage(p => p + 1)}
-                        className="border-0"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* INCIDENTS TAB */}
-              {activeTab === 'incidents' && (
-               <div className="bg-white rounded shadow-sm" style={{ padding: '0' }}>
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                      <thead className="table-light">
-                        <tr>
-                          <th>ID</th>
-                          <th>Title</th>
-                          <th>Reporter</th>
-                          <th>Status</th>
-                          <th>Submitted</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginated(tables.incidents).map(i => (
-                          <tr key={i.id} className="border-bottom">
-                            <td className="py-2 fw-semibold">{i.id}</td>
-                            <td className="py-2">{i.title}</td>
-                            <td className="py-2">{i.reporter}</td>
-                            <td className="py-2">
-                              <Badge bg={getStatusBadgeVariant(i.status)}>
-                                {i.status}
-                              </Badge>
-                              
-                            </td>
-                            <td className="py-3 text-muted">{i.created_at}</td>
-                          </tr>
-                        ))}
-                        {tables.incidents.length === 0 && (
-                          <tr>
-                            <td colSpan="5" className="text-center py-4 text-muted">
-                              <i className="fas fa-inbox fa-2x mb-2 d-block"></i>
-                              No incident reports found for the selected filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="d-flex justify-content-between align-items-center mt-4">
-                    <div className="text-muted">
-                      Showing {Math.min(pageSize, tables.incidents.length - (page - 1) * pageSize)} of {tables.incidents.length} entries
-                    </div>
-                    <div className="d-flex gap-2">
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={page === 1} 
-                        onClick={() => setPage(p => Math.max(1, p - 1))} 
-                        className="border-0"
-                      >
-                        Previous
-                      </Button>
-                      <span className="align-self-center px-3">
-                        Page {page} of {Math.ceil(tables.incidents.length / pageSize) || 1}
-                      </span>
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={(page * pageSize) >= tables.incidents.length} 
-                        onClick={() => setPage(p => p + 1)} 
-                        className="border-0"
-                      >
-                        Next
-                      </Button>
-                    </div>
+                  <div className="d-flex gap-2">
+                    <Button 
+                      variant="outline-primary" 
+                      className="px-4 py-2 d-flex align-items-center gap-2"
+                      style={{ borderRadius: '8px', fontWeight: '500' }}
+                      onClick={() => {
+                        // Export all work orders
+                        const headers = ['ID', 'Title', 'Category', 'Status', 'Created', 'Assigned', 'Requestee'];
+                        const rows = [headers, ...data.workOrders.map(w => [
+                          w.id, w.title, w.category, w.status, w.created_at, w.assigned, w.requestee
+                        ])];
+                        downloadCSV(`work_orders_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+                      }}
+                    >
+                      <i className="fas fa-file-csv"></i>
+                      Export Work Orders
+                    </Button>
+                    <Button 
+                      variant="outline-success" 
+                      className="px-4 py-2 d-flex align-items-center gap-2"
+                      style={{ borderRadius: '8px', fontWeight: '500' }}
+                      onClick={() => {
+                        // Export incidents
+                        const headers = ['ID', 'Title', 'Reporter', 'Status', 'Submitted'];
+                        const rows = [headers, ...data.incidentReports.map(i => [
+                          i.id, i.title, i.reporter, i.status, i.created_at
+                        ])];
+                        downloadCSV(`incidents_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+                      }}
+                    >
+                      <i className="fas fa-file-excel"></i>
+                      Export Incidents
+                    </Button>
                   </div>
                 </div>
-              )}
-
-              {/* MAINTENANCE TAB */}
-              {activeTab === 'maintenance' && (
-               <div className="bg-white rounded shadow-sm" style={{ padding: '0' }}>
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                      <thead className="table-light">
-                        <tr>
-                          <th>ID</th>
-                          <th>Title</th>
-                          <th>Schedule</th>
-                          <th>Status</th>
-                          <th>Assigned</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginated(tables.maintenance).map(m => (
-                          <tr key={m.id} className="border-bottom">
-                            <td className="py-2 fw-semibold">{m.id}</td>
-                            <td className="py-2">{m.title}</td>
-                            <td className="py-2 text-muted">{m.schedule_date}</td>
-                            <td className="py-2">
-                             <Badge bg={getStatusBadgeVariant(m.status)}>
-                              {m.status}
-                            </Badge>
-                            </td>
-                            <td className="py-2">{m.assigned}</td>
-                          </tr>
-                        ))}
-                        {tables.maintenance.length === 0 && (
-                          <tr>
-                            <td colSpan="5" className="text-center py-4 text-muted">
-                              <i className="fas fa-inbox fa-2x mb-2 d-block"></i>
-                              No maintenance schedules found for the selected filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="d-flex justify-content-between align-items-center mt-4">
-                    <div className="text-muted">
-                      Showing {Math.min(pageSize, tables.maintenance.length - (page - 1) * pageSize)} of {tables.maintenance.length} entries
-                    </div>
-                    <div className="d-flex gap-2">
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={page === 1} 
-                        onClick={() => setPage(p => Math.max(1, p - 1))} 
-                        className="border-0"
-                      >
-                        Previous
-                      </Button>
-                      <span className="align-self-center px-3">
-                        Page {page} of {Math.ceil(tables.maintenance.length / pageSize) || 1}
-                      </span>
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={(page * pageSize) >= tables.maintenance.length} 
-                        onClick={() => setPage(p => p + 1)} 
-                        className="border-0"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ASSETS TAB */}
-              {activeTab === 'assets' && (
-               <div className="bg-white rounded shadow-sm" style={{ padding: '0' }}>
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                      <thead className="table-light">
-                       <tr>
-                          <th>ID</th>
-                          <th>Name</th>
-                          <th>Category</th>
-                          <th>Status</th>
-                          <th>Location</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginated(tables.assets).map(a => (
-                          <tr key={a.id} className="border-bottom">
-                            <td className="py-2 fw-semibold">{a.id}</td>
-                            <td className="py-2">{a.name}</td>
-                            <td className="py-2 text-muted">{a.category}</td>
-                            <td className="py-2">
-
-                              <Badge bg={getStatusBadgeVariant(a.status)}>
-  {a.status.replace('_', ' ')}
-</Badge>
-
-
-                            </td>
-                            <td className="py-3 text-muted">{a.location}</td>
-                          </tr>
-                        ))}
-                        {tables.assets.length === 0 && (
-                          <tr>
-                            <td colSpan="5" className="text-center py-4 text-muted">
-                              <i className="fas fa-inbox fa-2x mb-2 d-block"></i>
-                              No assets found for the selected filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="d-flex justify-content-between align-items-center mt-4">
-                    <div className="text-muted">
-                      Showing {Math.min(pageSize, tables.assets.length - (page - 1) * pageSize)} of {tables.assets.length} entries
-                    </div>
-                    <div className="d-flex gap-2">
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={page === 1} 
-                        onClick={() => setPage(p => Math.max(1, p - 1))} 
-                        className="border-0"
-                      >
-                        Previous
-                      </Button>
-                      <span className="align-self-center px-3">
-                        Page {page} of {Math.ceil(tables.assets.length / pageSize) || 1}
-                      </span>
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={(page * pageSize) >= tables.assets.length} 
-                        onClick={() => setPage(p => p + 1)} 
-                        className="border-0"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* USERS TAB */}
-              {activeTab === 'users' && (
-                <div className="bg-white rounded shadow-sm" style={{ padding: '0' }}>
-                <div className="table-responsive">
-                  <table className="table table-hover mb-0">
-                      <thead className="table-light">
-                        <tr>
-                          <th>ID</th>
-                          <th>Name</th>
-                          <th>Email</th>
-                          <th>Role</th>
-                          <th>Created</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {paginated(tables.users).map(u => (
-                          <tr key={u.id} className="border-bottom">
-                            <td className="py-2 fw-semibold">{u.id}</td>
-                            <td className="py-2">{u.name}</td>
-                            <td className="py-2 text-muted">{u.email}</td>
-                            <td className="py-2">
-                            <Badge bg={getStatusBadgeVariant(u.role)}>
-                            {u.role}
-                          </Badge>
-                            </td>
-                            <td className="py-3 text-muted">{u.created_at}</td>
-                          </tr>
-                        ))}
-                        {tables.users.length === 0 && (
-                          <tr>
-                            <td colSpan="5" className="text-center py-4 text-muted">
-                              <i className="fas fa-inbox fa-2x mb-2 d-block"></i>
-                              No users found for the selected filters
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  <div className="d-flex justify-content-between align-items-center mt-4">
-                    <div className="text-muted">
-                      Showing {Math.min(pageSize, tables.users.length - (page - 1) * pageSize)} of {tables.users.length} entries
-                    </div>
-                    <div className="d-flex gap-2">
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={page === 1} 
-                        onClick={() => setPage(p => Math.max(1, p - 1))} 
-                        className="border-0"
-                      >
-                        Previous
-                      </Button>
-                      <span className="align-self-center px-3">
-                        Page {page} of {Math.ceil(tables.users.length / pageSize) || 1}
-                      </span>
-                      <Button 
-                        variant="outline-secondary" 
-                        size="sm" 
-                        disabled={(page * pageSize) >= tables.users.length} 
-                        onClick={() => setPage(p => p + 1)} 
-                        className="border-0"
-                      >
-                        Next
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              </Card.Body>
+            </Card>
+          </Col>
+        </Row>
       </div>
     </SidebarLayout>
   );

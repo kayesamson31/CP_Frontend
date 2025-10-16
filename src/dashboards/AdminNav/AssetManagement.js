@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { assetService } from '../../services/assetService';
+import { logActivity } from '../../utils/ActivityLogger';
 import {
   Container,
   Row,
@@ -28,6 +29,7 @@ const [personnel, setPersonnel] = useState([]);
 
 
 const [previousAsset, setPreviousAsset] = useState(null);
+
 const [predefinedTasks] = useState([
   'Check-up / Inspection',
   'Cleaning',
@@ -77,6 +79,10 @@ const [incidentTaskForm, setIncidentTaskForm] = useState({
 
 // Modal states for task assignment
 const [showTaskModal, setShowTaskModal] = useState(false);
+const [showMaintenanceHistoryModal, setShowMaintenanceHistoryModal] = useState(false);  
+const [showCombinedHistoryModal, setShowCombinedHistoryModal] = useState(false);
+const [historyAsset, setHistoryAsset] = useState(null);
+const [showIncidentHistoryModal, setShowIncidentHistoryModal] = useState(false);      
 const [newTask, setNewTask] = useState({
   assetId: '',
   assigneeId: '',
@@ -270,6 +276,8 @@ const handleUpdateAsset = async () => {
       setEditingAsset(null);
       
       alert('Asset updated successfully!');
+      // Log activity
+await logActivity('update_asset', `Updated asset: ${editingAsset.name} - Status changed to ${editingAsset.status}`);
     } catch (err) {
       console.error('Error updating asset:', err);
       alert('Failed to update asset. Please try again.');
@@ -298,6 +306,8 @@ const handleAddAsset = async () => {
       });
       
       alert('Asset added successfully!');
+      // Log activity
+await logActivity('add_asset', `Added asset: ${newAsset.name} in ${newAsset.location}`);
     } catch (err) {
       console.error('Error adding asset:', err);
       alert('Failed to add asset. Please try again.');
@@ -377,10 +387,10 @@ const handleBulkUpload = async () => {
       try {
         await assetService.addAsset(asset);
         successCount++;
-        console.log('✓ Uploaded:', asset.name);
+        console.log('âœ“ Uploaded:', asset.name);
       } catch (uploadErr) {
         failCount++;
-        console.error('✗ Failed:', asset.name, uploadErr.message);
+        console.error('âœ— Failed:', asset.name, uploadErr.message);
       }
     }
     
@@ -391,7 +401,8 @@ const handleBulkUpload = async () => {
     setCsvPreview([]);
     
     alert(`Upload complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
-    
+    // Log activity
+await logActivity('bulk_add_assets', `Bulk uploaded ${successCount} assets to system`);
   } catch (err) {
     console.error('CSV Upload Error:', err);
     alert('Failed to upload CSV: ' + err.message);
@@ -510,6 +521,8 @@ const handleCreateTask = async () => {
       
       setShowTaskModal(false);
       alert('Task assigned successfully!');
+      // Log activity
+await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTask.title} to asset ${newTask.assetId}`);
       
     } catch (err) {
       console.error('Error creating task:', err);
@@ -868,7 +881,7 @@ const handleCreateTask = async () => {
   {asset.hasFailedMaintenance && asset.status !== 'Operational' && (
     <div className="d-flex align-items-center mt-1">
       <span className="text-danger" style={{ fontSize: '0.7rem' }}>
-        ▲
+        â–²
       </span>
       <small className="text-danger ms-1" style={{ fontSize: '0.7rem', fontWeight: '500' }}>
         FAILED MAINTENANCE ({asset.failedMaintenanceCount})
@@ -944,9 +957,7 @@ const handleCreateTask = async () => {
                 </Modal.Title>
               </Modal.Header>
               <Modal.Body>
-                <Row>
-                  {/* Left Column - Asset Information */}
-                  <Col lg={8}>
+             
 <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
   <div className="d-flex gap-2">
     <span className={`badge ${
@@ -963,6 +974,19 @@ const handleCreateTask = async () => {
       </span>
     )}
   </div>
+  
+<Button 
+  size="sm" 
+  variant="outline-primary"
+  onClick={() => {
+    setHistoryAsset(selectedAsset);  // Store current asset
+    setSelectedAsset(null);  // Close Asset Details modal
+    setShowCombinedHistoryModal(true);  // Open History modal
+  }}
+>
+  <i className="fas fa-history me-2"></i>
+  View History
+</Button>
 </div>
                     {!isEditing ? (
                       // View Mode
@@ -1007,7 +1031,88 @@ const handleCreateTask = async () => {
       </Form.Text>
     )}
   </Form.Group>
-</div>                
+</div>              
+{/* Active Incidents Section */}
+<div className="mt-4 pt-3 border-top">
+  <div className="d-flex justify-content-between align-items-center mb-3">
+    <h6 className="mb-0">
+      <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
+      Active Incidents
+    </h6>
+    {selectedAsset.incidentReports?.length > 0 && (
+      <Badge bg="danger" pill>{selectedAsset.incidentReports.length}</Badge>
+    )}
+  </div>
+  
+  {selectedAsset.incidentReports?.length > 0 ? (
+    <Row className="g-3">
+      {selectedAsset.incidentReports.slice(0, 3).map((incident, index) => (
+        <Col xs={12} key={index}>
+  <Card className="mb-2 shadow-sm hover-card" style={{ 
+  border: '1px solid #e9ecef',
+  borderLeft: '4px solid ' + (incident.severity === 'High' ? '#dc3545' :
+                              incident.severity === 'Medium' ? '#ffc107' : '#0dcaf0'),
+  borderRadius: '6px' 
+}}>
+           <Card.Body className="p-3">
+  <div className="d-flex justify-content-between align-items-center">
+    <div className="d-flex align-items-center gap-3 flex-grow-1">
+      <div style={{
+        width: '4px',
+        height: '40px',
+        backgroundColor: incident.severity === 'High' ? '#dc3545' :
+                        incident.severity === 'Medium' ? '#ffc107' : '#0dcaf0',
+        borderRadius: '2px'
+      }}></div>
+      
+      <div>
+        <h6 className="mb-1">{incident.type}</h6>
+        <small className="text-muted">
+          {incident.reportedBy} • {formatDate(incident.reportedAt)}
+        </small>
+      </div>
+    </div>
+    
+    <div className="d-flex gap-2 align-items-center">
+      <Badge 
+        bg="light" 
+        text="dark" 
+        className="text-uppercase" 
+        style={{fontSize: '0.7rem', fontWeight: '600'}}
+      >
+        {incident.severity}
+      </Badge>
+      <Badge 
+        bg={incident.status === 'Open' ? 'danger' : 
+            incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}
+        style={{fontSize: '0.7rem'}}
+      >
+        {incident.status}
+      </Badge>
+      <Button 
+        size="sm" 
+        variant="link"
+        onClick={() => handleViewIncidentDetails(incident)}
+        className="text-decoration-none p-1"
+      >
+        <i className="fas fa-chevron-right"></i>
+      </Button>
+    </div>
+  </div>
+</Card.Body>
+          </Card>
+        </Col>
+      ))}
+    </Row>
+  ) : (
+    <div className="text-center py-4 bg-light rounded">
+      <i className="fas fa-check-circle fa-3x mb-3 text-success opacity-25"></i>
+      <p className="mb-0">No active incidents</p>
+      <small className="text-muted">All clear!</small>
+    </div>
+  )}
+</div>
+
                       </div>
                     ) : (
                       // Edit Mode
@@ -1112,94 +1217,7 @@ const handleCreateTask = async () => {
 </div>
                       </div>
                     )}
-
-
-                    {/* Maintenance History */}
-                  <div className="mt-4 pt-3 border-top">
-  <h6 className="mb-3">
-    <i className="fas fa-history me-2"></i>
-    Maintenance History
-  </h6>
-                      <Table bordered size="sm" className="mt-2">
-                        <thead>
-                          <tr>
-                            <th>Date</th>
-                            <th>Tasks</th>
-                            <th>Assigned</th>
-                            <th>Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {selectedAsset.maintenanceHistory?.length > 0 ? (
-                            selectedAsset.maintenanceHistory.map((entry, idx) => (
-                              <tr key={idx}>
-                                <td>{formatDate(entry.date)}</td>
-                                <td>{entry.task}</td>
-                                <td>{entry.assigned}</td>
-                                <td>
-                                  <Badge bg={entry.status === 'completed' ? 'success' : entry.status === 'failed' ? 'danger' : 'secondary'}>
-                                    {entry.status}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan="4" className="text-center text-muted">
-                                No maintenance history available
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </Table>
-                    </div>
-
-                    {/* Incident History */}
-{selectedAsset.incidentHistory && selectedAsset.incidentHistory.length > 0 && (
-  <div className="mt-4 pt-3 border-top">
-    <h6 className="mb-3">
-      <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
-      Incident Report History
-    </h6>
-    <Table bordered size="sm" className="mt-2">
-      <thead>
-        <tr>
-          <th>Date Reported</th>
-          <th>Type</th>
-          <th>Severity</th>
-          <th>Reported By</th>
-          <th>Status</th>
-        </tr>
-      </thead>
-     <tbody>
-  {selectedAsset.incidentHistory.map((incident, idx) => (
-    <tr key={idx}>
-      <td>{formatDate(incident.reportedAt)}</td>  {/* <-- CHANGED THIS LINE */}
-      <td>{incident.type}</td>
-      <td>
-        <Badge bg={
-          incident.severity === 'Critical' ? 'danger' :
-          incident.severity === 'Major' ? 'warning' : 'info'
-        }>
-          {incident.severity}
-        </Badge>
-      </td>
-      <td>{incident.reportedBy}</td>
-      <td>
-        <Badge bg={
-          incident.status === 'Reported' ? 'danger' : 
-          incident.status === 'Resolved' ? 'success' : 'secondary'
-        }>
-          {incident.status}
-        </Badge>
-      </td>
-    </tr>
-  ))}
-</tbody>
-    </Table>
-  </div>
-)}
-                    
+          
                     {/* Maintenance Schedule Section - Only show for Under Maintenance assets */}
                     {selectedAsset.status === 'Under Maintenance' && selectedAsset.maintenanceSchedule && (
                       <Card className="mt-4">
@@ -1267,82 +1285,6 @@ const handleCreateTask = async () => {
                         </Card.Body>
                       </Card>
                     )}
-                  </Col>
-
-                 {/* Right Column - Incident Reports Panel */}
-{/* Right Column - Incident Reports Panel */}
-<Col lg={4}>
-  <div className="h-100 border-start ps-4">
-    <div className="d-flex justify-content-between align-items-center mb-3">
-      <h6 className="mb-0">
-        <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
-        Incident Reports
-      </h6>
-      {selectedAsset.incidentReports?.length > 0 && (
-        <Badge bg="danger">{selectedAsset.incidentReports.length}</Badge>
-      )}
-    </div>
-    
-    <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-      {selectedAsset.incidentReports?.length > 0 ? (
-       selectedAsset.incidentReports.map((incident, index) => (
-  <div key={index} className="mb-3 p-3 border rounded shadow-sm bg-white">
-        <div className="d-flex justify-content-between align-items-start mb-2">
-  <div>
-    <strong className="text-danger">{incident.reportedBy}</strong>
-    <div>
-      <small className="text-muted">
-        {formatDate(incident.reportedAt)} 
-      </small>
-    </div>
-  </div>
-  <div className="text-end">
-    <Badge bg={incident.status === 'Open' ? 'danger' : incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
-      {incident.status}
-    </Badge>
-  </div>
-</div>
-            
-            <div className="mb-2">
-              <span className="fw-bold">{incident.type}</span>
-              <span className={`badge ms-2 ${
-                incident.severity === 'High' ? 'bg-danger' :
-                incident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
-              }`}>
-                {incident.severity}
-              </span>
-            </div>
-            
-            <p className="small mb-3 text-muted">
-              {incident.description.length > 80 
-                ? `${incident.description.substring(0, 80)}...` 
-                : incident.description
-              }
-            </p>
-            
-            <Button 
-              size="sm" 
-              variant="outline-primary"
-              onClick={() => handleViewIncidentDetails(incident)}
-              className="w-100"
-            >
-              View Details
-            </Button>
-          </div>
-        ))
-     ) : (
-  <div className="text-center text-muted py-5">
-    <i className="fas fa-clipboard-check fa-3x mb-3 opacity-25"></i>
-    <p className="mb-0">No incident reports</p>
-    <small>All clear!</small>
-  </div>
-)}
-    </div>
-  </div>
-</Col>
-
-
-                </Row>
               </Modal.Body>
               <Modal.Footer>
                 {!isEditing ? (
@@ -1579,79 +1521,90 @@ const handleCreateTask = async () => {
   <Modal.Header closeButton>
     <Modal.Title>Incident Report Details</Modal.Title>
   </Modal.Header>
-  <Modal.Body>
-    {selectedIncident && (
-      <>
-        <Row className="mb-3">
-  <Col md={6}>
-    <strong>Reported By:</strong>
-    <p>{selectedIncident.reportedBy}</p>
-  </Col>
-  <Col md={6}>
-    <strong>Date Reported:</strong>
-    <p>{formatDate(selectedIncident.reportedAt)}</p>  
-  </Col>
-</Row>
-        
-        
-        <Row className="mb-3">
-          <Col md={6}>
-            <strong>Incident Type:</strong>
-            <p>{selectedIncident.type}</p>
-          </Col>
-          <Col md={6}>
-            <strong>Severity:</strong>
-            <span className={`badge ${
-              selectedIncident.severity === 'High' ? 'bg-danger' :
-              selectedIncident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
-            }`}>
-              {selectedIncident.severity}
-            </span>
-          </Col>
-        </Row>
-        
-        <div className="mb-3">
-          <strong>Description:</strong>
-          <div className="border rounded p-3 bg-light mt-2">
-            {selectedIncident.description}
+<Modal.Body>
+  {selectedIncident && (
+    <div>
+      {/* Integrated Header with all info */}
+      <div className="mb-3">
+        <div className="d-flex justify-content-between align-items-start mb-2">
+          <div className="flex-grow-1">
+            <h5 className="mb-1">{selectedIncident.type}</h5>
+            <div className="d-flex align-items-center gap-2 text-muted" style={{fontSize: '0.875rem'}}>
+              <span><i className="fas fa-user me-1"></i>{selectedIncident.reportedBy}</span>
+              <span>•</span>
+              <span>{formatDate(selectedIncident.reportedAt)}</span>
+            </div>
           </div>
+          <span 
+            className={`badge bg-${selectedIncident.severity === 'High' ? 'danger' :
+                selectedIncident.severity === 'Medium' ? 'warning' : 'info'}`}
+            style={{fontSize: '0.75rem', fontWeight: '600', padding: '4px 12px'}}
+          >
+            {selectedIncident.severity.toUpperCase()}
+          </span>
         </div>
-        
-        {selectedIncident.assignedTaskId && (
-          <Alert variant="info">
-            <strong>Task Assigned:</strong> This incident has been assigned to maintenance task #{selectedIncident.assignedTaskId}
-          </Alert>
-        )}
+
+        {/* Description directly below - no separate section */}
+        <div className="mt-3 p-3 bg-light rounded">
+          <p className="mb-0 text-dark">{selectedIncident.description}</p>
+        </div>
+      </div>
+
+      {/* Status Alert if assigned */}
+      {selectedIncident.assignedTaskId && (
+        <Alert variant="success" className="mb-0">
+          <i className="fas fa-check-circle me-2"></i>
+          <strong>Task Assigned:</strong> This incident has been assigned to maintenance task #{selectedIncident.assignedTaskId}
+        </Alert>
+      )}
+    </div>
+  )}
+</Modal.Body>
+<Modal.Footer className="d-flex justify-content-between">
+  <Button 
+    variant="outline-secondary" 
+    size="sm"
+    onClick={() => {
+      setShowIncidentDetailsModal(false);
+      setSelectedAsset(previousAsset);
+      setPreviousAsset(null);
+    }}
+  >
+    <i className="fas fa-arrow-left me-2"></i>
+    Back
+  </Button>
+  
+  <div className="d-flex gap-2">
+    {(selectedIncident?.status === 'Reported' || selectedIncident?.status === 'Open') && (
+      <>
+        <Button 
+          variant="outline-danger" 
+          size="sm"
+          onClick={handleDismissIncident}
+        >
+          Dismiss
+        </Button>
+        <Button 
+          variant="primary"
+          onClick={handleAssignIncidentTask}
+        >
+          <i className="fas fa-tasks me-2"></i>
+          Assign Task
+        </Button>
       </>
     )}
-  </Modal.Body>
-<Modal.Footer>
-  <Button variant="outline-secondary" onClick={() => {
-    setShowIncidentDetailsModal(false);
-    setSelectedAsset(previousAsset);
-    setPreviousAsset(null);
-  }}>
-    <i className="fas fa-arrow-left me-2"></i>
-    Back to Asset Details
-  </Button>
-  <Button variant="secondary" onClick={() => {
-    setShowIncidentDetailsModal(false);
-    setPreviousAsset(null);
-  }}>
-    Close
-  </Button>
-  {(selectedIncident?.status === 'Reported' || selectedIncident?.status === 'Open') && (
-    <>
-      <Button variant="warning" onClick={handleAssignIncidentTask}>
-        <i className="fas fa-tasks me-2"></i>
-        Assign as Maintenance Task
+    {(selectedIncident?.status !== 'Reported' && selectedIncident?.status !== 'Open') && (
+      <Button 
+        variant="secondary"
+        onClick={() => {
+          setShowIncidentDetailsModal(false);
+          setPreviousAsset(null);
+        }}
+      >
+        Close
       </Button>
-      <Button variant="outline-danger" onClick={handleDismissIncident}>
-        <i className="fas fa-times me-2"></i>
-        Dismiss Incident
-      </Button>
-    </>
-  )}
+    )}
+  </div>
 </Modal.Footer>
 </Modal>
 
@@ -1661,14 +1614,7 @@ const handleCreateTask = async () => {
     <Modal.Title>Assign Maintenance Task from Incident</Modal.Title>
   </Modal.Header>
   <Modal.Body>
-      {/* DEBUG INFO - Remove after fixing */}
-  <div className="alert alert-info">
-    <strong>Debug Info:</strong><br/>
-    Total Assets: {assets.length}<br/>
-    Operational Assets: {assets.filter(a => a.status === 'Operational').length}<br/>
-    Total Personnel: {personnel.length}
-  </div>
-
+  
     {selectedIncident && (
       <>
         <Alert variant="info">
@@ -1747,6 +1693,242 @@ const handleCreateTask = async () => {
       Assign Task
     </Button>
   </Modal.Footer>
+</Modal>
+{/* Maintenance History Modal */}
+<Modal 
+  show={showMaintenanceHistoryModal} 
+  onHide={() => setShowMaintenanceHistoryModal(false)} 
+  size="lg"
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Complete Maintenance History</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <Table bordered hover size="sm">
+      <thead className="table-light">
+        <tr>
+          <th>Date</th>
+          <th>Task</th>
+          <th>Assigned To</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {selectedAsset?.maintenanceHistory?.map((entry, idx) => (
+          <tr key={idx}>
+            <td>{formatDate(entry.date)}</td>
+            <td>{entry.task}</td>
+            <td>{entry.assigned}</td>
+            <td>
+              <Badge bg={
+                entry.status === 'completed' ? 'success' : 
+                entry.status === 'failed' ? 'danger' : 'secondary'
+              }>
+                {entry.status}
+              </Badge>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowMaintenanceHistoryModal(false)}>
+      Close
+    </Button>
+  </Modal.Footer>
+</Modal>
+
+{/* Incident History Modal */}
+<Modal 
+  show={showIncidentHistoryModal} 
+  onHide={() => setShowIncidentHistoryModal(false)} 
+  size="lg"
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Complete Incident History</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <Table bordered hover size="sm">
+      <thead className="table-light">
+        <tr>
+          <th>Date</th>
+          <th>Type</th>
+          <th>Severity</th>
+          <th>Reported By</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {selectedAsset?.incidentHistory?.map((incident, idx) => (
+          <tr key={idx}>
+            <td>{formatDate(incident.reportedAt)}</td>
+            <td>{incident.type}</td>
+            <td>
+              <Badge bg={
+                incident.severity === 'Critical' ? 'danger' :
+                incident.severity === 'Major' ? 'warning' : 'info'
+              }>
+                {incident.severity}
+              </Badge>
+            </td>
+            <td>{incident.reportedBy}</td>
+            <td>
+              <Badge bg={
+                incident.status === 'Reported' ? 'danger' : 
+                incident.status === 'Resolved' ? 'success' : 'secondary'
+              }>
+                {incident.status}
+              </Badge>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </Table>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowIncidentHistoryModal(false)}>
+      Close
+    </Button>
+  </Modal.Footer>
+</Modal>
+{/* Combined History Modal */}
+<Modal 
+  show={showCombinedHistoryModal} 
+  onHide={() => {
+    setShowCombinedHistoryModal(false);
+    setHistoryAsset(null);  // Clear history asset
+  }} 
+  size="xl"
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Asset History</Modal.Title>
+  </Modal.Header>
+<Modal.Body>
+  {/* Maintenance History Section */}
+  <div className="mb-4">
+    <div className="d-flex justify-content-between align-items-center mb-3">
+      <h5 className="mb-0">
+        <i className="fas fa-tools me-2 text-primary"></i>
+        Maintenance History
+      </h5>
+      {historyAsset?.maintenanceHistory?.length > 0 && (  // CHANGED
+        <Badge bg="secondary">{historyAsset.maintenanceHistory.length} records</Badge>  // CHANGED
+      )}
+    </div>
+    
+    {historyAsset?.maintenanceHistory?.length > 0 ? (  // CHANGED
+      <Table bordered hover size="sm">
+        <thead className="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Task</th>
+            <th>Assigned To</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {historyAsset.maintenanceHistory.map((entry, idx) => (  // CHANGED
+            <tr key={idx}>
+              <td>{formatDate(entry.date)}</td>
+              <td>{entry.task}</td>
+              <td>{entry.assigned}</td>
+              <td>
+                <Badge bg={
+                  entry.status === 'completed' ? 'success' : 
+                  entry.status === 'failed' ? 'danger' : 'secondary'
+                }>
+                  {entry.status}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    ) : (
+      <Alert variant="light" className="text-center">
+        <i className="fas fa-clipboard-list fa-2x mb-2 opacity-25"></i>
+        <p className="mb-0">No maintenance history available</p>
+      </Alert>
+    )}
+  </div>
+
+  {/* Incident History Section */}
+  <div>
+    <div className="d-flex justify-content-between align-items-center mb-3">
+      <h5 className="mb-0">
+        <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
+        Incident History
+      </h5>
+      {historyAsset?.incidentHistory?.length > 0 && (  // CHANGED
+        <Badge bg="secondary">{historyAsset.incidentHistory.length} records</Badge>  // CHANGED
+      )}
+    </div>
+    
+    {historyAsset?.incidentHistory?.length > 0 ? (  // CHANGED
+      <Table bordered hover size="sm">
+        <thead className="table-light">
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Severity</th>
+            <th>Reported By</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {historyAsset.incidentHistory.map((incident, idx) => (  // CHANGED
+            <tr key={idx}>
+              <td>{formatDate(incident.reportedAt)}</td>
+              <td>{incident.type}</td>
+              <td>
+                <Badge bg={
+                  incident.severity === 'Critical' ? 'danger' :
+                  incident.severity === 'Major' ? 'warning' : 'info'
+                }>
+                  {incident.severity}
+                </Badge>
+              </td>
+              <td>{incident.reportedBy}</td>
+              <td>
+                <Badge bg={
+                  incident.status === 'Reported' ? 'danger' : 
+                  incident.status === 'Resolved' ? 'success' : 'secondary'
+                }>
+                  {incident.status}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </Table>
+    ) : (
+      <Alert variant="light" className="text-center">
+        <i className="fas fa-check-circle fa-2x mb-2 text-success opacity-25"></i>
+        <p className="mb-0">No incident history available</p>
+      </Alert>
+    )}
+  </div>
+</Modal.Body>
+<Modal.Footer>
+  <Button 
+    variant="outline-secondary" 
+    onClick={() => {
+      setShowCombinedHistoryModal(false);
+      setSelectedAsset(historyAsset);  // Restore Asset Details
+      setHistoryAsset(null);
+    }}
+  >
+    <i className="fas fa-arrow-left me-2"></i>
+    Back to Asset Details
+  </Button>
+  <Button variant="secondary" onClick={() => {
+    setShowCombinedHistoryModal(false);
+    setHistoryAsset(null);
+  }}>
+    Close
+  </Button>
+</Modal.Footer>
 </Modal>
 
     </SidebarLayout>
