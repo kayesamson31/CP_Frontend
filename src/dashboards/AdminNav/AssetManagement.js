@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { assetService } from '../../services/assetService';
 import { logActivity } from '../../utils/ActivityLogger';
+import { AuthUtils } from '../../utils/AuthUtils';
 import {
   Container,
   Row,
@@ -148,7 +149,7 @@ const handleDismissIncident = async () => {
     try {
       // Update in database
       await assetService.updateIncidentStatus(selectedIncident.id, 'Dismissed');
-      
+      await logActivity('dismiss_incident', `Dismissed incident: ${selectedIncident.type} - ${selectedIncident.severity}`);
       // Refresh assets to get updated data
       await fetchAssets();
       
@@ -195,10 +196,10 @@ const handleSubmitIncidentTask = async () => {
       };
       
       await assetService.createMaintenanceTask(taskData);
-      
       // Update incident status to "Assigned to Task"
       await assetService.updateIncidentStatus(selectedIncident.id, 'Assigned');
-      
+      // Log activity
+      await logActivity('assign_maintenance_task', `Assigned maintenance task from incident: ${selectedIncident.type} - ${selectedIncident.severity} Priority to ${assignedPersonnel.name}`);
       // Refresh assets
       await fetchAssets();
       
@@ -433,9 +434,10 @@ const handleDownloadTemplate = () => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+  
 };
 // Handle export to CSV
-const handleExportReport = () => {
+const handleExportReport = async () => {
   try {
     // Prepare CSV headers
     const headers = [
@@ -480,6 +482,7 @@ const handleExportReport = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    await logActivity('export_assets_report', `Exported assets report with ${filteredAssets.length} records`);
     
   } catch (err) {
     console.error('Error exporting report:', err);

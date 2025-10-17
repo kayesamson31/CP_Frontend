@@ -2,6 +2,8 @@
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { assetService } from '../../services/assetService';
+import { supabase } from '../../supabaseClient';
+import Papa from 'papaparse';
 import {
   Container,
   Row,
@@ -138,56 +140,172 @@ const handleBulkUpload = async () => {
     alert('Please select a CSV file first.');
     return;
   }
-  
+
   setUploadingAssets(true);
   
   try {
+    // Get current user's organization ID from Supabase Auth
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (!user || authError) {
+      throw new Error('User not authenticated - please log in again.');
+    }
+
+    const userEmail = user.email;
+
+    // Get organization_id from database
+    const { data: userData, error: userDataError } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
+
+    if (userDataError || !userData) {
+      throw new Error('User data not found in database');
+    }
+
+    const orgId = userData.organization_id;
+
+    // Read CSV file
     const reader = new FileReader();
     reader.onload = async (e) => {
-      const text = e.target.result;
-      const lines = text.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
-      
-      const newAssets = [];
-      for (let i = 1; i < lines.length; i++) {
-        if (lines[i].trim()) {
-          const values = lines[i].split(',').map(v => v.trim());
-          const asset = {
-            name: values[headers.indexOf('name')] || values[0],
-            category: values[headers.indexOf('category')] || values[1],
-            location: values[headers.indexOf('location')] || values[2],
-            status: values[headers.indexOf('status')] || values[3] || 'Operational',
-            acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || '',
-            nextMaintenance: values[headers.indexOf('nextMaintenance')] || values[5] || ''
-          };
-          newAssets.push(asset);
+      try {
+        const csvContent = e.target.result;
+
+        // Parse CSV content using Papa.parse
+        const parseResult = Papa.parse(csvContent, { 
+          header: true, 
+          skipEmptyLines: true,
+          transformHeader: (header) => header.trim()
+        });
+
+        if (parseResult.errors.length > 0) {
+          console.error('CSV Parse Errors:', parseResult.errors);
         }
+
+        const csvRows = parseResult.data.filter(row => 
+          row['Asset Name'] && row['Asset Name'].trim() !== '' && 
+          row.Category && row.Category.trim() !== ''
+        );
+
+        if (csvRows.length === 0) {
+          throw new Error('No valid asset data found in CSV');
+        }
+
+        // Get unique categories from CSV
+        const uniqueCategories = [...new Set(csvRows.map(row => row.Category.trim()))];
+        console.log('Categories to process:', uniqueCategories);
+
+        // Create/get asset categories first
+        const categoryMap = {};
+        
+        for (const categoryName of uniqueCategories) {
+          try {
+            // Try to get existing category first
+            const { data: existingCategory } = await supabase
+              .from('asset_categories')
+              .select('category_id, category_name')
+              .eq('category_name', categoryName)
+              .single();
+
+            if (existingCategory) {
+              categoryMap[categoryName] = existingCategory.category_id;
+            } else {
+              // Create new category
+              const { data: newCategory, error: categoryError } = await supabase
+                .from('asset_categories')
+                .insert([{ category_name: categoryName }])
+                .select('category_id, category_name')
+                .single();
+
+              if (categoryError) {
+                console.error(`Failed to create category ${categoryName}:`, categoryError);
+                throw new Error(`Failed to create category: ${categoryName}`);
+              }
+
+              categoryMap[categoryName] = newCategory.category_id;
+            }
+          } catch (categoryError) {
+            console.error(`Error processing category ${categoryName}:`, categoryError);
+            throw new Error(`Error processing category: ${categoryName}`);
+          }
+        }
+
+        console.log('Category mapping:', categoryMap);
+
+        // Prepare assets for insertion
+        const assetsToInsert = csvRows.map((row, index) => ({
+          asset_code: `${row['Asset Name'].trim().replace(/\s+/g, '_')}_${Date.now()}_${index}`,
+          asset_category_id: categoryMap[row.Category.trim()],
+          asset_status: (row.Status || 'operational').toLowerCase(),
+          location: row.Location ? row.Location.trim() : 'Not specified',
+          organization_id: orgId
+        }));
+
+        console.log('Assets to insert:', assetsToInsert);
+
+        // Insert assets one by one to handle individual failures
+        const insertedAssets = [];
+        const failedAssets = [];
+
+        for (const assetData of assetsToInsert) {
+          try {
+            const { data, error } = await supabase
+              .from('assets')
+              .insert([assetData])
+              .select()
+              .single();
+
+            if (error) {
+              console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
+              failedAssets.push({ asset_code: assetData.asset_code, error: error.message });
+            } else {
+              insertedAssets.push(data);
+            }
+          } catch (insertError) {
+            console.error(`Error inserting asset ${assetData.asset_code}:`, insertError);
+            failedAssets.push({ asset_code: assetData.asset_code, error: insertError.message });
+          }
+        }
+
+        const insertedCount = insertedAssets.length;
+        const failedCount = failedAssets.length;
+
+        // Refresh assets list
+        await fetchAssets();
+
+        // Close modal and reset
+        setShowBulkUploadModal(false);
+        setCsvFile(null);
+        setCsvPreview([]);
+        
+        // Show detailed results
+        let resultMessage = `Asset upload completed!\n\n`;
+        resultMessage += `✓ Successfully inserted: ${insertedCount} assets\n`;
+        if (failedCount > 0) resultMessage += `✗ Failed: ${failedCount} assets\n`;
+        
+        alert(resultMessage);
+        
+      } catch (innerError) {
+        console.error('Error processing CSV:', innerError);
+        alert(`Error: ${innerError.message}`);
       }
-      
-      // You would normally call your API here
-      // await assetService.bulkUploadAssets(newAssets);
-      
-      alert(`Successfully prepared ${newAssets.length} assets for upload!`);
-      setShowBulkUploadModal(false);
-      setCsvFile(null);
-      setCsvPreview([]);
-      await fetchAssets();
     };
+
     reader.readAsText(csvFile);
     
-  } catch (err) {
-    console.error('Error uploading CSV:', err);
-    alert('Failed to upload CSV. Please check the format and try again.');
+  } catch (error) {
+    console.error('Error processing asset CSV:', error);
+    alert(`Error: ${error.message}`);
   } finally {
     setUploadingAssets(false);
   }
 };
 
-// Download template
 const downloadTemplate = () => {
-  const template = `name,category,location,status,acquisitionDate,nextMaintenance
-Laptop Dell XPS,Computer,Office Floor 1,Operational,2024-01-15,2024-06-15
-Printer HP LaserJet,Office Equipment,Reception,Operational,2024-02-20,2024-07-20`;
+  const template = `Asset Name,Category,Location,Status
+Laptop Dell XPS,Computer,Office Floor 1,Operational
+Printer HP LaserJet,Office Equipment,Reception,Operational
+Monitor Samsung,Computer,Office Floor 2,Operational`;
 
   const blob = new Blob([template], { type: 'text/csv' });
   const url = window.URL.createObjectURL(blob);

@@ -74,7 +74,7 @@ if (taskType === 'maintenance_task') {
       .select();
 
     if (error) throw error;
-    
+    await logActivity('request_task_extension', `Requested extension for maintenance task #${taskId} from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
     try {
       await supabase.from('notifications').insert({
         notification_type_id: 3, // maintenance_task_update
@@ -93,10 +93,6 @@ if (taskType === 'maintenance_task') {
     }
 
     return { success: true, data: data?.[0] };
-    // Log activity - Task extension request
-await logActivity('request_task_extension', `Requested extension for maintenance task #${taskId} from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
-    // Log activity - Maintenance task status update
-await logActivity('update_task_status', `Updated maintenance task #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);    
   }
 
   // Regular status update for maintenance tasks (non-extension)
@@ -186,7 +182,7 @@ try {
 } catch (notifError) {
   console.error('Failed to create admin notification:', notifError);
 }
-
+await logActivity('update_task_status', `Updated maintenance task #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);
 return { success: true, data: data?.[0] };
 }  // ← This closes the maintenance_task if block
 
@@ -230,7 +226,6 @@ return { success: true, data: data?.[0] };
       if (workOrderError) throw workOrderError;
       return { success: true, data: workOrderData?.[0] };
       // Log activity - Task extension request
-    await logActivity('request_task_extension', `Requested extension for work order #${taskId} from ${new Date(currentWO.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
     }
 
     // Regular status update (not extension)
@@ -261,10 +256,10 @@ return { success: true, data: data?.[0] };
     } catch (detailsErr) {
       console.warn('Work order details update failed, but continuing...');
     }
-
+await logActivity('update_task_status', `Updated work order #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);
     return { success: true, data: workOrderData?.[0] || workOrderData };
     // Log activity - Work order status update
-await logActivity('update_task_status', `Updated work order #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);  } catch (error) {
+} catch (error) {
     console.error('Error updating task status:', error);
     return { success: false, error: error.message };
   }

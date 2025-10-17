@@ -631,15 +631,11 @@ const processProblematicAssets = (incidents, assets) => {
 export default function Reports() {
   // State management
   const [period, setPeriod] = useState('monthly');
-  const [activeTab, setActiveTab] = useState('workorders');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
   // Search & filters
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
 // Data state
 const [data, setData] = useState({
   workOrders: [],
@@ -652,9 +648,6 @@ const [data, setData] = useState({
   performanceMetrics: null
 });
 
-  // Pagination
-  const [pageSize] = useState(10);
-  const [page, setPage] = useState(1);
 
 const fetchAllData = async (showLoading = true) => {
   if (showLoading) setIsLoading(true);
@@ -709,10 +702,6 @@ const fetchAllData = async (showLoading = true) => {
   useEffect(() => {
     fetchAllData();
   }, [period]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [activeTab, search, statusFilter, categoryFilter, period]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
@@ -785,73 +774,7 @@ useEffect(() => {
   };
 }, [period]);
 
-  // Filtering logic
-  const filterTable = (rows) => {
-    return rows.filter(r => {
-      // Search filter
-      const q = search.trim().toLowerCase();
-      if (q) {
-        const searchableText = JSON.stringify(r).toLowerCase();
-        if (!searchableText.includes(q)) return false;
-      }
 
-      // Status filter
-      if (statusFilter !== 'all') {
-        const itemStatus = r.status || r.role;
-        if (itemStatus !== statusFilter) return false;
-      }
-
-      // Category filter
-      if (categoryFilter !== 'all' && r.category && r.category !== categoryFilter) {
-        return false;
-      }
-
-      // Period filter
-      const checkDate = r.created_at || r.schedule_date || null;
-      if (checkDate) {
-        const now = new Date();
-        const d = new Date(checkDate);
-        const diffDays = Math.floor((now - d) / (1000 * 60 * 60 * 24));
-        
-        if (period === 'today' && diffDays > 1) return false;
-        if (period === 'weekly' && diffDays > 7) return false;
-        if (period === 'monthly' && diffDays > 31) return false;
-        if (period === 'yearly' && diffDays > 365) return false;
-      }
-
-      return true;
-    });
-  };
-
-  // Filtered and paginated data
-  const tables = useMemo(() => ({
-    workorders: filterTable(data.workOrders),
-    incidents: filterTable(data.incidentReports),
-    maintenance: filterTable(data.maintenanceSchedules),
-    assets: filterTable(data.assets),
-    users: filterTable(data.users)
-  }), [data, search, statusFilter, categoryFilter, period]);
-
-  const paginated = (tableData) => {
-    const start = (page - 1) * pageSize;
-    return tableData.slice(start, start + pageSize);
-  };
-
-  // Export function
-  const exportCurrentTabCSV = () => {
-    const tableData = tables[activeTab] || [];
-    if (!tableData.length) {
-      alert('No data to export for this view.');
-      return;
-    }
-    const headers = Object.keys(tableData[0]);
-    const rows = [headers, ...tableData.map(item => headers.map(h => item[h] ?? ''))];
-    const filename = `report_${activeTab}_${period}_${new Date().toISOString().split('T')[0]}.csv`;
-    downloadCSV(filename, rows);
-  };
-
-  // Get unique categories for filter
-  const categoryOptions = Array.from(new Set(data.workOrders.map(w => w.category))).filter(Boolean);
 const chartData = useMemo(() => {
   if (!data.analytics) return null;
   
@@ -890,35 +813,52 @@ const chartData = useMemo(() => {
                 </small>
               </div>
             </div>
-            <div className="d-flex gap-2">
-             
-              <Form.Select 
-                value={period} 
-                onChange={(e) => setPeriod(e.target.value)}
-                style={{ minWidth: '120px', fontSize: '0.875rem' }}
-                className="border-0 shadow-sm"
-                size="sm"
-              >
-                {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </Form.Select>
-              <Button 
-                variant="outline-success" 
-                onClick={exportCurrentTabCSV}
-                className="px-3 py-2 shadow-sm d-flex align-items-center gap-2"
-                style={{ 
-                  fontWeight: '500', 
-                  fontSize: '0.875rem',
-                  borderColor: '#198754',
-                  color: '#198754',
-                  backgroundColor: 'white',
-                  borderRadius: '8px',
-                  border: '1px solid #198754',
-                  whiteSpace: 'nowrap'
-                }}
-              >
-                Export CSV
-              </Button>
-            </div>
+<div className="d-flex gap-2 align-items-center">
+  <Form.Select 
+    value={period} 
+    onChange={(e) => setPeriod(e.target.value)}
+    style={{ width: '150px', fontSize: '0.875rem',height: '38px' }}
+    className="border-0 shadow-sm"
+    size="sm"
+  >
+    {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+  </Form.Select>
+  
+  {/* Export Buttons */}
+  <Button 
+    variant="outline-primary" 
+    size="sm"
+    className="px-3 py-2"
+    style={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+    onClick={() => {
+      const headers = ['ID', 'Title', 'Category', 'Status', 'Created', 'Assigned', 'Requestee'];
+      const rows = [headers, ...data.workOrders.map(w => [
+        w.id, w.title, w.category, w.status, w.created_at, w.assigned, w.requestee
+      ])];
+      downloadCSV(`work_orders_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+    }}
+  >
+    <i className="fas fa-file-csv me-1"></i>
+    Work Orders
+  </Button>
+  
+  <Button 
+    variant="outline-success" 
+    size="sm"
+    className="px-3 py-2"
+    style={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+    onClick={() => {
+      const headers = ['ID', 'Title', 'Reporter', 'Status', 'Submitted'];
+      const rows = [headers, ...data.incidentReports.map(i => [
+        i.id, i.title, i.reporter, i.status, i.created_at
+      ])];
+      downloadCSV(`incidents_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+    }}
+  >
+    <i className="fas fa-file-excel me-1"></i>
+    Incidents
+  </Button>
+</div>
           </div>
 
           {/* Error Alert */}
@@ -1216,55 +1156,6 @@ const chartData = useMemo(() => {
           </>
         )}
 
-        {/* Export Section */}
-        <Row className="g-3 mb-4">
-          <Col>
-            <Card className="border-0 shadow-sm" style={{ borderRadius: '12px' }}>
-              <Card.Body className="p-4">
-                <div className="d-flex justify-content-between align-items-center">
-                  <div>
-                    <h5 className="mb-1 fw-semibold">Export Reports</h5>
-                    <p className="text-muted mb-0" style={{ fontSize: '0.9rem' }}>Download comprehensive reports of your data</p>
-                  </div>
-                  <div className="d-flex gap-2">
-                    <Button 
-                      variant="outline-primary" 
-                      className="px-4 py-2 d-flex align-items-center gap-2"
-                      style={{ borderRadius: '8px', fontWeight: '500' }}
-                      onClick={() => {
-                        // Export all work orders
-                        const headers = ['ID', 'Title', 'Category', 'Status', 'Created', 'Assigned', 'Requestee'];
-                        const rows = [headers, ...data.workOrders.map(w => [
-                          w.id, w.title, w.category, w.status, w.created_at, w.assigned, w.requestee
-                        ])];
-                        downloadCSV(`work_orders_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
-                      }}
-                    >
-                      <i className="fas fa-file-csv"></i>
-                      Export Work Orders
-                    </Button>
-                    <Button 
-                      variant="outline-success" 
-                      className="px-4 py-2 d-flex align-items-center gap-2"
-                      style={{ borderRadius: '8px', fontWeight: '500' }}
-                      onClick={() => {
-                        // Export incidents
-                        const headers = ['ID', 'Title', 'Reporter', 'Status', 'Submitted'];
-                        const rows = [headers, ...data.incidentReports.map(i => [
-                          i.id, i.title, i.reporter, i.status, i.created_at
-                        ])];
-                        downloadCSV(`incidents_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
-                      }}
-                    >
-                      <i className="fas fa-file-excel"></i>
-                      Export Incidents
-                    </Button>
-                  </div>
-                </div>
-              </Card.Body>
-            </Card>
-          </Col>
-        </Row>
       </div>
     </SidebarLayout>
   );
