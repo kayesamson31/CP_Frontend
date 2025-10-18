@@ -1,17 +1,18 @@
-// System Administrator Reports - Dynamic Data Implementation
+// System Administrator Reports - Enhanced with Visual Analytics
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
+import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function SysadReports() {
   const [dateFrom, setDateFrom] = useState('2024-12-01');
   const [dateTo, setDateTo] = useState('2024-12-15');
   const [eventTypeFilter, setEventTypeFilter] = useState('all');
+  const [dateRange, setDateRange] = useState('monthly');
   const [searchTerm, setSearchTerm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState(null);
   
-  // State for dynamic data
   const [systemSummary, setSystemSummary] = useState({
     successfulLogins: 0,
     failedLogins: 0,
@@ -22,184 +23,265 @@ export default function SysadReports() {
   const [securityEvents, setSecurityEvents] = useState([]);
   const [error, setError] = useState(null);
 
-  // Simulate API call with realistic data
+  // NEW: Chart data states
+  const [loginTrendData, setLoginTrendData] = useState([]);
+  const [eventTypeDistribution, setEventTypeDistribution] = useState([]);
+  const [topUsersData, setTopUsersData] = useState([]);
+
+  const COLORS = ['#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6c757d'];
+
   const fetchReportsData = async () => {
-  setIsLoading(true);
-  setError(null);
-  
-  try {
-    // ✅ Get current user's organization
-    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    if (!currentUser || !currentUser.organizationId) {
-      throw new Error('Session expired. Please log in again.');
-    }
-
-    // ✅ Query audit_logs table for security events
-    const { data: auditData, error: auditError } = await supabase
-      .from('audit_logs')
-      .select(`
-        audit_id,
-        action_taken,
-        timestamp,
-        ip_address,
-        users!inner (
-          full_name,
-          email,
-          organization_id
-        )
-      `)
-      .eq('users.organization_id', currentUser.organizationId)
-      .gte('timestamp', dateFrom)
-      .lte('timestamp', dateTo)
-      .order('timestamp', { ascending: false });
-
-    if (auditError) throw auditError;
-
-    // ✅ Transform audit logs to security events format
-    const events = auditData.map(log => ({
-      id: log.audit_id,
-      date: log.timestamp.split('T')[0],
-      time: log.timestamp.split('T')[1]?.split('.')[0],
-      eventType: determineEventType(log.action_taken),
-      user: log.users.email,
-      ipAddress: log.ip_address || 'N/A',
-      details: log.action_taken,
-      status: 'Completed',
-      created_at: log.timestamp
-    }));
-
-    // ✅ Calculate summary from real data
-    const summary = calculateSummaryFromEvents(events);
-
-    setSecurityEvents(events);
-    setSystemSummary(summary);
+    setIsLoading(true);
+    setError(null);
     
-  } catch (err) {
-    console.error('Error fetching reports data:', err);
-    setError('Failed to load reports data. Please try again.');
-    setSystemSummary({
-      successfulLogins: 0,
-      failedLogins: 0,
-      passwordResets: 0,
-      accountLockouts: 0,
-      suspiciousAttempts: 0
-    });
-    setSecurityEvents([]);
-  } finally {
-    setIsLoading(false);
-  }
-};
-// ✅ Helper to determine event type from action
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+      if (!currentUser || !currentUser.organizationId) {
+        throw new Error('Session expired. Please log in again.');
+      }
+
+      const { data: auditData, error: auditError } = await supabase
+        .from('audit_logs')
+        .select(`
+          audit_id,
+          action_taken,
+          timestamp,
+          ip_address,
+          users!inner (
+            full_name,
+            email,
+            organization_id
+          )
+        `)
+        .eq('users.organization_id', currentUser.organizationId)
+        .gte('timestamp', dateFrom)
+        .lte('timestamp', dateTo)
+        .order('timestamp', { ascending: false });
+
+      if (auditError) throw auditError;
+
+      const events = auditData.map(log => ({
+        id: log.audit_id,
+        date: log.timestamp.split('T')[0],
+        time: log.timestamp.split('T')[1]?.split('.')[0],
+        eventType: determineEventType(log.action_taken),
+        user: log.users.email,
+        ipAddress: log.ip_address || 'N/A',
+        details: log.action_taken,
+        status: 'Completed',
+        created_at: log.timestamp
+      }));
+
+      const summary = calculateSummaryFromEvents(events);
+      
+      // NEW: Generate chart data
+      const trendData = generateLoginTrendData(events);
+      const distributionData = generateEventDistribution(events);
+      const topUsers = generateTopUsersData(events);
+
+      setSecurityEvents(events);
+      setSystemSummary(summary);
+      setLoginTrendData(trendData);
+      setEventTypeDistribution(distributionData);
+      setTopUsersData(topUsers);
+      
+    } catch (err) {
+      console.error('Error fetching reports data:', err);
+      setError('Failed to load reports data. Please try again.');
+      setSystemSummary({
+        successfulLogins: 0,
+        failedLogins: 0,
+        passwordResets: 0,
+        accountLockouts: 0,
+        suspiciousAttempts: 0
+      });
+      setSecurityEvents([]);
+      setLoginTrendData([]);
+      setEventTypeDistribution([]);
+      setTopUsersData([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
 const determineEventType = (action) => {
   const actionLower = action.toLowerCase();
   
-  if (actionLower.includes('login') && actionLower.includes('failed')) {
-    return 'Failed Login';
-  }
-  if (actionLower.includes('login') && actionLower.includes('success')) {
+  // Login events - more flexible matching
+  if (actionLower.includes('logged in') || 
+      (actionLower.includes('login') && actionLower.includes('success'))) {
     return 'Successful Login';
   }
+  
+  if (actionLower.includes('failed login') || 
+      actionLower.includes('incorrect password') ||
+      (actionLower.includes('login') && actionLower.includes('failed'))) {
+    return 'Failed Login';
+  }
+  
+  if (actionLower.includes('logged out') || actionLower.includes('logout')) {
+    return 'Logout';
+  }
+  
+  // Password & Profile
+  if (actionLower.includes('password')) {
+    return 'Password Reset';
+  }
+  
+  if (actionLower.includes('updated profile')) {
+    return 'Profile Update';
+  }
+  
+  // User Management
+  if (actionLower.includes('created') && actionLower.includes('user')) {
+    return 'User Created';
+  }
+  
+  if (actionLower.includes('updated') && actionLower.includes('user')) {
+    return 'User Updated';
+  }
+  
+  if (actionLower.includes('deleted') && actionLower.includes('user')) {
+    return 'User Deleted';
+  }
+  
+  // Security
   if (actionLower.includes('locked') || actionLower.includes('lockout')) {
     return 'Account Lockout';
   }
-  if (actionLower.includes('password') && actionLower.includes('reset')) {
-    return 'Password Reset';
-  }
-  if (actionLower.includes('suspicious') || actionLower.includes('unusual')) {
+  
+  if (actionLower.includes('suspicious')) {
     return 'Suspicious Login';
   }
   
   return 'System Activity';
 };
 
-// ✅ Save report generation record to database
-const saveReportMetadata = async (reportType, fileUrl = null) => {
-  try {
-    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    
-    const { data, error } = await supabase
-      .from('reports')
-      .insert({
-        report_type: reportType,
-        title: `Security Report - ${dateFrom} to ${dateTo}`,
-        generated_by: currentUser.userId,
-        file_path: fileUrl,
-        status: 'completed'
-      });
+const calculateSummaryFromEvents = (events) => {
+  const summary = {
+    successfulLogins: 0,
+    failedLogins: 0,
+    passwordResets: 0,
+    accountLockouts: 0,
+    suspiciousAttempts: 0
+  };
 
-    if (error) throw error;
+  events.forEach(event => {
+    const eventType = event.eventType.toLowerCase();
+    const details = event.details.toLowerCase();
     
-    console.log('Report metadata saved:', data);
-  } catch (err) {
-    console.error('Error saving report metadata:', err);
-    // Don't block the export if metadata save fails
-  }
+    // More flexible matching
+    if (eventType.includes('successful login') || eventType.includes('logout')) {
+      summary.successfulLogins++;
+    }
+    else if (eventType.includes('failed login')) {
+      summary.failedLogins++;
+    }
+    else if (eventType.includes('password') || details.includes('password')) {
+      summary.passwordResets++;
+    }
+    else if (eventType.includes('lockout') || details.includes('locked')) {
+      summary.accountLockouts++;
+    }
+    else if (eventType.includes('suspicious')) {
+      summary.suspiciousAttempts++;
+    }
+  });
+
+  return summary;
 };
 
-  // Alternative: Calculate summary from events data (for future use with real API)
-  const calculateSummaryFromEvents = (events) => {
-    const summary = {
-      successfulLogins: 0,
-      failedLogins: 0,
-      passwordResets: 0,
-      accountLockouts: 0,
-      suspiciousAttempts: 0
-    };
-
+  // NEW: Generate login trend data (daily aggregation)
+  const generateLoginTrendData = (events) => {
+    const dateMap = {};
+    
     events.forEach(event => {
-      switch (event.eventType.toLowerCase()) {
-        case 'successful login':
-        case 'login success':
-          summary.successfulLogins++;
-          break;
-        case 'failed login':
-        case 'login failed':
-          summary.failedLogins++;
-          break;
-        case 'password reset':
-          summary.passwordResets++;
-          break;
-        case 'account lockout':
-          summary.accountLockouts++;
-          break;
-        case 'suspicious login':
-        case 'suspicious attempt':
-          summary.suspiciousAttempts++;
-          break;
-        default:
-          break;
+      const date = event.date;
+      if (!dateMap[date]) {
+        dateMap[date] = { date, successful: 0, failed: 0 };
+      }
+      
+      if (event.eventType.toLowerCase().includes('successful')) {
+        dateMap[date].successful++;
+      } else if (event.eventType.toLowerCase().includes('failed')) {
+        dateMap[date].failed++;
       }
     });
 
-    return summary;
+    return Object.values(dateMap).sort((a, b) => new Date(a.date) - new Date(b.date));
   };
 
-  // Fetch data on component mount and when date filters change
+  // NEW: Generate event type distribution
+  const generateEventDistribution = (events) => {
+    const typeCount = {};
+    
+    events.forEach(event => {
+      const type = event.eventType;
+      typeCount[type] = (typeCount[type] || 0) + 1;
+    });
+
+    return Object.entries(typeCount).map(([name, value]) => ({ name, value }));
+  };
+
+  // NEW: Generate top users with most events
+  const generateTopUsersData = (events) => {
+    const userCount = {};
+    
+    events.forEach(event => {
+      const user = event.user;
+      userCount[user] = (userCount[user] || 0) + 1;
+    });
+
+    return Object.entries(userCount)
+      .map(([user, count]) => ({ user: user.split('@')[0], count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+  };
+
+  const saveReportMetadata = async (reportType, fileUrl = null) => {
+    try {
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+      
+      const { data, error } = await supabase
+        .from('reports')
+        .insert({
+          report_type: reportType,
+          title: `Security Report - ${dateFrom} to ${dateTo}`,
+          generated_by: currentUser.userId,
+          file_path: fileUrl,
+          status: 'completed'
+        });
+
+      if (error) throw error;
+      
+      console.log('Report metadata saved:', data);
+    } catch (err) {
+      console.error('Error saving report metadata:', err);
+    }
+  };
+
   useEffect(() => {
-  fetchReportsData();
-}, [dateFrom, dateTo]);
+    fetchReportsData();
+  }, [dateFrom, dateTo]);
 
- const filteredEvents = securityEvents.filter(event => {
-  const eventDate = new Date(event.date || event.created_at);
-  const fromDate = new Date(dateFrom);
-  const toDate = new Date(dateTo);
-  
-  const dateMatch = eventDate >= fromDate && eventDate <= toDate;
-  const typeMatch = eventTypeFilter === 'all' || 
-    event.eventType.toLowerCase().includes(eventTypeFilter.toLowerCase()) ||
-    event.event_type?.toLowerCase().includes(eventTypeFilter.toLowerCase());
-  
-  // Add search functionality
-  const searchMatch = searchTerm === '' || 
-    (event.user || event.username || event.user_email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (event.ipAddress || event.ip_address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (event.details || event.description || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (event.eventType || event.event_type || '').toLowerCase().includes(searchTerm.toLowerCase());
-  
-  return dateMatch && typeMatch && searchMatch;
-});
+  const filteredEvents = securityEvents.filter(event => {
+    const eventDate = new Date(event.date || event.created_at);
+    const fromDate = new Date(dateFrom);
+    const toDate = new Date(dateTo);
+    
+    const dateMatch = eventDate >= fromDate && eventDate <= toDate;
+    const typeMatch = eventTypeFilter === 'all' || 
+      event.eventType.toLowerCase().includes(eventTypeFilter.toLowerCase());
+    
+    const searchMatch = searchTerm === '' || 
+      (event.user || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (event.ipAddress || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (event.details || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (event.eventType || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return dateMatch && typeMatch && searchMatch;
+  });
 
-  // Export function with real data
   const exportReport = async (format) => {
     if (filteredEvents.length === 0) {
       alert('No data to export for the selected criteria.');
@@ -212,12 +294,12 @@ const saveReportMetadata = async (reportType, fileUrl = null) => {
     if (format === 'csv') {
       const headers = ['Date', 'Time', 'Event Type', 'User', 'IP Address', 'Details', 'Status'];
       const rows = filteredEvents.map(event => [
-        event.date || event.created_at?.split('T')[0],
-        event.time || event.created_at?.split('T')[1]?.split('.')[0],
-        event.eventType || event.event_type,
-        event.user || event.username || event.user_email,
-        event.ipAddress || event.ip_address,
-        event.details || event.description,
+        event.date,
+        event.time,
+        event.eventType,
+        event.user,
+        event.ipAddress,
+        event.details,
         event.status
       ]);
       
@@ -251,12 +333,10 @@ const saveReportMetadata = async (reportType, fileUrl = null) => {
     await saveReportMetadata(`security_${format}`, null);
   };
 
-  // Refresh data manually
   const refreshData = () => {
     fetchReportsData();
   };
 
-  // View details popup
   const ViewDetailsModal = () => {
     if (!selectedEvent) return null;
     
@@ -275,20 +355,20 @@ const saveReportMetadata = async (reportType, fileUrl = null) => {
             <div className="modal-body">
               <div className="row g-3">
                 <div className="col-12">
-                <strong>Timestamp:</strong> {new Date(selectedEvent.created_at || `${selectedEvent.date} ${selectedEvent.time}`).toLocaleString()}
-              </div>
+                  <strong>Timestamp:</strong> {new Date(selectedEvent.created_at || `${selectedEvent.date} ${selectedEvent.time}`).toLocaleString()}
+                </div>
                 <div className="col-12">
                   <strong>Event Type:</strong> 
-                  <strong className="ms-2">{selectedEvent.eventType || selectedEvent.event_type}</strong>
+                  <strong className="ms-2">{selectedEvent.eventType}</strong>
                 </div>
                 <div className="col-12">
-                  <strong>User:</strong> {selectedEvent.user || selectedEvent.username || selectedEvent.user_email}
+                  <strong>User:</strong> {selectedEvent.user}
                 </div>
                 <div className="col-12">
-                  <strong>IP Address:</strong> {selectedEvent.ipAddress || selectedEvent.ip_address}
+                  <strong>IP Address:</strong> {selectedEvent.ipAddress}
                 </div>
                 <div className="col-12">
-                  <strong>Details:</strong> {selectedEvent.details || selectedEvent.description}
+                  <strong>Details:</strong> {selectedEvent.details}
                 </div>
                 <div className="col-12">
                   <strong>Status:</strong> 
@@ -333,33 +413,66 @@ const saveReportMetadata = async (reportType, fileUrl = null) => {
   return (
     <SidebarLayout role="sysadmin">
       <div className="container-fluid">
-        {/* Header */}
-        <div className="row mb-4">
-          <div className="col-12">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <h2 className="mb-1">System Administrator Reports</h2>
-                <p className="text-muted mb-0">Security and system activity monitoring</p>
-              </div>
-              <div className="d-flex gap-2 align-items-center">
-                <button 
-                  className="btn btn-outline-success"
-                  onClick={() => exportReport('csv')}
-                  disabled={filteredEvents.length === 0}
-                >
-                  Export CSV
-                </button>
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => exportReport('pdf')}
-                  disabled={filteredEvents.length === 0}
-                >
-                  Export PDF
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+{/* Header */}
+<div className="row mb-4">
+  <div className="col-12">
+    <div className="d-flex justify-content-between align-items-center">
+      <div>
+        <h2 className="mb-1">System Administrator Reports</h2>
+        <p className="text-muted mb-0">Security and system activity monitoring</p>
+      </div>
+<div className="d-flex gap-2 align-items-center">
+  {/* Date Range Filter */}
+  <select 
+    className="form-select"
+    value={dateRange}
+    onChange={(e) => {
+      const value = e.target.value;
+      const today = new Date();
+      let newDateFrom = '';
+      
+      switch(value) {
+        case 'today':
+          newDateFrom = today.toISOString().split('T')[0];
+          break;
+        case 'weekly':
+          newDateFrom = new Date(today.setDate(today.getDate() - 7)).toISOString().split('T')[0];
+          break;
+        case 'monthly':
+          newDateFrom = new Date(today.setMonth(today.getMonth() - 1)).toISOString().split('T')[0];
+          break;
+        case 'yearly':
+          newDateFrom = new Date(today.setFullYear(today.getFullYear() - 1)).toISOString().split('T')[0];
+          break;
+        default:
+          newDateFrom = '2024-01-01';
+      }
+      
+      setDateFrom(newDateFrom);
+      setDateTo(new Date().toISOString().split('T')[0]);
+      setDateRange(value);
+    }}
+    style={{ minWidth: '150px' }}
+  >
+    <option value="today">Today</option>
+    <option value="weekly">Last 7 Days</option>
+    <option value="monthly">Last 30 Days</option>
+    <option value="yearly">Last Year</option>
+  </select>
+
+<button 
+  className="btn btn-success d-flex align-items-center gap-2"
+  onClick={() => exportReport('csv')}
+  disabled={securityEvents.length === 0}
+  style={{ whiteSpace: 'nowrap' }}
+>
+  <i className="fas fa-file-csv"></i>
+  Export CSV
+</button>
+</div>
+    </div>
+  </div>
+</div>
 
         {/* Error Message */}
         {error && (
@@ -379,7 +492,7 @@ const saveReportMetadata = async (reportType, fileUrl = null) => {
           </div>
         )}
 
-        {/* System Reports Summary */}
+        {/* Summary Cards */}
         <div className="row mb-4">
           <div className="col">
             <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
@@ -438,132 +551,82 @@ const saveReportMetadata = async (reportType, fileUrl = null) => {
           </div>
         </div>
 
-      {/* Search and Filters */}
-<div className="row mb-4">
-  <div className="col-12">
-    <div className="d-flex gap-3 align-items-end">
-      <div className="flex-fill">
-        <input 
-          type="text" 
-          className="form-control form-control-lg"
-          placeholder="Search events by user, IP, or details..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          style={{
-            borderRadius: '8px',
-            border: '1px solid #dee2e6',
-            fontSize: '16px',
-            padding: '12px 16px'
-          }}
-        />
-      </div>
-      <div style={{minWidth: '180px'}}>
-        <select 
-          className="form-select form-select-lg"
-          value={eventTypeFilter}
-          onChange={(e) => setEventTypeFilter(e.target.value)}
-          style={{
-            borderRadius: '8px',
-            border: '1px solid #dee2e6',
-            fontSize: '16px',
-            padding: '12px 16px'
-          }}
-        >
-          <option value="all">All Events</option>
-          <option value="failed">Failed Login</option>
-          <option value="lockout">Account Lockout</option>
-          <option value="reset">Password Reset</option>
-          <option value="suspicious">Suspicious Login</option>
-        </select>
-      </div>
-      <div style={{minWidth: '180px'}}>
-        <select 
-          className="form-select form-select-lg"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          style={{
-            borderRadius: '8px',
-            border: '1px solid #dee2e6',
-            fontSize: '16px',
-            padding: '12px 16px'
-          }}
-        >
-          <option value="2024-12-01">Last 30 Days</option>
-          <option value="2024-11-01">Last 60 Days</option>
-          <option value="2024-10-01">Last 90 Days</option>
-          <option value="2024-01-01">This Year</option>
-        </select>
-      </div>
-    </div>
-  </div>
-</div>
-        {/* Security Events Table */}
-        <div className="row">
+        {/* NEW: Visual Analytics Section */}
+        <div className="row mb-4">
+          {/* Login Trends Chart */}
+          <div className="col-md-6 mb-4">
+            <div className="card border-2 h-100">
+              <div className="card-header bg-white border-0 py-3">
+                <h5 className="mb-0">Login Trends Over Time</h5>
+              </div>
+              <div className="card-body">
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={loginTrendData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="successful" stroke="#198754" name="Successful" strokeWidth={2} />
+                    <Line type="monotone" dataKey="failed" stroke="#dc3545" name="Failed" strokeWidth={2} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Event Type Distribution */}
+          <div className="col-md-6 mb-4">
+            <div className="card border-2 h-100">
+              <div className="card-header bg-white border-0 py-3">
+                <h5 className="mb-0">Event Type Distribution</h5>
+              </div>
+              <div className="card-body">
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={eventTypeDistribution}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({name, percent}) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {eventTypeDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Top Users by Activity */}
           <div className="col-12">
             <div className="card border-2">
               <div className="card-header bg-white border-0 py-3">
-                <h5 className="mb-0">Security Events Summary</h5>
+                <h5 className="mb-0">Top 5 Most Active Users</h5>
               </div>
               <div className="card-body">
-                <div className="table-responsive">
-                  <table className="table table-hover">
-                    <thead className="table-light">
-                      <tr>
-                        <th>Timestamp</th>
-                        <th>Event Type</th>
-                        <th>User</th>
-                        <th>IP Address</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredEvents.map((event) => (
-                        <tr key={event.id}>
-                         <td>
-                        <small className="text-muted">
-                          {new Date(event.created_at || `${event.date} ${event.time}`).toLocaleString()}
-                        </small>
-                      </td>
-                         <td>
-                          <strong>{event.eventType || event.event_type}</strong>
-                        </td>
-                          <td>{event.user || event.username || event.user_email}</td>
-                          <td>{event.ipAddress || event.ip_address}</td>
-                          <td>
-                            <span className={`badge ${
-                              event.status === 'Resolved' || event.status === 'Completed' ? 'bg-success' :
-                              event.status === 'Under Review' ? 'bg-warning' :
-                              'bg-secondary'
-                            }`}>
-                              {event.status}
-                            </span>
-                          </td>
-                          <td>
-                            <button 
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() => setSelectedEvent(event)}
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  
-                  {filteredEvents.length === 0 && !isLoading && (
-                    <div className="text-center py-4">
-                      <div className="text-muted">No security events found for the selected criteria.</div>
-                    </div>
-                  )}
-                </div>
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={topUsersData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="user" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="count" fill="#0d6efd" name="Total Events" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </div>
         </div>
 
-        {/* View Details Modal */}
         <ViewDetailsModal />
       </div>
     </SidebarLayout>

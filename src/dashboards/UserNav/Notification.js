@@ -6,7 +6,31 @@ import { supabase } from '../../supabaseClient';
 export default function Notification() {
   // Get current user from localStorage
   const currentUser = JSON.parse(localStorage.getItem('currentUser') || '{}');
-  
+  // Helper function to get current user's organization
+const getCurrentUserOrganization = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('No authenticated user');
+
+    const { data: userData, error } = await supabase
+      .from('users')
+      .select('organization_id, user_id')
+      .eq('email', user.email)  // ✅ Use email instead of auth_uid
+      .single();
+
+    if (error || !userData) {
+      console.error('User data fetch error:', error);
+      throw new Error('User organization not found');
+    }
+    
+    console.log('✅ Organization ID:', userData.organization_id);
+    console.log('✅ User ID:', userData.user_id);
+    return userData.organization_id;
+  } catch (error) {
+    console.error('Error getting user organization:', error);
+    throw error;
+  }
+};
   // Map role_id to role name
   const getRoleName = (roleId) => {
     const roleMap = {
@@ -73,19 +97,26 @@ const cleanupOldNotifications = async () => {
     const readNotificationIds = readNotifications?.map(n => n.notification_id) || [];
 
     // Soft delete read notifications older than 7 days
-    if (readNotificationIds.length > 0) {
-      await supabase
-        .from('notifications')
-        .update({ is_active: false })
-        .in('notification_id', readNotificationIds);
-    }
+if (readNotificationIds.length > 0) {
+  const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+  
+  await supabase
+    .from('notifications')
+    .update({ is_active: false })
+    .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+    .in('notification_id', readNotificationIds);
+}
 
     // Soft delete unread notifications older than 30 days
-    await supabase
-      .from('notifications')
-      .update({ is_active: false })
-      .lt('created_at', unreadCutoffDate.toISOString())
-      .eq('is_active', true);
+// Soft delete unread notifications older than 30 days
+const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+
+await supabase
+  .from('notifications')
+  .update({ is_active: false })
+  .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+  .lt('created_at', unreadCutoffDate.toISOString())
+  .eq('is_active', true);
 
     console.log(`Cleanup: Deleted ${readNotificationIds.length} old read notifications`);
   } catch (error) {
@@ -93,13 +124,16 @@ const cleanupOldNotifications = async () => {
   }
 };
   // Fetch notifications from Supabase
-  const fetchNotifications = async () => {
-    try {
-      setLoading(true);
-      const roleId = getRoleId(role);
+const fetchNotifications = async () => {
+  try {
+    setLoading(true);
+    const roleId = getRoleId(role);
+    const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
 
-      // Fetch notifications for this role
-      const { data: notificationsData, error } = await supabase
+    console.log('🔍 Fetching notifications for Org:', organizationId); // ✅ Debug
+
+    // Fetch notifications for this role AND organization
+    const { data: notificationsData, error } = await supabase
   .from('notifications')
   .select(`
     notification_id,
@@ -109,14 +143,15 @@ const cleanupOldNotifications = async () => {
     related_table,
     related_id,
     target_user_id,
+    organization_id,
     notification_types(type_name),
     priority_levels(priority_name, color_code),
     created_by
   `)
+  .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
   .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
   .eq('is_active', true)
   .order('created_at', { ascending: false});
-
       if (error) throw error;
 
 console.log('=== FETCH NOTIFICATIONS DEBUG ===');
@@ -244,10 +279,14 @@ const clearReadNotifications = async () => {
     }
 
     // Soft delete by setting is_active to false
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_active: false })
-      .in('notification_id', readNotificationIds);
+// Soft delete by setting is_active to false
+const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+
+const { error } = await supabase
+  .from('notifications')
+  .update({ is_active: false })
+  .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+  .in('notification_id', readNotificationIds);
 
     if (error) throw error;
 

@@ -5,6 +5,7 @@ import Layout from './Layout';
 import OpenFMSLogo from './assets/OpenFMSLogo.png';
 import { supabase } from './supabaseClient'; 
 import { PasswordUtils } from './utils/PasswordUtils';
+import { AuditLogger } from './utils/AuditLogger';
 
 function LoginPage() {
   // State for input fields
@@ -31,6 +32,13 @@ const handleLogin = async (e) => {
     if (userError || !userData) {
       console.log('User not found in database:', userError);
       alert("Invalid email or password");
+      await AuditLogger.log({
+        userId: null,
+        actionTaken: `Failed login attempt for email: ${email.toLowerCase()}`,
+        tableAffected: 'users',
+        recordId: null,
+        ipAddress: await AuditLogger.getClientIP()
+      });
       return;
     }
 
@@ -62,6 +70,12 @@ const handleLogin = async (e) => {
     
     if (!PasswordUtils.verifyPassword(password, userData.password_hash)) {
       console.log('Database password verification failed');
+       await AuditLogger.logWithIP({
+    userId: userData.user_id,
+    actionTaken: 'Failed login attempt - incorrect password',
+    tableAffected: 'users',
+    recordId: userData.user_id
+  });
       alert("Invalid email or password");
       return;
     }
@@ -170,6 +184,13 @@ const handleSuccessfulLogin = async (userData) => {
     organizationId: userData.organization_id,
     authUid: userData.auth_uid
   }));
+  // ✅ ADD THIS - Log successful login
+await AuditLogger.logWithIP({
+  userId: userData.user_id,
+  actionTaken: 'User logged in successfully',
+  tableAffected: 'users',
+  recordId: userData.user_id
+});
 
   // Your existing redirect logic
 if (userData.first_login === true) {
@@ -177,7 +198,6 @@ if (userData.first_login === true) {
       .from('users')
       .update({ 
         user_status: 'active',
-        first_login: false 
       })
       .eq('user_id', userData.user_id);
     alert("Welcome! Please change your temporary password to continue.");

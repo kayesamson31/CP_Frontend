@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Modal, Button, Form, Card, Spinner, Alert } from "react-bootstrap";
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { supabase } from '../../supabaseClient';
+import { AuthUtils } from '../../utils/AuthUtils';
 export default function Activity() {
   const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,10 +16,16 @@ export default function Activity() {
  const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15); // Show 20 items per page
   
-  useEffect(() => {
+useEffect(() => {
   const fetchActivities = async () => {
     try {
       setLoading(true);
+      
+      // Get organization_id from current user
+      const orgId = AuthUtils.getCurrentOrganizationId();
+      if (!orgId) {
+        throw new Error('Organization not found for current user');
+      }
       
       let query = supabase
         .from('activity_tracking')
@@ -35,6 +42,7 @@ export default function Activity() {
             roles (role_name)
           )
         `)
+        .eq('organization_id', orgId)  // ← ADD THIS
         .order('timestamp', { ascending: false });
 
       // Apply date range filter

@@ -5,7 +5,7 @@ import Papa from 'papaparse'
 import { PasswordUtils } from '../utils/PasswordUtils';
 import { EmailService } from '../utils/EmailService';
 import EmailProgressModal from '../components/EmailProgressModal';
-import { AuthUtils } from '../utils/AuthUtils';
+
 
 
 export default function DashboardSyAdmin() {
@@ -19,6 +19,8 @@ export default function DashboardSyAdmin() {
   const [recentActivities, setRecentActivities] = useState([]);
   const [editingOrgInfo, setEditingOrgInfo] = useState(false);
 const [editedOrgData, setEditedOrgData] = useState({});
+  const [organizationTypes, setOrganizationTypes] = useState([]);
+
 
   // Function to add new activity
 const addActivity = (type, title, user = organizationData.contactPerson) => {
@@ -42,7 +44,7 @@ const handleEmailProgressClose = () => {
   // Show final summary if there were any failures
   const { successCount, failedCount } = emailProgress;
   if (failedCount > 0) {
-    alert(`Email Summary:\nÃ¢Å“â€¦ ${successCount} emails sent successfully\nÃ¢ÂÅ’ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+    alert(`Email Summary:\nÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ ${successCount} emails sent successfully\nÃƒÂ¢Ã‚ÂÃ…â€™ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
   }
 };
 
@@ -100,9 +102,6 @@ const getRoleIdFromRole = (roleString) => {
   return roleMap[normalizedRole] || 4; // Default to Standard user
 };
 
-
-
-
 // Helper function to format timestamp to relative time
 const getRelativeTime = (timestamp) => {
   const now = new Date();
@@ -117,14 +116,10 @@ const getRelativeTime = (timestamp) => {
   return activityTime.toLocaleDateString();
 };
 
-  
-  // Function to get dynamic organization data
-// Replace your getOrganizationData function with this fixed version:
-
-// REPLACEMENT: fetch organization data directly from Supabase
+ 
+//fetch organization data directly from Supabase
 const getOrganizationData = async () => {
   try {
-    // Replace localStorage check with Supabase auth
     const { data: { user } } = await supabase.auth.getUser();
     const userEmail = user?.email;
 
@@ -132,10 +127,14 @@ const getOrganizationData = async () => {
       return getDefaultOrgData();
     }
 
-    // Get organization based on user email
+    // Get organization with JOINs to get type_name and country_name
     const { data: orgData, error: orgError } = await supabase
       .from('organizations')
-      .select('*')
+      .select(`
+        *,
+        countries (country_name),
+        organization_types (type_name)
+      `)
       .eq('contact_email', userEmail)
       .single();
 
@@ -146,20 +145,21 @@ const getOrganizationData = async () => {
 
     return {
       name: orgData.org_name,
-      type: orgData.org_type || "Government Agency",
+      type: orgData.organization_types?.type_name || "Government Agency",
+      typeId: orgData.org_type_id, // ADD THIS - store the ID too
       address: orgData.address || "Not specified",
       phone: orgData.phone || "Not specified",
-      country: orgData.country || "Not specified",
+      country: orgData.countries?.country_name || "Not specified",
+      countryId: orgData.country_id, // ADD THIS - store the ID too
       website: orgData.website || "https://openfms.io",
       contactPerson: orgData.contact_person || "System Administrator",
       contactEmail: orgData.contact_email || userEmail
     };
   } catch (error) {
-console.error('Error loading organization data:', error);
+    console.error('Error loading organization data:', error);
     return getDefaultOrgData();
   }
 };
-
 
 const getDefaultOrgData = () => ({
   name: "OpenFMS",
@@ -301,6 +301,73 @@ const totalAssets = assetsResult.count || 0;
   }
 };
 
+const fetchRecentAuditLogs = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+
+    if (!userEmail) return [];
+
+    // Get the organization ID
+    const { data: userData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', userEmail)
+      .single();
+
+    const organizationId = userData?.organization_id;
+    if (!organizationId) return [];
+
+    // Fetch last 5 audit logs from the same organization
+    const { data: auditLogs, error } = await supabase
+      .from('audit_logs')
+      .select(`
+        audit_id,
+        action_taken,
+        timestamp,
+        users!inner (
+          full_name,
+          email,
+          organization_id
+        )
+      `)
+      .eq('users.organization_id', organizationId)
+      .order('timestamp', { ascending: false })
+      .limit(5);
+
+    if (error) throw error;
+
+    // Transform to match the recentActivities format
+    return auditLogs.map(log => ({
+      id: log.audit_id,
+      type: 'audit_log',
+      icon: 'bi-clock-history',
+      title: log.action_taken,
+      user: log.users.full_name || log.users.email,
+      timestamp: log.timestamp,
+      color: 'info'
+    }));
+
+  } catch (error) {
+    console.error('Error fetching recent audit logs:', error);
+    return [];
+  }
+};
+const fetchOrganizationTypes = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('organization_types')
+      .select('org_type_id, type_name')
+      .eq('is_active', true)
+      .order('type_name');
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching organization types:', error);
+    return [];
+  }
+};
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
@@ -363,21 +430,28 @@ const totalAssets = assetsResult.count || 0;
 
 const updateSetupProgress = async () => {
   try {
-    const setupWizardData = localStorage.getItem('setupWizardData');
-    
     // Get actual database counts
     const dbStats = await fetchDatabaseStats();
     
-    // Check organization info
+    // Check organization info from Supabase (not localStorage)
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+    
     let hasOrganizationInfo = false;
-    if (setupWizardData) {
-      const wizardData = JSON.parse(setupWizardData);
-      hasOrganizationInfo = wizardData.orgData?.name && wizardData.orgData?.contactEmail;
+    if (userEmail) {
+      const { data: orgData } = await supabase
+        .from('organizations')
+        .select('org_name, contact_email')
+        .eq('contact_email', userEmail)
+        .single();
+      
+      hasOrganizationInfo = orgData?.org_name && orgData?.contact_email;
     }
     
-  const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
+    // âœ… Check if users exist (based on DATABASE, not localStorage)
+    const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
     
-    // Check if assets exist in DATABASE (not just localStorage)
+    // âœ… Check if assets exist (based on DATABASE, not localStorage)
     const hasAssets = dbStats.totalAssets > 0;
     
     const setupStatus = {
@@ -397,9 +471,12 @@ const updateSetupProgress = async () => {
       systemHealth: newProgress > 66 ? 'Good' : newProgress > 33 ? 'Warning' : 'Critical'
     }));
     
-    // Check if setup is now complete
+    // âœ… CRITICAL FIX: Automatically set setupCompleted to true when all requirements are met
     if (completedSteps === 3) {
       setSetupCompleted(true);
+      // âœ… Remove the setup wizard data since it's complete
+      localStorage.removeItem('setupWizardData');
+      localStorage.setItem('justCompleted', 'true');
     } else {
       setSetupCompleted(false);
     }
@@ -427,7 +504,7 @@ const handleSaveOrgInfo = async () => {
       return;
     }
 
-    // First, get the organization ID
+    // Get organization ID
     const { data: orgData, error: fetchError } = await supabase
       .from('organizations')
       .select('organization_id')
@@ -440,17 +517,32 @@ const handleSaveOrgInfo = async () => {
       return;
     }
 
-    // If country was changed, we need to get the country_id
-    let updateData = {
+    // Build update payload
+    const updatePayload = {
       org_name: editedOrgData.name,
-      org_type: editedOrgData.type,
       address: editedOrgData.address,
       phone: editedOrgData.phone,
       website: editedOrgData.website
     };
 
-    // If country needs to be updated, look up country_id
-    if (editedOrgData.country) {
+    // Handle org_type_id - if type changed, look up the ID
+    if (editedOrgData.type && editedOrgData.type !== organizationData.type) {
+      const { data: typeData } = await supabase
+        .from('organization_types')
+        .select('org_type_id')
+        .eq('type_name', editedOrgData.type)
+        .single();
+      
+      if (typeData) {
+        updatePayload.org_type_id = typeData.org_type_id;
+      }
+    } else if (organizationData.typeId) {
+      // Keep existing type ID if not changed
+      updatePayload.org_type_id = organizationData.typeId;
+    }
+
+    // Handle country_id - if country changed, look up the ID
+    if (editedOrgData.country && editedOrgData.country !== organizationData.country) {
       const { data: countryData } = await supabase
         .from('countries')
         .select('country_id')
@@ -458,23 +550,27 @@ const handleSaveOrgInfo = async () => {
         .single();
       
       if (countryData) {
-        updateData.country_id = countryData.country_id;
+        updatePayload.country_id = countryData.country_id;
       }
+    } else if (organizationData.countryId) {
+      // Keep existing country ID if not changed
+      updatePayload.country_id = organizationData.countryId;
     }
 
-  // Then update using organization_id instead
-const { error } = await supabase
-  .from('organizations')
-  .update({
-    org_name: editedOrgData.name,
-    address: editedOrgData.address,
-    phone: editedOrgData.phone,
-    website: editedOrgData.website
-    // Removed org_type and country - they're foreign keys
-  })
-  .eq('organization_id', orgData.organization_id);
+    console.log('About to update with:', updatePayload);
 
-    // Rest of your code stays the same
+    const { error } = await supabase
+      .from('organizations')
+      .update(updatePayload)
+      .eq('organization_id', orgData.organization_id);
+
+    if (error) {
+      console.error('Update error:', error);
+      alert('Database error: ' + error.message);
+      return;
+    }
+
+    console.log('Update successful');
     const updatedData = await getOrganizationData();
     setOrganizationData(updatedData);
     setEditingOrgInfo(false);
@@ -572,7 +668,11 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
 
 useEffect(() => {
   const loadDashboardData = async () => {
+
+
     try {
+      const types = await fetchOrganizationTypes();
+      setOrganizationTypes(types);
       // Check if just completed setup or needs forced refresh
       const justCompleted = localStorage.getItem('setupJustCompleted');
       const forceRefresh = localStorage.getItem('forceRefreshDashboard');
@@ -590,6 +690,9 @@ useEffect(() => {
       // Get all statistics from database
       const dbStats = await fetchDatabaseStats();
       
+      // âœ… ADD THIS LINE - Fetch recent audit logs
+      const recentLogs = await fetchRecentAuditLogs();
+      
       // Merge organization info with database statistics
       const mergedOrgData = {
         ...baseOrgData,
@@ -598,9 +701,11 @@ useEffect(() => {
       
       setOrganizationData(mergedOrgData);
       
+      // âœ… ADD THIS LINE - Set recent activities with audit logs
+      setRecentActivities(recentLogs);
+      
       // Update dashboard data
-      // Update dashboard data
-const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials;
+      const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials;
       setDashboardData(prev => ({
         ...prev,
         totalUsers: totalUsers,
@@ -614,23 +719,22 @@ const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOffi
     } catch (error) {
       console.error('Error loading dashboard data:', error);
       // Fallback to default values
-     setOrganizationData(prev => ({
-  ...prev,
-  personnel: 0,
-  standardUsers: 0,
-  adminOfficials: 0,
-  systemAdmins: 1,
-  totalAssets: 0,
-  systemHealthPercentage: 25
-}));
+      setOrganizationData(prev => ({
+        ...prev,
+        personnel: 0,
+        standardUsers: 0,
+        adminOfficials: 0,
+        systemAdmins: 1,
+        totalAssets: 0,
+        systemHealthPercentage: 25
+      }));
     }
     
- await updateSetupProgress();
+    await updateSetupProgress();
   };
 
   loadDashboardData();
 }, []); // Remove dependency array issues
-
   
   // Auto-dismiss completion message
   useEffect(() => {
@@ -759,7 +863,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     id: 1,
     type: 'system_start',
     icon: 'bi-info-circle',
-    title: 'System initialized - No recent activities yet',
+    title: 'No recent audit logs yet', 
     user: 'System',
     timestamp: new Date().toISOString(),
     color: 'secondary'
@@ -969,16 +1073,22 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     <div className="col-md-4">
       <div className="mb-3">
         <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Organization Type</label>
-        {editingOrgInfo ? (
-          <input 
-            type="text" 
-            className="form-control"
-            value={editedOrgData.type}
-            onChange={(e) => setEditedOrgData({...editedOrgData, type: e.target.value})}
-          />
-        ) : (
-          <p className="mb-0">{organizationData.type}</p>
-        )}
+       {editingOrgInfo ? (
+  <select 
+    className="form-control"
+    value={editedOrgData.type || ''}
+    onChange={(e) => setEditedOrgData({...editedOrgData, type: e.target.value})}
+  >
+    <option value="">Select Organization Type</option>
+    {organizationTypes.map(type => (
+      <option key={type.org_type_id} value={type.type_name}>
+        {type.type_name}
+      </option>
+    ))}
+  </select>
+) : (
+  <p className="mb-0">{organizationData.type}</p>
+)}
       </div>
       <div className="mb-3">
         <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Phone</label>
@@ -1034,7 +1144,19 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 <div className="row mb-4">
  {/* Admin Officials */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
+      transition: 'transform 0.2s, box-shadow 0.2s'
+    }}
+    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  // â† ADD THIS
+    onMouseEnter={(e) => {  // â† ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => {  // â† ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    >
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1052,7 +1174,19 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
   {/* Standard Users */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
+      transition: 'transform 0.2s, box-shadow 0.2s'}}
+      onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}
+       onMouseEnter={(e) => {  // â† ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => {  // â† ADD THIS (optional hover effect)
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+      >
+        
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1070,7 +1204,20 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
  {/* Personnel */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',
+      cursor: 'pointer', 
+      transition: 'transform 0.2s, box-shadow 0.2s'  
+    }}
+    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  
+    onMouseEnter={(e) => {  
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => { 
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    >
       <div className="card-body text-center position-relative">
         {organizationData.isUsersDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1091,7 +1238,19 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 <div className="row mb-4">
   {/* Total Assets */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',
+       cursor: 'pointer',  transition: 'transform 0.2s, box-shadow 0.2s' 
+    }}
+    onClick={() => navigate('/dashboard-sysadmin/AssetOverview')}  
+    onMouseEnter={(e) => {  
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => {  
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    >
       <div className="card-body text-center position-relative">
         {organizationData.isAssetsDataSkipped && (
           <span className="badge bg-warning position-absolute top-0 end-0 mt-2 me-2" style={{fontSize: '0.6rem'}}>
@@ -1109,7 +1268,21 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 
   {/* System Administrators */}
   <div className="col-lg-4 col-md-6 mb-3">
-    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6'}}>
+    <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',
+     cursor: 'pointer',
+    transition: 'transform 0.2s, box-shadow 0.2s' 
+    }}
+        onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  
+    onMouseEnter={(e) => {  
+      e.currentTarget.style.transform = 'translateY(-4px)';
+      e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
+    }}
+    onMouseLeave={(e) => { 
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = '';
+    }}
+    
+    >
       <div className="card-body text-center">
         <i className="bi bi-shield-fill-check text-danger fs-3 mb-2 d-block"></i>
         <h5 className="fw-bold mb-1">{safeNumber(organizationData.systemAdmins).toLocaleString()}</h5>
@@ -1133,11 +1306,10 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         <div className="card mb-4 shadow-sm" style={{
   borderRadius: '16px',
   border: '1px solid #dee2e6',
-  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out'
-  
+  transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+  cursor: 'pointer' 
 }}
-
-
+onClick={() => navigate('/dashboard-sysadmin/SysadAuditLogs')}
 onMouseEnter={(e) => {
   e.currentTarget.style.transform = 'translateY(-2px)';
   e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.15)';
@@ -1154,12 +1326,15 @@ onMouseLeave={(e) => {
     Recent Activity
   </h5>
  
-  {recentActivities.length > 5 && (
+  {recentActivities.length > 0 && (
     <button 
       className="btn btn-link text-primary fw-semibold text-decoration-none p-0"
-      onClick={() => navigate('/dashboard-sysadmin/SysadAuditLogs')}
+       onClick={(e) => {
+        e.stopPropagation(); // â† ADD THIS to prevent card click
+        navigate('/dashboard-sysadmin/SysadAuditLogs');
+      }}
     >
-      View All Activities
+      View All Activities in Audit Logs 
     </button>
   )}
 

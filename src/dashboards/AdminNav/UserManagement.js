@@ -207,10 +207,6 @@ const createUser = async (userData) => {
 
     // Refresh user list
     await fetchUsers();
-    // Log activity
-await logActivity('edit_user', `Updated user: ${editingUser.name} - Changed role to ${editingUser.role}`);
-    // Log activity
-    await logActivity('add_user', `Added user: ${newUser.name} (${newUser.email}) as ${newUser.role}`);
     // Show email progress modal
     setEmailProgress({
       isVisible: true,
@@ -256,6 +252,7 @@ await logActivity('edit_user', `Updated user: ${editingUser.name} - Changed role
 
       if (emailResult.success) {
         console.log('✓ Welcome email sent successfully');
+          await logActivity('add_user', `Added user: ${userData.name} (${userData.email}) as ${userData.role}`);
       } else {
         console.error('✗ Email failed:', emailResult.error);
         alert(

@@ -5,6 +5,7 @@ import { Container, Row, Col, Button, Nav } from 'react-bootstrap';
 import dashboardlogo from '../assets/OpenFMSLogo.png';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import { supabase } from '../supabaseClient';
+import { AuditLogger } from '../utils/AuditLogger';
 
 const menuConfig = {
   standard: [
@@ -120,12 +121,21 @@ useEffect(() => {
       const roleId = userData.role_id;
       const userId = userData.user_id;
 
-      // ✅ UPDATED: Check both target_roles AND target_user_id
-      const { data: notifications, error } = await supabase
-        .from('notifications')
-        .select('notification_id')
-        .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)  // ← Fixed!
-        .eq('is_active', true);
+    // Get user's organization
+const { data: orgData } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('email', user.email)
+  .single();
+
+const organizationId = orgData?.organization_id;
+
+const { data: notifications, error } = await supabase
+  .from('notifications')
+  .select('notification_id')
+  .eq('organization_id', organizationId)  // ✅ ADD THIS
+  .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
+  .eq('is_active', true);
 
       if (error) throw error;
 
@@ -190,6 +200,16 @@ useEffect(() => {
 
   const handleLogout = async () => {
     try {
+
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    if (currentUser) {
+      await AuditLogger.logWithIP({
+        userId: currentUser.id,
+        actionTaken: 'User logged out',
+        tableAffected: 'users',
+        recordId: currentUser.id
+      });
+    }
       // Sign out from Supabase Auth
       await supabase.auth.signOut();
       

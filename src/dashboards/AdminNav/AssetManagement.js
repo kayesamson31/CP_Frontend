@@ -65,19 +65,6 @@ const [newAsset, setNewAsset] = useState({
 const [csvFile, setCsvFile] = useState(null);
 const [csvPreview, setCsvPreview] = useState([]);
 
-
-
-const [showIncidentDetailsModal, setShowIncidentDetailsModal] = useState(false);
-const [selectedIncident, setSelectedIncident] = useState(null);
-const [showAssignTaskModal, setShowAssignTaskModal] = useState(false);
-const [incidentTaskForm, setIncidentTaskForm] = useState({
-  incidentId: '',
-  assigneeId: '',
-  dueDate: '',
-  dueTime: '',
-  description: ''
-});
-
 // Modal states for task assignment
 const [showTaskModal, setShowTaskModal] = useState(false);
 const [showMaintenanceHistoryModal, setShowMaintenanceHistoryModal] = useState(false);  
@@ -125,98 +112,6 @@ const [newTask, setNewTask] = useState({
   return `${month}-${day}-${year}`;
 };
 
-  // Sample hardcoded data for visualization with maintenance schedules
-
-const handleViewIncidentDetails = (incident) => {
-  setPreviousAsset(selectedAsset); // Store the current asset
-  setSelectedIncident(incident);
-  setSelectedAsset(null); // Close the Asset Details modal
-  setShowIncidentDetailsModal(true);
-};
-
-const handleAssignIncidentTask = () => {
-  setIncidentTaskForm({
-    ...incidentTaskForm,
-    incidentId: parseInt(selectedIncident.id.replace('INC-', ''))  // Extract numeric part
-  });
-  setShowIncidentDetailsModal(false);
-  setShowAssignTaskModal(true);
-  // Don't reset previousAsset here so user can return to asset details later
-};
-
-const handleDismissIncident = async () => {
-  if (selectedIncident && previousAsset) {
-    try {
-      // Update in database
-      await assetService.updateIncidentStatus(selectedIncident.id, 'Dismissed');
-      await logActivity('dismiss_incident', `Dismissed incident: ${selectedIncident.type} - ${selectedIncident.severity}`);
-      // Refresh assets to get updated data
-      await fetchAssets();
-      
-      setShowIncidentDetailsModal(false);
-      setSelectedAsset(null);
-      setPreviousAsset(null);
-      
-      alert('Incident dismissed successfully!');
-    } catch (err) {
-      console.error('Error dismissing incident:', err);
-      alert('Failed to dismiss incident. Please try again.');
-    }
-  }
-};
-const handleSubmitIncidentTask = async () => {
-  if (incidentTaskForm.assigneeId && incidentTaskForm.dueDate && previousAsset) {  // ADD previousAsset check
-    try {
-      const assignedPersonnel = personnel.find(p => p.id === incidentTaskForm.assigneeId);
-      
-      // Use previousAsset instead of selectedAsset
-      const assetId = previousAsset.id;
-      
-      // Map severity to priority
-      const severityToPriority = {
-        'Critical': 'high',
-        'Major': 'high',
-        'Minor': 'low'
-      };
-      
-      const priority = severityToPriority[selectedIncident.severity] || 'medium';
-      
-      // Create the maintenance task via API
-      const taskData = {
-        assetId: assetId,
-        title: `${selectedIncident.type} - ${selectedIncident.severity} Priority`,
-        description: incidentTaskForm.description || selectedIncident.description,
-        assigneeId: incidentTaskForm.assigneeId,
-        priority: priority,
-        dueDate: incidentTaskForm.dueDate,
-        dueTime: incidentTaskForm.dueTime || '09:00',
-        taskType: 'custom',
-        status: 'pending',
-         incidentId: parseInt(selectedIncident.id.replace('INC-', ''))
-      };
-      
-      await assetService.createMaintenanceTask(taskData);
-      // Update incident status to "Assigned to Task"
-      await assetService.updateIncidentStatus(selectedIncident.id, 'Assigned');
-      // Log activity
-      await logActivity('assign_maintenance_task', `Assigned maintenance task from incident: ${selectedIncident.type} - ${selectedIncident.severity} Priority to ${assignedPersonnel.name}`);
-      // Refresh assets
-      await fetchAssets();
-      
-      setShowAssignTaskModal(false);
-      setIncidentTaskForm({ incidentId: '', assigneeId: '', dueDate: '', dueTime: '', description: '' });
-      setPreviousAsset(null);
-      
-      alert(`Maintenance task assigned to ${assignedPersonnel.name}!`);
-      
-    } catch (err) {
-      console.error('Error assigning task:', err);
-      alert('Failed to assign task: ' + err.message);
-    }
-  } else {
-    alert('Please fill in required fields.');
-  }
-};
 
  const fetchAssets = async () => {
   try {
@@ -1036,6 +931,7 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
   </Form.Group>
 </div>              
 {/* Active Incidents Section */}
+{/* Active Incidents Section - View Only */}
 <div className="mt-4 pt-3 border-top">
   <div className="d-flex justify-content-between align-items-center mb-3">
     <h6 className="mb-0">
@@ -1048,74 +944,25 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
   </div>
   
   {selectedAsset.incidentReports?.length > 0 ? (
-    <Row className="g-3">
-      {selectedAsset.incidentReports.slice(0, 3).map((incident, index) => (
-        <Col xs={12} key={index}>
-  <Card className="mb-2 shadow-sm hover-card" style={{ 
-  border: '1px solid #e9ecef',
-  borderLeft: '4px solid ' + (incident.severity === 'High' ? '#dc3545' :
-                              incident.severity === 'Medium' ? '#ffc107' : '#0dcaf0'),
-  borderRadius: '6px' 
-}}>
-           <Card.Body className="p-3">
-  <div className="d-flex justify-content-between align-items-center">
-    <div className="d-flex align-items-center gap-3 flex-grow-1">
-      <div style={{
-        width: '4px',
-        height: '40px',
-        backgroundColor: incident.severity === 'High' ? '#dc3545' :
-                        incident.severity === 'Medium' ? '#ffc107' : '#0dcaf0',
-        borderRadius: '2px'
-      }}></div>
-      
-      <div>
-        <h6 className="mb-1">{incident.type}</h6>
+    <Alert variant="warning" className="mb-0">
+      <div className="d-flex align-items-center justify-content-between">
+        <div>
+          <i className="fas fa-exclamation-circle me-2"></i>
+          <strong>{selectedAsset.incidentReports.length} active incident{selectedAsset.incidentReports.length > 1 ? 's' : ''} reported for this asset.</strong>
+        </div>
         <small className="text-muted">
-          {incident.reportedBy} • {formatDate(incident.reportedAt)}
+          <i className="fas fa-arrow-right me-1"></i>
+          View and manage in <strong>Maintenance Tasks</strong>
         </small>
       </div>
-    </div>
-    
-    <div className="d-flex gap-2 align-items-center">
-      <Badge 
-        bg="light" 
-        text="dark" 
-        className="text-uppercase" 
-        style={{fontSize: '0.7rem', fontWeight: '600'}}
-      >
-        {incident.severity}
-      </Badge>
-      <Badge 
-        bg={incident.status === 'Open' ? 'danger' : 
-            incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}
-        style={{fontSize: '0.7rem'}}
-      >
-        {incident.status}
-      </Badge>
-      <Button 
-        size="sm" 
-        variant="link"
-        onClick={() => handleViewIncidentDetails(incident)}
-        className="text-decoration-none p-1"
-      >
-        <i className="fas fa-chevron-right"></i>
-      </Button>
-    </div>
-  </div>
-</Card.Body>
-          </Card>
-        </Col>
-      ))}
-    </Row>
+    </Alert>
   ) : (
-    <div className="text-center py-4 bg-light rounded">
-      <i className="fas fa-check-circle fa-3x mb-3 text-success opacity-25"></i>
-      <p className="mb-0">No active incidents</p>
-      <small className="text-muted">All clear!</small>
+    <div className="text-center py-3 bg-light rounded">
+      <i className="fas fa-check-circle fa-2x mb-2 text-success opacity-25"></i>
+      <p className="mb-0 small">No active incidents</p>
     </div>
   )}
 </div>
-
                       </div>
                     ) : (
                       // Edit Mode
@@ -1519,184 +1366,6 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
   </Modal>
 )}
 
-{/* Incident Details Modal */}
-<Modal show={showIncidentDetailsModal} onHide={() => setShowIncidentDetailsModal(false)} size="lg">
-  <Modal.Header closeButton>
-    <Modal.Title>Incident Report Details</Modal.Title>
-  </Modal.Header>
-<Modal.Body>
-  {selectedIncident && (
-    <div>
-      {/* Integrated Header with all info */}
-      <div className="mb-3">
-        <div className="d-flex justify-content-between align-items-start mb-2">
-          <div className="flex-grow-1">
-            <h5 className="mb-1">{selectedIncident.type}</h5>
-            <div className="d-flex align-items-center gap-2 text-muted" style={{fontSize: '0.875rem'}}>
-              <span><i className="fas fa-user me-1"></i>{selectedIncident.reportedBy}</span>
-              <span>•</span>
-              <span>{formatDate(selectedIncident.reportedAt)}</span>
-            </div>
-          </div>
-          <span 
-            className={`badge bg-${selectedIncident.severity === 'High' ? 'danger' :
-                selectedIncident.severity === 'Medium' ? 'warning' : 'info'}`}
-            style={{fontSize: '0.75rem', fontWeight: '600', padding: '4px 12px'}}
-          >
-            {selectedIncident.severity.toUpperCase()}
-          </span>
-        </div>
-
-        {/* Description directly below - no separate section */}
-        <div className="mt-3 p-3 bg-light rounded">
-          <p className="mb-0 text-dark">{selectedIncident.description}</p>
-        </div>
-      </div>
-
-      {/* Status Alert if assigned */}
-      {selectedIncident.assignedTaskId && (
-        <Alert variant="success" className="mb-0">
-          <i className="fas fa-check-circle me-2"></i>
-          <strong>Task Assigned:</strong> This incident has been assigned to maintenance task #{selectedIncident.assignedTaskId}
-        </Alert>
-      )}
-    </div>
-  )}
-</Modal.Body>
-<Modal.Footer className="d-flex justify-content-between">
-  <Button 
-    variant="outline-secondary" 
-    size="sm"
-    onClick={() => {
-      setShowIncidentDetailsModal(false);
-      setSelectedAsset(previousAsset);
-      setPreviousAsset(null);
-    }}
-  >
-    <i className="fas fa-arrow-left me-2"></i>
-    Back
-  </Button>
-  
-  <div className="d-flex gap-2">
-    {(selectedIncident?.status === 'Reported' || selectedIncident?.status === 'Open') && (
-      <>
-        <Button 
-          variant="outline-danger" 
-          size="sm"
-          onClick={handleDismissIncident}
-        >
-          Dismiss
-        </Button>
-        <Button 
-          variant="primary"
-          onClick={handleAssignIncidentTask}
-        >
-          <i className="fas fa-tasks me-2"></i>
-          Assign Task
-        </Button>
-      </>
-    )}
-    {(selectedIncident?.status !== 'Reported' && selectedIncident?.status !== 'Open') && (
-      <Button 
-        variant="secondary"
-        onClick={() => {
-          setShowIncidentDetailsModal(false);
-          setPreviousAsset(null);
-        }}
-      >
-        Close
-      </Button>
-    )}
-  </div>
-</Modal.Footer>
-</Modal>
-
-{/* Assign Incident Task Modal */}
-<Modal show={showAssignTaskModal} onHide={() => setShowAssignTaskModal(false)} size="lg">
-  <Modal.Header closeButton>
-    <Modal.Title>Assign Maintenance Task from Incident</Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-  
-    {selectedIncident && (
-      <>
-        <Alert variant="info">
-          <strong>Creating task for incident:</strong> {selectedIncident.type} - {selectedIncident.severity} Priority
-        </Alert>
-        
-        <Row className="g-3">
-          <Col xs={12}>
-            <Form.Group>
-              <Form.Label>Assign To *</Form.Label>
-              <Form.Select
-                value={incidentTaskForm.assigneeId}
-                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, assigneeId: e.target.value})}
-                required
-              >
-                <option value="">Select Personnel</option>
-                {personnel.map(person => (
-                  <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
-                ))}
-              </Form.Select>
-            </Form.Group>
-          </Col>
-          
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label>Due Date *</Form.Label>
-              <Form.Control
-                type="date"
-                value={incidentTaskForm.dueDate}
-                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, dueDate: e.target.value})}
-                required
-              />
-            </Form.Group>
-          </Col>
-          
-          <Col md={6}>
-            <Form.Group>
-              <Form.Label>Due Time</Form.Label>
-              <Form.Control
-                type="time"
-                value={incidentTaskForm.dueTime}
-                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, dueTime: e.target.value})}
-              />
-            </Form.Group>
-          </Col>
-          
-          <Col xs={12}>
-            <Form.Group>
-              <Form.Label>Additional Instructions</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={incidentTaskForm.description}
-                onChange={(e) => setIncidentTaskForm({...incidentTaskForm, description: e.target.value})}
-                placeholder="Add any additional instructions for the maintenance task..."
-              />
-              <Form.Text className="text-muted">
-                Default: {selectedIncident.description}
-              </Form.Text>
-            </Form.Group>
-          </Col>
-        </Row>
-      </>
-    )}
-  </Modal.Body>
-  <Modal.Footer>
-<Button variant="secondary" onClick={() => {
-  setShowBulkUploadModal(false);
-  setCsvFile(null);
-  setCsvPreview([]);
-}}>
-  Cancel
-</Button>
-    <Button variant="primary" onClick={handleSubmitIncidentTask}>
-      <i className="fas fa-tasks me-2"></i>
-      Assign Task
-    </Button>
-  </Modal.Footer>
-</Modal>
 {/* Maintenance History Modal */}
 <Modal 
   show={showMaintenanceHistoryModal} 

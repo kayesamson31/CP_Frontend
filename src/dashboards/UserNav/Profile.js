@@ -3,7 +3,7 @@ import { Container, Row, Col, Button, Form, Card, Alert } from 'react-bootstrap'
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
 import { PasswordUtils } from '../../utils/PasswordUtils';
-
+import { AuditLogger } from '../../utils/AuditLogger';
 export default function Profile({ role = 'standard' }) {
   const [profileData, setProfileData] = useState({
     name: '',
@@ -225,7 +225,14 @@ const { data, error: updateError } = await supabase
     }
 
     console.log('Profile updated successfully:', data);
-
+      await AuditLogger.logWithIP({
+  userId: data.user_id,
+  actionTaken: isChangingPassword 
+    ? 'Updated profile and changed password'
+    : 'Updated profile information',
+  tableAffected: 'users',
+  recordId: data.user_id
+});
     // Update localStorage
     localStorage.setItem('userName', profileData.name);
     localStorage.setItem('userEmail', profileData.email);

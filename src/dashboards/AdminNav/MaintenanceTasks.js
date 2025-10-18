@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
 import { supabase } from '../../supabaseClient';
 import { AuthUtils } from '../../utils/AuthUtils';
+import { logActivity } from '../../utils/ActivityLogger';
+import { assetService } from '../../services/assetService';
 export default function MaintenanceTasks() {
   // State management (same pattern as WorkOrder)
   const [activeTab, setActiveTab] = useState('Pending');
@@ -16,12 +18,20 @@ export default function MaintenanceTasks() {
   const [error, setError] = useState(null);
   const [personnel, setPersonnel] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [assignedPersonnel, setAssignedPersonnel] = useState('');
+const [showAssignModal, setShowAssignModal] = useState(false);
+const [showDismissModal, setShowDismissModal] = useState(false);
 
   // API Base URL
   const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000/api';
-
+  const [incidentTaskForm, setIncidentTaskForm] = useState({
+  dueDate: '',
+  dueTime: '09:00',
+  description: ''
+});
   // Tabs - NO "To Review" for maintenance tasks
   const tabs = [
+    { name: 'To Review', count: tasks.filter(t => t.type === 'incident' && t.status === 'To Review').length },
     { name: 'Pending', count: tasks.filter(t => t.status === 'Pending').length },
     { name: 'In Progress', count: tasks.filter(t => t.status === 'In Progress').length },
     { name: 'Completed', count: tasks.filter(t => t.status === 'Completed').length },
@@ -116,7 +126,52 @@ const fetchMaintenanceTasks = async () => {
 };
     });
 
-    setTasks(transformedTasks);
+  // Fetch incident reports for "To Review" tab
+    const { data: incidents, error: incidentError } = await supabase
+      .from('incident_reports')
+      .select(`
+        incident_id,
+        description,
+        date_reported,
+        asset_id,
+        severity_id,
+        incident_type_id,
+        reported_by,
+        assets(asset_name, asset_code, location),
+        incident_types(type_name),
+        severity_levels(severity_name),
+        users!reported_by(full_name)
+      `)
+      .eq('organization_id', orgId)
+      .eq('status_id', 4) // Only "Reported" incidents
+      .order('date_reported', { ascending: false });
+
+    if (incidentError) {
+      console.error('Error fetching incidents:', incidentError);
+    }
+
+    // Transform incidents to look like tasks
+    const transformedIncidents = incidents?.map(inc => ({
+      id: `INC-${inc.incident_id}`,
+      taskName: inc.incident_types?.type_name || 'Incident Report',
+      assetName: inc.assets?.asset_name || 'Unknown Asset',
+      assetCode: inc.assets?.asset_code || null,
+      location: inc.assets?.location || '-',
+      status: 'To Review',
+      priority: inc.severity_levels?.severity_name || 'Medium',
+      dueDate: null,
+      dateCreated: inc.date_reported,
+      description: inc.description,
+      incident_id: inc.incident_id,
+      asset_id: inc.asset_id,
+      assignedTo: 'Unassigned',
+      type: 'incident',
+      reportedBy: inc.users?.full_name || 'Unknown',
+      severity: inc.severity_levels?.severity_name || 'Medium'
+    })) || [];
+
+    // Combine incidents and tasks
+    setTasks([...transformedIncidents, ...transformedTasks]);
 
   } catch (err) {
     console.error('Error fetching maintenance tasks:', err);
@@ -188,6 +243,93 @@ const fetchMaintenanceTasks = async () => {
     setSelectedTask(task);
     setShowModal(true);
   };
+  const handleDismissIncident = async () => {
+  if (!window.confirm('Are you sure you want to dismiss this incident?')) return;
+  
+  try {
+    setLoading(true);
+    
+    await assetService.updateIncidentStatus(selectedTask.id, 'Dismissed');
+    
+    await logActivity('dismiss_incident', 
+      `Dismissed incident: ${selectedTask.taskName} - ${selectedTask.priority} Priority for ${selectedTask.assetName}`
+    );
+    
+    await fetchMaintenanceTasks();
+    setShowModal(false);
+    setSelectedTask(null);
+    
+    alert('Incident dismissed successfully');
+  } catch (err) {
+    console.error('Error dismissing incident:', err);
+    alert('Failed to dismiss incident: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleAssignIncidentTask = () => {
+  setShowModal(false);
+  setShowAssignModal(true);
+};
+
+const confirmIncidentAssignment = async () => {
+  if (!assignedPersonnel || !incidentTaskForm.dueDate) {
+    alert('Please select personnel and set due date');
+    return;
+  }
+  
+  try {
+    setLoading(true);
+    
+    const assignedPerson = personnel.find(p => p.id === parseInt(assignedPersonnel));
+    
+    const severityToPriority = {
+      'Critical': 'high',
+      'Major': 'high', 
+      'Minor': 'low',
+      'High': 'high',
+      'Medium': 'medium',
+      'Low': 'low'
+    };
+    
+    const priority = severityToPriority[selectedTask.priority] || 'medium';
+    
+   const taskData = {
+  assetId: selectedTask.assetCode,
+  title: `${selectedTask.taskName} - ${selectedTask.priority} Priority`,
+  description: incidentTaskForm.description || selectedTask.description,
+  assigneeId: assignedPersonnel,
+  priority: priority,
+  dueDate: incidentTaskForm.dueDate,
+  dueTime: incidentTaskForm.dueTime || '09:00',
+  taskType: 'custom',
+  status: 'pending',
+  incidentId: parseInt(selectedTask.id.replace('INC-', ''))
+};
+    
+    await assetService.createMaintenanceTask(taskData);
+    await assetService.updateIncidentStatus(selectedTask.id, 'Assigned');
+    
+    await logActivity('assign_maintenance_task', 
+      `Assigned maintenance task from incident: ${selectedTask.taskName} - ${selectedTask.priority} Priority to ${assignedPerson.name}`
+    );
+    
+    await fetchMaintenanceTasks();
+ setShowAssignModal(false);
+setAssignedPersonnel('');
+setIncidentTaskForm({ dueDate: '', dueTime: '09:00', description: '' });
+setSelectedTask(null);
+    
+    alert(`Maintenance task assigned to ${assignedPerson.name}!`);
+    
+  } catch (err) {
+    console.error('Error assigning task:', err);
+    alert('Failed to assign task: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
 const getStatusBadge = (status) => {
     const statusColors = {
@@ -353,18 +495,18 @@ const getStatusBadge = (status) => {
             <div className="table-responsive">
               <table className="table table-hover mb-0">      
                 <thead className="table-light">
-                  <tr>
-                    <th>ID</th>
-                    <th>Task Name</th>
-                    <th>Asset</th>
-                    <th>Location</th>
-                    <th>Status</th>
-                    <th>Priority</th>
-                    <th>Due Date</th>
-                    <th>Assigned To</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
+  <tr>
+    <th>ID</th>
+    <th>Task Name</th>
+    <th>Asset</th>
+    <th>Location</th>
+    <th>Status</th>
+    <th>Priority</th>
+    <th>Due Date</th>
+    {activeTab !== 'To Review' && <th>Assigned To</th>}
+    <th>Actions</th>
+  </tr>
+</thead>
                        
                       <tbody>
                   {filteredTasks.map(task => (
@@ -398,8 +540,8 @@ const getStatusBadge = (status) => {
   </div>
 </td>
                       <td>{formatDate(task.dueDate)}</td>
-                      <td>{task.assignedTo || 'Unassigned'}</td>
-                      <td>
+{activeTab !== 'To Review' && <td>{task.assignedTo || 'Unassigned'}</td>}
+<td>
                         <button className="btn btn-outline-primary btn-sm" onClick={() => handleViewTask(task)}>
                           View
                         </button>
@@ -625,7 +767,36 @@ const getStatusBadge = (status) => {
     </div>
   )}
 </div>
-                       
+                       {/* Admin Actions for Incidents */}
+{selectedTask.type === 'incident' && selectedTask.status === 'To Review' && (
+  <div className="mb-4 p-4 rounded-3 shadow-sm" style={{backgroundColor: '#FFFFFF', border: '2px solid #337FCA'}}>
+    <h6 className="fw-bold mb-3 text-dark d-flex align-items-center">
+      <i className="bi bi-gear-fill me-2 text-warning"></i>
+      Incident Actions
+    </h6>
+    
+    <div className="row g-2">
+      <div className="col-6">
+        <button 
+          className="btn btn-danger w-100 fw-bold"
+          onClick={handleDismissIncident}
+          disabled={loading}
+        >
+          Dismiss Incident
+        </button>
+      </div>
+      <div className="col-6">
+        <button 
+          className="btn btn-success w-100 fw-bold"
+          onClick={handleAssignIncidentTask}
+          disabled={loading}
+        >
+          Assign Task
+        </button>
+      </div>
+    </div>
+  </div>
+)}
                        <div className="modal-footer border-0 pt-0 justify-content-end">
                         <button 
   type="button" 
@@ -639,6 +810,111 @@ const getStatusBadge = (status) => {
                    </div>
                  </div>
                )}
+
+               {/* Assign Personnel Modal */}
+{showAssignModal && selectedTask && (
+  <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="modal-dialog">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h5 className="modal-title">Assign Maintenance Task - {selectedTask.id}</h5>
+          <button 
+            type="button" 
+            className="btn-close"
+            onClick={() => {
+              setShowAssignModal(false);
+              setAssignedPersonnel('');
+            }}
+          ></button>
+        </div>
+        <div className="modal-body">
+          <div className="alert alert-info">
+            <strong>Incident:</strong> {selectedTask.taskName}<br />
+            <strong>Asset:</strong> {selectedTask.assetName}<br />
+            <strong>Priority:</strong> {selectedTask.priority}
+          </div>
+          
+<div className="mb-3">
+  <label className="form-label">Select Personnel *</label>
+  <select 
+    className="form-select"
+    value={assignedPersonnel}
+    onChange={(e) => setAssignedPersonnel(e.target.value)}
+  >
+    <option value="">Choose personnel...</option>
+    {personnel.map(person => (
+      <option key={person.id} value={person.id}>
+        {person.name}
+      </option>
+    ))}
+  </select>
+</div>
+
+{/* ADD THESE - Due Date & Time Fields */}
+<div className="row">
+  <div className="col-md-6">
+    <div className="mb-3">
+      <label className="form-label">Due Date *</label>
+      <input
+        type="date"
+        className="form-control"
+        value={incidentTaskForm.dueDate || ''}
+        onChange={(e) => setIncidentTaskForm({...incidentTaskForm, dueDate: e.target.value})}
+        required
+      />
+    </div>
+  </div>
+  
+  <div className="col-md-6">
+    <div className="mb-3">
+      <label className="form-label">Due Time</label>
+      <input
+        type="time"
+        className="form-control"
+        value={incidentTaskForm.dueTime || '09:00'}
+        onChange={(e) => setIncidentTaskForm({...incidentTaskForm, dueTime: e.target.value})}
+      />
+    </div>
+  </div>
+</div>
+
+<div className="mb-3">
+  <label className="form-label">Additional Instructions (Optional)</label>
+  <textarea
+    className="form-control"
+    rows={3}
+    value={incidentTaskForm.description || ''}
+    onChange={(e) => setIncidentTaskForm({...incidentTaskForm, description: e.target.value})}
+    placeholder="Add any additional instructions..."
+  />
+  <small className="text-muted">Default: {selectedTask?.description}</small>
+</div>
+        </div>
+        <div className="modal-footer">
+<button 
+  type="button" 
+  className="btn btn-secondary"
+  onClick={() => {
+    setShowAssignModal(false);
+    setAssignedPersonnel('');
+    setIncidentTaskForm({ dueDate: '', dueTime: '09:00', description: '' });
+  }}
+>
+  Cancel
+</button>
+<button 
+  type="button" 
+  className="btn btn-success"
+  onClick={confirmIncidentAssignment}
+  disabled={!assignedPersonnel || !incidentTaskForm.dueDate || loading}
+>
+  {loading ? 'Assigning...' : 'Assign Task'}
+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
                     </div>
            </SidebarLayout>
          );
