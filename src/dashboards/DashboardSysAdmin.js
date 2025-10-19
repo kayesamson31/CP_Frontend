@@ -20,8 +20,8 @@ export default function DashboardSyAdmin() {
   const [editingOrgInfo, setEditingOrgInfo] = useState(false);
 const [editedOrgData, setEditedOrgData] = useState({});
   const [organizationTypes, setOrganizationTypes] = useState([]);
-
-
+const [countries, setCountries] = useState([]);
+const [isDataLoaded, setIsDataLoaded] = useState(false);
   // Function to add new activity
 const addActivity = (type, title, user = organizationData.contactPerson) => {
   const newActivity = {
@@ -44,7 +44,7 @@ const handleEmailProgressClose = () => {
   // Show final summary if there were any failures
   const { successCount, failedCount } = emailProgress;
   if (failedCount > 0) {
-    alert(`Email Summary:\nÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ ${successCount} emails sent successfully\nÃƒÂ¢Ã‚ÂÃ…â€™ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+    alert(`Email Summary:\nÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ ${successCount} emails sent successfully\nÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
   }
 };
 
@@ -368,6 +368,24 @@ const fetchOrganizationTypes = async () => {
     return [];
   }
 };
+
+const fetchCountries = async () => {
+  try {
+    const { data, error } = await supabase
+      .from('countries')
+      .select('country_id, country_name')
+      .eq('is_active', true)
+      .order('country_name');
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error fetching countries:', error);
+    return [];
+  }
+};
+
+
   // Function to simulate API data fetching
   const fetchAPIData = async (endpoint, apiKey) => {
     try {
@@ -448,10 +466,10 @@ const updateSetupProgress = async () => {
       hasOrganizationInfo = orgData?.org_name && orgData?.contact_email;
     }
     
-    // âœ… Check if users exist (based on DATABASE, not localStorage)
+    // Ã¢Å“â€¦ Check if users exist (based on DATABASE, not localStorage)
     const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
     
-    // âœ… Check if assets exist (based on DATABASE, not localStorage)
+    // Ã¢Å“â€¦ Check if assets exist (based on DATABASE, not localStorage)
     const hasAssets = dbStats.totalAssets > 0;
     
     const setupStatus = {
@@ -471,10 +489,10 @@ const updateSetupProgress = async () => {
       systemHealth: newProgress > 66 ? 'Good' : newProgress > 33 ? 'Warning' : 'Critical'
     }));
     
-    // âœ… CRITICAL FIX: Automatically set setupCompleted to true when all requirements are met
+    // Ã¢Å“â€¦ CRITICAL FIX: Automatically set setupCompleted to true when all requirements are met
     if (completedSteps === 3) {
       setSetupCompleted(true);
-      // âœ… Remove the setup wizard data since it's complete
+      // Ã¢Å“â€¦ Remove the setup wizard data since it's complete
       localStorage.removeItem('setupWizardData');
       localStorage.setItem('justCompleted', 'true');
     } else {
@@ -668,15 +686,14 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
 
 useEffect(() => {
   const loadDashboardData = async () => {
-
-
     try {
       const types = await fetchOrganizationTypes();
       setOrganizationTypes(types);
       // Check if just completed setup or needs forced refresh
       const justCompleted = localStorage.getItem('setupJustCompleted');
       const forceRefresh = localStorage.getItem('forceRefreshDashboard');
-      
+      const countries = await fetchCountries();
+      setCountries(countries);
       if (justCompleted === 'true' || forceRefresh === 'true') {
         // Small delay to ensure all database operations are complete
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -690,7 +707,7 @@ useEffect(() => {
       // Get all statistics from database
       const dbStats = await fetchDatabaseStats();
       
-      // âœ… ADD THIS LINE - Fetch recent audit logs
+      // Ã¢Å“â€¦ ADD THIS LINE - Fetch recent audit logs
       const recentLogs = await fetchRecentAuditLogs();
       
       // Merge organization info with database statistics
@@ -701,7 +718,7 @@ useEffect(() => {
       
       setOrganizationData(mergedOrgData);
       
-      // âœ… ADD THIS LINE - Set recent activities with audit logs
+      // Ã¢Å“â€¦ ADD THIS LINE - Set recent activities with audit logs
       setRecentActivities(recentLogs);
       
       // Update dashboard data
@@ -718,6 +735,7 @@ useEffect(() => {
 
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      setIsDataLoaded(true); 
       // Fallback to default values
       setOrganizationData(prev => ({
         ...prev,
@@ -731,6 +749,7 @@ useEffect(() => {
     }
     
     await updateSetupProgress();
+    setIsDataLoaded(true);
   };
 
   loadDashboardData();
@@ -1066,7 +1085,9 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
             onChange={(e) => setEditedOrgData({...editedOrgData, address: e.target.value})}
           />
         ) : (
-          <p className="mb-0">{organizationData.address}</p>
+          <p className="mb-0">
+      {isDataLoaded ? organizationData.address : <small className="text-muted">Loading...</small>}
+    </p>
         )}
       </div>
     </div>
@@ -1087,7 +1108,9 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     ))}
   </select>
 ) : (
-  <p className="mb-0">{organizationData.type}</p>
+  <p className="mb-0">
+  {isDataLoaded ? organizationData.type : <small className="text-muted">Loading...</small>}
+</p>
 )}
       </div>
       <div className="mb-3">
@@ -1100,24 +1123,34 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
             onChange={(e) => setEditedOrgData({...editedOrgData, phone: e.target.value})}
           />
         ) : (
-          <p className="mb-0">{organizationData.phone}</p>
+         <p className="mb-0">
+  {isDataLoaded ? organizationData.phone : <small className="text-muted">Loading...</small>}
+</p>
         )}
       </div>
     </div>
     <div className="col-md-4">
-      <div className="mb-3">
-        <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Country</label>
-        {editingOrgInfo ? (
-          <input 
-            type="text" 
-            className="form-control"
-            value={editedOrgData.country}
-            onChange={(e) => setEditedOrgData({...editedOrgData, country: e.target.value})}
-          />
-        ) : (
-          <p className="mb-0">{organizationData.country}</p>
-        )}
-      </div>
+<div className="mb-3">
+  <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Country</label>
+  {editingOrgInfo ? (
+    <select 
+      className="form-control"
+      value={editedOrgData.country || ''}
+      onChange={(e) => setEditedOrgData({...editedOrgData, country: e.target.value})}
+    >
+      <option value="">Select Country</option>
+      {countries.map(country => (
+        <option key={country.country_id} value={country.country_name}>
+          {country.country_name}
+        </option>
+      ))}
+    </select>
+  ) : (
+    <p className="mb-0">
+  {isDataLoaded ? organizationData.country : <small className="text-muted">Loading...</small>}
+</p>
+  )}
+</div>
       <div className="mb-3">
         <label className="form-label small fw-semibold" style={{color: '#284C9A'}}>Official Website</label>
         {editingOrgInfo ? (
@@ -1147,12 +1180,12 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
       transition: 'transform 0.2s, box-shadow 0.2s'
     }}
-    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  // â† ADD THIS
-    onMouseEnter={(e) => {  // â† ADD THIS (optional hover effect)
+    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  // Ã¢â€ Â ADD THIS
+    onMouseEnter={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(-4px)';
       e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
     }}
-    onMouseLeave={(e) => {  // â† ADD THIS (optional hover effect)
+    onMouseLeave={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(0)';
       e.currentTarget.style.boxShadow = '';
     }}
@@ -1177,11 +1210,11 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
       transition: 'transform 0.2s, box-shadow 0.2s'}}
       onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}
-       onMouseEnter={(e) => {  // â† ADD THIS (optional hover effect)
+       onMouseEnter={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(-4px)';
       e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
     }}
-    onMouseLeave={(e) => {  // â† ADD THIS (optional hover effect)
+    onMouseLeave={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(0)';
       e.currentTarget.style.boxShadow = '';
     }}
@@ -1330,7 +1363,7 @@ onMouseLeave={(e) => {
     <button 
       className="btn btn-link text-primary fw-semibold text-decoration-none p-0"
        onClick={(e) => {
-        e.stopPropagation(); // â† ADD THIS to prevent card click
+        e.stopPropagation(); // Ã¢â€ Â ADD THIS to prevent card click
         navigate('/dashboard-sysadmin/SysadAuditLogs');
       }}
     >

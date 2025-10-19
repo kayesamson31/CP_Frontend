@@ -5,8 +5,15 @@ import { supabase } from '../../supabaseClient';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 export default function SysadReports() {
-  const [dateFrom, setDateFrom] = useState('2024-12-01');
-  const [dateTo, setDateTo] = useState('2024-12-15');
+// ✅ Set to last 30 days dynamically
+const [dateFrom, setDateFrom] = useState(() => {
+  const date = new Date();
+  date.setDate(date.getDate() - 30);
+  return date.toISOString().split('T')[0];
+});
+const [dateTo, setDateTo] = useState(() => {
+  return new Date().toISOString().split('T')[0] + 'T23:59:59';
+});
   const [eventTypeFilter, setEventTypeFilter] = useState('all');
   const [dateRange, setDateRange] = useState('monthly');
   const [searchTerm, setSearchTerm] = useState('');
@@ -430,28 +437,40 @@ const calculateSummaryFromEvents = (events) => {
       const value = e.target.value;
       const today = new Date();
       let newDateFrom = '';
+      let newDateTo = ''; 
       
-      switch(value) {
-        case 'today':
-          newDateFrom = today.toISOString().split('T')[0];
-          break;
-        case 'weekly':
-          newDateFrom = new Date(today.setDate(today.getDate() - 7)).toISOString().split('T')[0];
-          break;
-        case 'monthly':
-          newDateFrom = new Date(today.setMonth(today.getMonth() - 1)).toISOString().split('T')[0];
-          break;
-        case 'yearly':
-          newDateFrom = new Date(today.setFullYear(today.getFullYear() - 1)).toISOString().split('T')[0];
-          break;
-        default:
-          newDateFrom = '2024-01-01';
-      }
-      
-      setDateFrom(newDateFrom);
-      setDateTo(new Date().toISOString().split('T')[0]);
-      setDateRange(value);
-    }}
+  switch(value) {
+    case 'today':
+      newDateFrom = today.toISOString().split('T')[0];
+      newDateTo = today.toISOString().split('T')[0] + 'T23:59:59';  // ✅ ADD END OF DAY
+      break;
+    case 'weekly':
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      newDateFrom = weekAgo.toISOString().split('T')[0];
+      newDateTo = today.toISOString().split('T')[0] + 'T23:59:59';  // ✅ ADD END OF DAY
+      break;
+    case 'monthly':
+      const monthAgo = new Date();
+      monthAgo.setMonth(monthAgo.getMonth() - 1);
+      newDateFrom = monthAgo.toISOString().split('T')[0];
+      newDateTo = today.toISOString().split('T')[0] + 'T23:59:59';  // ✅ ADD END OF DAY
+      break;
+    case 'yearly':
+      const yearAgo = new Date();
+      yearAgo.setFullYear(yearAgo.getFullYear() - 1);
+      newDateFrom = yearAgo.toISOString().split('T')[0];
+      newDateTo = today.toISOString().split('T')[0] + 'T23:59:59';  // ✅ ADD END OF DAY
+      break;
+    default:
+      newDateFrom = '2024-01-01';
+      newDateTo = today.toISOString().split('T')[0] + 'T23:59:59';  // ✅ ADD END OF DAY
+  }
+  
+  setDateFrom(newDateFrom);
+  setDateTo(newDateTo);  // ✅ USE NEW VARIABLE
+  setDateRange(value);
+}}
     style={{ minWidth: '150px' }}
   >
     <option value="today">Today</option>

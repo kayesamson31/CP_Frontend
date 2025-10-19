@@ -151,7 +151,17 @@ const fetchMaintenanceTasks = async () => {
     }
 
     // Transform incidents to look like tasks
-    const transformedIncidents = incidents?.map(inc => ({
+    // Get incidents that already have assigned tasks
+const { data: existingTasks } = await supabase
+  .from('maintenance_tasks')
+  .select('incident_id')
+  .not('incident_id', 'is', null);
+
+const assignedIncidentIds = new Set(existingTasks?.map(t => t.incident_id) || []);
+
+// Filter out incidents that already have tasks assigned
+const unassignedIncidents = incidents?.filter(inc => !assignedIncidentIds.has(inc.incident_id)) || [];
+    const transformedIncidents = unassignedIncidents.map(inc => ({
       id: `INC-${inc.incident_id}`,
       taskName: inc.incident_types?.type_name || 'Incident Report',
       assetName: inc.assets?.asset_name || 'Unknown Asset',
@@ -309,8 +319,14 @@ const confirmIncidentAssignment = async () => {
 };
     
     await assetService.createMaintenanceTask(taskData);
-    await assetService.updateIncidentStatus(selectedTask.id, 'Assigned');
-    
+    // Mark incident as handled (but keep status as Reported until task completes)
+const incidentId = parseInt(selectedTask.id.replace('INC-', ''));
+await supabase
+  .from('incident_reports')
+  .update({ 
+    status_id: 4 // Keep as "Reported" - will auto-resolve when task completes
+  })
+  .eq('incident_id', incidentId);
     await logActivity('assign_maintenance_task', 
       `Assigned maintenance task from incident: ${selectedTask.taskName} - ${selectedTask.priority} Priority to ${assignedPerson.name}`
     );

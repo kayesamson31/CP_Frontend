@@ -573,6 +573,7 @@ try {
     priority_id: priorityMap[taskData.priority] || 2,
     related_table: 'maintenance_tasks',
     related_id: taskResult.task_id,
+    organization_id: organizationId,
     is_active: true,
     created_at: new Date().toISOString()
     
@@ -802,6 +803,43 @@ const insertData = {
     }
 
     console.log('Insert successful:', data);
+    console.log('Insert successful:', data);
+
+// ✅ CREATE NOTIFICATION FOR ADMIN
+try {
+  const priorityMap = { 'Low': 1, 'Medium': 2, 'High': 3 };
+  
+  const notificationData = {
+    notification_type_id: 14, // incident_reported
+    created_by: currentUser.user_id,
+    title: 'New Incident Report Submitted',
+    message: `${data.users?.full_name || 'Personnel'} reported: ${incidentData.type} - ${incidentData.severity} severity for ${assetData.asset_name}`,
+    target_roles: '2', // Admin role
+    target_user_id: null,
+    priority_id: priorityMap[incidentData.severity] || 2,
+    related_table: 'incident_reports',
+    related_id: data.incident_id,
+    organization_id: assetOrg.organization_id,
+    is_active: true,
+    created_at: new Date().toISOString()
+  };
+
+  console.log('📢 Creating admin notification:', notificationData);
+
+  const { error: notifError } = await supabase
+    .from('notifications')
+    .insert([notificationData]);
+
+  if (notifError) {
+    console.error('❌ Admin notification failed:', notifError);
+  } else {
+    console.log('✅ Admin notified about incident report');
+  }
+} catch (notifErr) {
+  console.error('❌ Notification error:', notifErr);
+  // Don't throw - incident was created successfully
+}
+
     console.log('=== CREATE INCIDENT END ===');
 
     return {

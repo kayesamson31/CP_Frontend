@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from './Layout';
 import { supabase } from './supabaseClient';
-
+import { useEffect } from 'react';
 //  SignUpPage component para gumawa ng bagong Organization Account
 function SignUpPage() {
 const navigate = useNavigate(); // Para makapag-redirect sa ibang page
@@ -26,7 +26,8 @@ const navigate = useNavigate(); // Para makapag-redirect sa ibang page
   const [loading, setLoading] = useState(false);
    // State para sa error galing server (Supabase)
   const [serverError, setServerError] = useState('');
-
+const [organizationTypes, setOrganizationTypes] = useState([]);
+const [countries, setCountries] = useState([]);
    //  Function na ina-update ang orgInfo habang nagta-type ang user
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -117,19 +118,41 @@ const handleSubmit = async (e) => {
     setLoading(false);
   }
 };
+useEffect(() => {
+  const fetchOrgTypes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('organization_types')
+        .select('org_type_id, type_name')
+        .eq('is_active', true)
+        .order('type_name');
+      
+      if (error) throw error;
+      setOrganizationTypes(data || []);
+    } catch (error) {
+      console.error('Error fetching organization types:', error);
+    }
+  };
 
-//List of organization types para sa dropdown
-  const organizationTypes = [
-    'School / Educational Institution',
-    'Office / Corporate',
-    'Church / Parish / Religious Institution',
-    'Hospital / Healthcare Facility',
-    'Hotel / Hospitality',
-    'Government Office',
-    'BPO / Call Center',
-    'Nonprofit Organization / NGO',
-    'Others'
-  ];
+  const fetchCountries = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('countries')
+        .select('country_id, country_name')
+        .eq('is_active', true)
+        .order('country_name');
+      
+      if (error) throw error;
+      setCountries(data || []);
+    } catch (error) {
+      console.error('Error fetching countries:', error);
+    }
+  };
+
+  fetchOrgTypes();
+  fetchCountries();
+}, []);
+
 
   const containerStyle = {
     background: '#ffffff',
@@ -360,33 +383,39 @@ const handleSubmit = async (e) => {
                     Organization Type <span style={{ color: '#ef4444' }}>*</span>
                   </label>
                   <select
-                    style={errors.orgType ? errorInputStyle : inputStyle}
-                    name="orgType"
-                    value={orgInfo.orgType}
-                    onChange={handleChange}
-                  >
-                    <option value="">Select organization type</option>
-                    {organizationTypes.map((type) => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
+    style={errors.orgType ? errorInputStyle : inputStyle}
+    name="orgType"
+    value={orgInfo.orgType}
+    onChange={handleChange}
+  >
+    <option value="">Select organization type</option>
+    {organizationTypes.map((type) => (
+      <option key={type.org_type_id} value={type.type_name}>
+        {type.type_name}
+      </option>
+    ))}
+  </select>
                   {errors.orgType && <span style={errorTextStyle}>{errors.orgType}</span>}
                 </div>
-
-                <div style={inputGroupStyle}>
-                  <label style={labelStyle}>
-                    Country <span style={{ color: '#ef4444' }}>*</span>
-                  </label>
-                  <input 
-                    style={errors.country ? errorInputStyle : inputStyle}
-                    type="text" 
-                    name="country" 
-                    value={orgInfo.country} 
-                    onChange={handleChange}
-                    placeholder="Enter country"
-                  />
-                  {errors.country && <span style={errorTextStyle}>{errors.country}</span>}
-                </div>
+<div style={inputGroupStyle}>
+  <label style={labelStyle}>
+    Country <span style={{ color: '#ef4444' }}>*</span>
+  </label>
+  <select
+    style={errors.country ? errorInputStyle : inputStyle}
+    name="country"
+    value={orgInfo.country}
+    onChange={handleChange}
+  >
+    <option value="">Select country</option>
+    {countries.map((country) => (
+      <option key={country.country_id} value={country.country_name}>
+        {country.country_name}
+      </option>
+    ))}
+  </select>
+  {errors.country && <span style={errorTextStyle}>{errors.country}</span>}
+</div>
 
                 <div style={inputGroupStyle}>
                   <label style={labelStyle}>

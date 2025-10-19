@@ -1,7 +1,7 @@
 // Una, ini-import ko lahat ng kailangan kong dependencies at components.
 // Kasama dito ang React, React Router (pang-routing ng mga pages),
-// EmailService (pang-email notification), at iba’t ibang dashboard pages
-// para sa iba’t ibang user roles (standard, personnel, admin, sysadmin).
+// EmailService (pang-email notification), at ibaâ€™t ibang dashboard pages
+// para sa ibaâ€™t ibang user roles (standard, personnel, admin, sysadmin).
 
 import React, { useEffect } from 'react';
 import { EmailService } from './utils/EmailService';
@@ -63,9 +63,9 @@ function App() {
     if (process.env.NODE_ENV === 'development') {
       EmailService.testConfiguration().then(result => {
         if (result.success) {
-          console.log('Ã¢Å“â€¦ EmailJS configuration test passed');
+          console.log('ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ EmailJS configuration test passed');
         } else {
-          console.error('Ã¢ÂÅ’ EmailJS configuration test failed:', result.error);
+          console.error('ÃƒÂ¢Ã‚ÂÃ…â€™ EmailJS configuration test failed:', result.error);
           console.log('Make sure your EmailJS service, template, and public key are correctly configured.');
         }
       });

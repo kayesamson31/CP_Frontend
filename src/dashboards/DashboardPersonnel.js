@@ -76,17 +76,25 @@ if (taskType === 'maintenance_task') {
     if (error) throw error;
     await logActivity('request_task_extension', `Requested extension for maintenance task #${taskId} from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
     try {
-      await supabase.from('notifications').insert({
-        notification_type_id: 3, // maintenance_task_update
-        created_by: userProfile.user_id,
-        title: 'Maintenance Task Extended',
-        message: `Personnel extended maintenance task #${taskId} due date from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`,
-        target_roles: '2', // Admin role
-        priority_id: 2, // Medium priority
-        related_table: 'maintenance_tasks',
-        related_id: taskId,
-        is_active: true
-      });
+const { data: userOrgData } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('user_id', userProfile.user_id)
+  .single();
+
+// Then add to notification:
+await supabase.from('notifications').insert({
+  notification_type_id: 3,
+  created_by: userProfile.user_id,
+  title: 'Maintenance Task Extended',
+  message: `Personnel extended maintenance task #${taskId}...`,
+  target_roles: '2',
+  priority_id: 2,
+  related_table: 'maintenance_tasks',
+  related_id: taskId,
+  organization_id: userOrgData.organization_id, // ✅ ADD THIS
+  is_active: true
+});
       console.log('✅ Admin notified about task extension');
     } catch (notifError) {
       console.error('❌ Failed to notify admin about extension:', notifError);
@@ -133,23 +141,40 @@ if (status === 'completed' && data?.[0]?.asset_id) {
   }
 }
 
-if (data[0]?.incident_id) {
+// ✅ NOTIFY ADMIN about maintenance task update (exclude incident-related tasks to avoid duplicates)
+if (!data[0]?.incident_id) {
   try {
     const statusMessage = status === 'completed' 
-      ? `Personnel completed incident report task #${data[0].incident_id}` 
+      ? `Personnel completed maintenance task #${taskId}` 
       : status === 'failed'
-      ? `Personnel marked incident report task #${data[0].incident_id} as failed${reason ? ': ' + reason : ''}`
-      : `Personnel updated incident report task #${data[0].incident_id} to ${status}`;
+      ? `Personnel marked maintenance task #${taskId} as failed${reason ? ': ' + reason : ''}`
+      : status === 'in-progress'
+      ? newDate 
+        ? `Personnel extended maintenance task #${taskId} due date to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`
+        : `Personnel started working on maintenance task #${taskId}`
+      : `Personnel updated maintenance task #${taskId} to ${status}`;
+
+    const { data: userOrgData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('user_id', userProfile.user_id)
+      .single();
 
     await supabase.from('notifications').insert({
       notification_type_id: 3,
       created_by: userProfile.user_id,
-      title: `Incident Task ${status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : 'Updated'}`,
+      title: `Maintenance Task ${
+        status === 'completed' ? 'Completed' : 
+        status === 'failed' ? 'Failed' : 
+        status === 'in-progress' ? (newDate ? 'Extended' : 'In Progress') : 
+        'Updated'
+      }`,
       message: statusMessage,
       target_roles: '2',
       priority_id: status === 'failed' ? 3 : 2,
-      related_table: 'incident_reports',
-      related_id: data[0].incident_id,
+      related_table: 'maintenance_tasks',
+      related_id: taskId,
+      organization_id: userOrgData.organization_id,
       is_active: true
     });
   } catch (notifError) {
@@ -157,6 +182,7 @@ if (data[0]?.incident_id) {
   }
 }
 // ✅ NOTIFY ADMIN about maintenance task update
+if (data[0]?.incident_id && (status === 'completed' || status === 'failed')) {
 try {
   const statusMessage = status === 'completed' 
     ? `Personnel completed maintenance task #${taskId}` 
@@ -168,19 +194,32 @@ try {
       : `Personnel started working on maintenance task #${taskId}`
     : `Personnel updated maintenance task #${taskId} to ${status}`;
 
-  await supabase.from('notifications').insert({
-    notification_type_id: 3, // maintenance_task_update
-    created_by: userProfile.user_id,
-    title: `Maintenance Task ${status === 'completed' ? 'Completed' : status === 'failed' ? 'Failed' : status === 'in-progress' ? 'Updated' : 'Status Changed'}`,
-    message: statusMessage,
-    target_roles: '2', // Admin role
-    priority_id: status === 'failed' ? 3 : 2,
-    related_table: 'maintenance_tasks',
-    related_id: taskId,
-    is_active: true
-  });
+  const { data: userOrgData } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('user_id', userProfile.user_id)
+  .single();
+
+await supabase.from('notifications').insert({
+  notification_type_id: 3,
+  created_by: userProfile.user_id,
+ title: `Maintenance Task ${
+  status === 'completed' ? 'Completed' : 
+  status === 'failed' ? 'Failed' : 
+  status === 'in-progress' ? (newDate ? 'Extended' : 'In Progress') : 
+  'Updated'
+}`,
+  message: statusMessage,
+  target_roles: '2',
+  priority_id: status === 'failed' ? 3 : 2,
+  related_table: 'maintenance_tasks',
+  related_id: taskId,
+  organization_id: userOrgData.organization_id, // ✅ ADD THIS
+  is_active: true
+});
 } catch (notifError) {
   console.error('Failed to create admin notification:', notifError);
+}
 }
 await logActivity('update_task_status', `Updated maintenance task #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);
 return { success: true, data: data?.[0] };
