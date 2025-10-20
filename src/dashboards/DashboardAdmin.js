@@ -19,7 +19,8 @@ export default function DashboardAdmin() {
   const [modalData, setModalData] = useState(null);
   const [modalType, setModalType] = useState('');
  
-
+const [userRole, setUserRole] = useState('Admin Official');
+const [organizationName, setOrganizationName] = useState('Organization');
 const [statsData, setStatsData] = useState([
   {
     title: "Pending Approvals",
@@ -71,12 +72,24 @@ useEffect(() => {
 
 const { data: userData } = await supabase
   .from('users')
-  .select('full_name, organization_id')
+  .select('full_name, organization_id, job_position')
   .eq('auth_uid', user.id)
   .single();
 
       if (userData) {
         setAdminName(userData.full_name);
+        setUserRole(userData.job_position || 'Admin Official');
+        
+        // Fetch organization name
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('org_name')
+          .eq('organization_id', userData.organization_id)
+          .single();
+        
+        if (orgData) {
+          setOrganizationName(orgData.org_name);
+        }
       }
     } catch (error) {
       console.error('Error fetching admin data:', error);
@@ -110,8 +123,7 @@ const { count: pendingCount } = await supabase
     const { count: extendedCount } = await supabase
   .from('maintenance_task_extensions')
   .select('*', { count: 'exact', head: true })
-  .eq('organization_id', orgId)  // ← ADD THIS
-  .gte('extension_date', today.toISOString());
+  .eq('organization_id', orgId);
 
       // 4. Asset Maintenance - assets needing maintenance today
     const { count: assetCount } = await supabase
@@ -442,8 +454,11 @@ const statCardStyle = {
   marginBottom: '24px'
 }}>
  <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1a1a1a' }}>
-  Welcome back, {adminName}
+  Welcome back, {adminName}!
 </h3>
+  <p style={{ margin: '4px 0 0 0', color: '#6c757d', fontSize: '14px' }}>
+    {userRole} | {organizationName}
+  </p>
   <p style={{ margin: '4px 0 0 0', color: '#6c757d', fontSize: '14px' }}>
     {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
   </p>

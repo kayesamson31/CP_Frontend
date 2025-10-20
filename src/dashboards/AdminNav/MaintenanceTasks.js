@@ -192,7 +192,7 @@ const unassignedIncidents = incidents?.filter(inc => !assignedIncidentIds.has(in
   }
 };
 
- const fetchPersonnel = async () => {
+const fetchPersonnel = async () => {
   try {
     const orgId = AuthUtils.getCurrentOrganizationId();
     if (!orgId) {
@@ -203,8 +203,8 @@ const unassignedIncidents = incidents?.filter(inc => !assignedIncidentIds.has(in
     
     const { data, error } = await supabase
       .from('users')
-      .select('user_id, full_name, email, role_id')
-      .eq('organization_id', orgId)  // ← ADD THIS
+      .select('user_id, full_name, email, role_id, job_position') // ← ADD job_position
+      .eq('organization_id', orgId)
       .eq('role_id', 3)
       .order('full_name');
 
@@ -213,7 +213,8 @@ const unassignedIncidents = incidents?.filter(inc => !assignedIncidentIds.has(in
       const transformedPersonnel = data.map(user => ({
         id: user.user_id,
         name: user.full_name,
-        email: user.email
+        email: user.email,
+        department: user.job_position || 'Personnel' // ← ADD department field
       }));
       
       setPersonnel(transformedPersonnel);
@@ -861,6 +862,7 @@ const getStatusBadge = (status) => {
     {personnel.map(person => (
       <option key={person.id} value={person.id}>
         {person.name}
+        {person.department && ` - ${person.department}`}
       </option>
     ))}
   </select>

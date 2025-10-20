@@ -1,6 +1,7 @@
 // src/dashboards/AdminNav/AssetManagement.js
 import React, { useState, useEffect } from "react";
 import SidebarLayout from "../../Layouts/SidebarLayout";
+import { useNavigate } from "react-router-dom";
 import { assetService } from '../../services/assetService';
 import { logActivity } from '../../utils/ActivityLogger';
 import { AuthUtils } from '../../utils/AuthUtils';
@@ -19,6 +20,7 @@ import {
 } from "react-bootstrap";
 
 export default function AssetManagement() {
+  const navigate = useNavigate(); 
   // State for assets - will be populated from backend
   const [assets, setAssets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -283,10 +285,10 @@ const handleBulkUpload = async () => {
       try {
         await assetService.addAsset(asset);
         successCount++;
-        console.log('âœ“ Uploaded:', asset.name);
+        console.log('Ã¢Å“â€œ Uploaded:', asset.name);
       } catch (uploadErr) {
         failCount++;
-        console.error('âœ— Failed:', asset.name, uploadErr.message);
+        console.error('Ã¢Å“â€” Failed:', asset.name, uploadErr.message);
       }
     }
     
@@ -768,32 +770,41 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
     <td>{asset.category}</td>
     <td>{asset.location}</td>
 
-                                <td>
-  <span className={`badge ${
-    asset.status === 'Operational' ? 'bg-success' :
-    asset.status === 'Under Maintenance' ? 'bg-warning' :
-    'bg-secondary'
-  }`}>
-    {asset.status}
-  </span>
-  {asset.hasFailedMaintenance && asset.status !== 'Operational' && (
-    <div className="d-flex align-items-center mt-1">
-      <span className="text-danger" style={{ fontSize: '0.7rem' }}>
-        â–²
+<td>
+  <div className="d-flex align-items-center gap-2">
+    {/* Main Status Badge */}
+    <span className={`badge ${
+      asset.status === 'Operational' ? 'bg-success' :
+      asset.status === 'Under Maintenance' ? 'bg-warning' :
+      'bg-secondary'
+    }`}>
+      {asset.status}
+    </span>
+    
+    {/* ✅ IMPROVED: Show failed badge regardless of status */}
+    {asset.hasFailedMaintenance && (
+      <span 
+        className="badge bg-danger" 
+        title={`${asset.failedMaintenanceCount} Active Failed Task(s)`}
+        style={{ cursor: 'help' }}
+      >
+        <i className="fas fa-wrench me-1"></i>
+        {asset.failedMaintenanceCount}
       </span>
-      <small className="text-danger ms-1" style={{ fontSize: '0.7rem', fontWeight: '500' }}>
-        FAILED MAINTENANCE ({asset.failedMaintenanceCount})
-      </small>
-    </div>
-  )}
-  {asset.incidentReports && asset.incidentReports.length > 0 && (
-    <div className="d-flex align-items-center mt-1">
-      <i className="fas fa-exclamation-circle text-danger" style={{ fontSize: '0.7rem' }}></i>
-      <small className="text-danger ms-1" style={{ fontSize: '0.7rem', fontWeight: '500' }}>
-        {asset.incidentReports.length} INCIDENT REPORT{asset.incidentReports.length > 1 ? 'S' : ''}
-      </small>
-    </div>
-  )}
+    )}
+    
+    {/* Incident Badge - Keep as is */}
+    {asset.incidentReports && asset.incidentReports.length > 0 && (
+      <span 
+        className="badge bg-warning text-dark" 
+        title={`${asset.incidentReports.length} Unresolved Incident(s)`}
+        style={{ cursor: 'help' }}
+      >
+        <i className="fas fa-exclamation-triangle me-1"></i>
+        {asset.incidentReports.length}
+      </span>
+    )}
+  </div>
 </td>
                     <td>{asset.lastMaintenance}</td>
                     
@@ -857,7 +868,8 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
               <Modal.Body>
              
 <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-  <div className="d-flex gap-2">
+  <div className="d-flex gap-2 align-items-center">
+    {/* Main Status */}
     <span className={`badge ${
       selectedAsset.status === 'Operational' ? 'bg-success' :
       selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
@@ -865,10 +877,20 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
     }`}>
       {selectedAsset.status}
     </span>
+    
+    {/* ✅ IMPROVED: Show failed badge with better label */}
     {selectedAsset.hasFailedMaintenance && (
       <span className="badge bg-danger">
+        <i className="fas fa-wrench me-1"></i>
+        {selectedAsset.failedMaintenanceCount} Unresolved Failure{selectedAsset.failedMaintenanceCount > 1 ? 's' : ''}
+      </span>
+    )}
+    
+    {/* Incident Badge */}
+    {selectedAsset.incidentReports && selectedAsset.incidentReports.length > 0 && (
+      <span className="badge bg-warning text-dark">
         <i className="fas fa-exclamation-triangle me-1"></i>
-        {selectedAsset.failedMaintenanceCount} Failed Task{selectedAsset.failedMaintenanceCount > 1 ? 's' : ''}
+        {selectedAsset.incidentReports.length} Pending Incident{selectedAsset.incidentReports.length > 1 ? 's' : ''}
       </span>
     )}
   </div>
@@ -930,7 +952,6 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
     )}
   </Form.Group>
 </div>              
-{/* Active Incidents Section */}
 {/* Active Incidents Section - View Only */}
 <div className="mt-4 pt-3 border-top">
   <div className="d-flex justify-content-between align-items-center mb-3">
@@ -944,22 +965,32 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
   </div>
   
   {selectedAsset.incidentReports?.length > 0 ? (
-    <Alert variant="warning" className="mb-0">
-      <div className="d-flex align-items-center justify-content-between">
-        <div>
-          <i className="fas fa-exclamation-circle me-2"></i>
-          <strong>{selectedAsset.incidentReports.length} active incident{selectedAsset.incidentReports.length > 1 ? 's' : ''} reported for this asset.</strong>
+    <Card className="border-warning mb-0">
+      <Card.Body className="py-3">
+        <div className="d-flex align-items-center justify-content-between">
+          <div>
+            <i className="fas fa-exclamation-circle text-warning me-2"></i>
+            <span className="fw-semibold">
+              {selectedAsset.incidentReports.length} incident{selectedAsset.incidentReports.length > 1 ? 's' : ''} require{selectedAsset.incidentReports.length === 1 ? 's' : ''} attention
+            </span>
+          </div>
+          <Button 
+  variant="outline-warning" 
+  size="sm"
+  onClick={() => {
+    setSelectedAsset(null); // Close the modal
+    navigate('/dashboard-admin/MaintenanceTasks'); // Navigate to Maintenance Tasks
+  }}
+>
+  View Details <i className="fas fa-arrow-right ms-1"></i>
+</Button>
         </div>
-        <small className="text-muted">
-          <i className="fas fa-arrow-right me-1"></i>
-          View and manage in <strong>Maintenance Tasks</strong>
-        </small>
-      </div>
-    </Alert>
+      </Card.Body>
+    </Card>
   ) : (
     <div className="text-center py-3 bg-light rounded">
       <i className="fas fa-check-circle fa-2x mb-2 text-success opacity-25"></i>
-      <p className="mb-0 small">No active incidents</p>
+      <p className="mb-0 small text-muted">No active incidents</p>
     </div>
   )}
 </div>
@@ -1548,31 +1579,31 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
             <th>Status</th>
           </tr>
         </thead>
-        <tbody>
-          {historyAsset.incidentHistory.map((incident, idx) => (  // CHANGED
-            <tr key={idx}>
-              <td>{formatDate(incident.reportedAt)}</td>
-              <td>{incident.type}</td>
-              <td>
-                <Badge bg={
-                  incident.severity === 'Critical' ? 'danger' :
-                  incident.severity === 'Major' ? 'warning' : 'info'
-                }>
-                  {incident.severity}
-                </Badge>
-              </td>
-              <td>{incident.reportedBy}</td>
-              <td>
-                <Badge bg={
-                  incident.status === 'Reported' ? 'danger' : 
-                  incident.status === 'Resolved' ? 'success' : 'secondary'
-                }>
-                  {incident.status}
-                </Badge>
-              </td>
-            </tr>
-          ))}
-        </tbody>
+<tbody>
+  {historyAsset.incidentHistory.map((incident, idx) => (
+    <tr key={idx}>
+      <td>{formatDate(incident.reportedAt)}</td>
+      <td>{incident.type}</td>
+      <td>
+        <Badge bg={
+          incident.severity === 'High' ? 'danger' :
+          incident.severity === 'Medium' ? 'warning' : 'info'
+        }>
+          {incident.severity}
+        </Badge>
+      </td>
+      <td>{incident.reportedBy}</td>
+      <td>
+        <Badge bg={
+          incident.status === 'Reported' ? 'danger' : 
+          incident.status === 'Resolved' ? 'success' : 'secondary'  // ⬅️ EDIT THIS LINE
+        }>
+          {incident.status}
+        </Badge>
+      </td>
+    </tr>
+  ))}
+</tbody>
       </Table>
     ) : (
       <Alert variant="light" className="text-center">

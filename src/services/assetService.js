@@ -39,16 +39,35 @@ async fetchAssets() {
     if (error) throw error;
 
     // Get failed maintenance tasks count
-    const { data: failedTasks } = await supabase
-      .from('maintenance_tasks')
-      .select('asset_id, status_id')
-      .eq('organization_id', organizationId) 
-      .eq('status_id', 11);
+// Get failed maintenance tasks count (ACTIVE FAILURES ONLY)
+const { data: failedTasks } = await supabase
+  .from('maintenance_tasks')
+  .select('asset_id, status_id, task_id')
+  .eq('organization_id', organizationId) 
+  .eq('status_id', 11); // Failed status
 
-    const failedCountMap = {};
-    failedTasks?.forEach(task => {
-      failedCountMap[task.asset_id] = (failedCountMap[task.asset_id] || 0) + 1;
-    });
+// ✅ Filter to show ONLY unresolved failures
+const activeFailedTasks = [];
+for (const task of failedTasks || []) {
+  // Check if there's a newer task for this asset after this failed task
+  const { data: newerTasks } = await supabase
+    .from('maintenance_tasks')
+    .select('task_id')
+    .eq('asset_id', task.asset_id)
+    .gt('task_id', task.task_id) // Tasks created AFTER the failed one
+    .in('status_id', [1, 2, 3]); // Pending, In Progress, or Completed
+  
+  // Only count as active failure if NO follow-up task exists
+  if (!newerTasks || newerTasks.length === 0) {
+    activeFailedTasks.push(task);
+  }
+}
+
+// Create map of ACTIVE failures only
+const failedCountMap = {};
+activeFailedTasks.forEach(task => {
+  failedCountMap[task.asset_id] = (failedCountMap[task.asset_id] || 0) + 1;
+});
 
     // Fetch maintenance history for all assets
     const { data: maintenanceTasks } = await supabase
@@ -125,15 +144,20 @@ allIncidents?.forEach(incident => {
   }
   incidentHistoryByAsset[incident.asset_id].push(incidentObj);
   
-  // ✅ IMPROVED: Use incident_id to check for related completed tasks
-  if (incident.status_id === 4) { // Reported status
-    const hasCompletedTask = maintenanceTasks?.some(task => 
-      task.incident_id === incident.incident_id &&
-      (task.status_id === 3 || task.status_id === 11) // Completed or Failed
+  // ✅ IMPROVED: Show badge ONLY for unresolved incidents
+  if (incident.status_id === 4) { // Reported status only
+    // Check if there's a maintenance task addressing this incident
+    const hasAddressingTask = maintenanceTasks?.some(task => 
+      // Either: task is directly linked to this incident
+      (task.incident_id === incident.incident_id) ||
+      // Or: task was created for this asset AFTER the incident
+      (task.asset_id === incident.asset_id && 
+       new Date(task.date_created) > new Date(incident.date_reported) &&
+       (task.status_id === 2 || task.status_id === 3)) // In Progress or Completed
     );
     
-    // Only show badge if NO completed/failed task exists
-    if (!hasCompletedTask) {
+    // Only show badge if NO task is addressing it
+    if (!hasAddressingTask) {
       if (!activeIncidentsByAsset[incident.asset_id]) {
         activeIncidentsByAsset[incident.asset_id] = [];
       }
@@ -157,7 +181,7 @@ allIncidents?.forEach(incident => {
       task: asset.task || '',
       hasFailedMaintenance: (failedCountMap[asset.asset_id] || 0) > 0,
       failedMaintenanceCount: failedCountMap[asset.asset_id] || 0,
-      maintenanceHistory: tasksByAsset[asset.asset_id] || [], // ✅ Now populated!
+      maintenanceHistory: tasksByAsset[asset.asset_id] || [], // âœ… Now populated!
      incidentReports: activeIncidentsByAsset[asset.asset_id] || [],
       incidentHistory: incidentHistoryByAsset[asset.asset_id] || [],
       maintenanceSchedule: null
@@ -544,7 +568,7 @@ const taskInsert = {
   due_date: taskData.dueDate,
   assigned_to: parseInt(taskData.assigneeId),
   incident_id: taskData.incidentId || null,
-  organization_id: organizationId  // ← ADD THIS
+  organization_id: organizationId  // â† ADD THIS
 };
     
 const { data: taskResult, error: taskError } = await supabase
@@ -561,7 +585,7 @@ await supabase
   .update({ asset_status: 'maintenance' })
   .eq('asset_code', taskData.assetId);
 
-// ✅ CREATE NOTIFICATION FOR PERSONNEL
+// âœ… CREATE NOTIFICATION FOR PERSONNEL
 try {
   const notificationInsert = {
     notification_type_id: 13, // asset_maintenance_assigned
@@ -580,7 +604,7 @@ try {
   };
   
 
-  console.log('🔔 Creating notification:', notificationInsert);
+  console.log('ðŸ”” Creating notification:', notificationInsert);
 
 const { data: notifResult, error: notifError } = await supabase
     .from('notifications')
@@ -588,14 +612,14 @@ const { data: notifResult, error: notifError } = await supabase
     .select(); // Add .select() to get the inserted data
 
   if (notifError) {
-    console.error('❌ Notification error:', notifError);
-    console.error('❌ Insert data was:', notificationInsert);
-    console.error('❌ Full error details:', JSON.stringify(notifError, null, 2));
+    console.error('âŒ Notification error:', notifError);
+    console.error('âŒ Insert data was:', notificationInsert);
+    console.error('âŒ Full error details:', JSON.stringify(notifError, null, 2));
   } else {
-    console.log('✅ Notification created successfully:', notifResult);
+    console.log('âœ… Notification created successfully:', notifResult);
   }
 } catch (notifErr) {
-  console.error('❌ Notification creation failed:', notifErr);
+  console.error('âŒ Notification creation failed:', notifErr);
   // Don't throw - task was created successfully
 }
 
@@ -774,7 +798,7 @@ const insertData = {
   reported_by: currentUser.user_id,
   status_id: 4,
   date_reported: new Date().toISOString(),
-  organization_id: assetOrg.organization_id  // ← ADD THIS
+  organization_id: assetOrg.organization_id  // â† ADD THIS
 };
 
     console.log('Insert data:', insertData);
@@ -805,7 +829,7 @@ const insertData = {
     console.log('Insert successful:', data);
     console.log('Insert successful:', data);
 
-// ✅ CREATE NOTIFICATION FOR ADMIN
+// âœ… CREATE NOTIFICATION FOR ADMIN
 try {
   const priorityMap = { 'Low': 1, 'Medium': 2, 'High': 3 };
   
@@ -824,19 +848,19 @@ try {
     created_at: new Date().toISOString()
   };
 
-  console.log('📢 Creating admin notification:', notificationData);
+  console.log('ðŸ“¢ Creating admin notification:', notificationData);
 
   const { error: notifError } = await supabase
     .from('notifications')
     .insert([notificationData]);
 
   if (notifError) {
-    console.error('❌ Admin notification failed:', notifError);
+    console.error('âŒ Admin notification failed:', notifError);
   } else {
-    console.log('✅ Admin notified about incident report');
+    console.log('âœ… Admin notified about incident report');
   }
 } catch (notifErr) {
-  console.error('❌ Notification error:', notifErr);
+  console.error('âŒ Notification error:', notifErr);
   // Don't throw - incident was created successfully
 }
 
@@ -863,10 +887,10 @@ async updateIncidentStatus(incidentId, newStatus) {
     const numericId = parseInt(incidentId.replace('INC-', ''));
     
     const statusMap = {
-      'Reported': 4,
-      'Resolved': 5,
-      'Dismissed': 5,
-      'Assigned': 4  // ADD THIS - keep as Reported but will be filtered differently
+      'Reported': 4,      // Keep this
+      'Completed': 3,     // NEW - same as maintenance tasks
+      'Failed': 11,       // NEW - same as maintenance tasks
+      'Dismissed': 5      // Keep for admin override
     };
     
     const { data, error } = await supabase
@@ -897,7 +921,7 @@ async autoResolveIncident(incidentId) {
     const { data, error } = await supabase
       .from('incident_reports')
       .update({ 
-        status_id: 5, // Resolved
+        status_id: 3, // Completed (changed from 5)
         date_resolved: new Date().toISOString()
       })
       .eq('incident_id', numericId)

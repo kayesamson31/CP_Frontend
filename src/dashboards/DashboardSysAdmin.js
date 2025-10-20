@@ -10,7 +10,7 @@ import EmailProgressModal from '../components/EmailProgressModal';
 
 export default function DashboardSyAdmin() {
 
-  
+  const [sysAdminName, setSysAdminName] = useState('System Administrator');
   const navigate = useNavigate();
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [showSetupDetails, setShowSetupDetails] = useState(false);
@@ -754,7 +754,28 @@ useEffect(() => {
 
   loadDashboardData();
 }, []); // Remove dependency array issues
-  
+  useEffect(() => {
+  const fetchSysAdminData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('auth_uid', user.id)
+        .single();
+
+      if (userData) {
+        setSysAdminName(userData.full_name);
+      }
+    } catch (error) {
+      console.error('Error fetching sysadmin data:', error);
+    }
+  };
+
+  fetchSysAdminData();
+}, []);
   // Auto-dismiss completion message
   useEffect(() => {
     if (setupCompleted && localStorage.getItem('justCompleted') === 'true') {
@@ -893,13 +914,16 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
       <div className="container-fluid">
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-4">
-          <div>
-            <h2 className="mb-1 fw-bold">Welcome to {organizationData.name}!</h2>
-            <small className="text-muted">
-              <i className="bi bi-clock me-1"></i>
-              Last updated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-            </small>
-          </div>
+<div>
+  <h2 className="mb-1 fw-bold">Welcome back, {sysAdminName}!</h2>
+  <p className="mb-1 text-muted" style={{ fontSize: '14px' }}>
+    System Administrator | {organizationData.name}
+  </p>
+  <small className="text-muted">
+    <i className="bi bi-clock me-1"></i>
+    Last updated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+  </small>
+</div>
         </div>
 
 

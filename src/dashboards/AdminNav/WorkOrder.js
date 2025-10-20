@@ -124,19 +124,18 @@ const fetchPersonnel = async () => {
     
     const { data, error } = await supabase
       .from('users')
-      .select('user_id, full_name, email, role_id')
-      .eq('organization_id', orgId)  // â† ADD THIS
+      .select('user_id, full_name, email, role_id, job_position') // ← ADD job_position
+      .eq('organization_id', orgId)
       .eq('role_id', 3)
       .order('full_name');
 
     if (error) throw error;
 
-    // Transform to match your current structure
     const transformedPersonnel = data.map(user => ({
       id: user.user_id,
       name: user.full_name,
       email: user.email,
-      department: 'Personnel' // You can add department field to users table later if needed
+      department: user.job_position || 'Personnel' // ← ADD department field
     }));
     
     setPersonnel(transformedPersonnel);

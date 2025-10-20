@@ -92,8 +92,10 @@ const { data, error } = await supabase
       description: `Created work order: ${workOrderData.title}`,
       ip_address: await this.getClientIP()
     });
+    
 
     return { success: true, data };
+
 
   } catch (error) {
     console.error('WorkOrderService.submitWorkOrder error:', error);
