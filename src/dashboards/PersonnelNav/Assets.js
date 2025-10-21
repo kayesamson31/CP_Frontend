@@ -800,7 +800,7 @@ const formatDate = (dateString) => {
                 <td>{incident.reportedBy}</td>
 <td>
   <Badge bg={
-    incident.status === 'Reported' ? 'danger' : 
+    incident.status === 'Reported' ? 'secondary' :  // ⬅️ CHANGED from 'danger'
     incident.status === 'Completed' ? 'success' : 
     incident.status === 'Failed' ? 'danger' : 'secondary'
   }>

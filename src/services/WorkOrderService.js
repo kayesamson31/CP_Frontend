@@ -63,7 +63,7 @@ const workOrder = {
   requested_by: currentUser.id,
   category: workOrderData.category,
   location: workOrderData.location.trim(),
-  organization_id: currentUser.organizationId  // ← ADD THIS
+  organization_id: currentUser.organizationId  // â† ADD THIS
 };
 
     console.log('Submitting work order:', workOrder);
@@ -85,17 +85,78 @@ const { data, error } = await supabase
       throw error;
     }
 
-    // Log the activity
-    await this.logActivity({
-      user_id: currentUser.id,
-      activity_type: 'work_order_created',
-      description: `Created work order: ${workOrderData.title}`,
-      ip_address: await this.getClientIP()
+// Log the activity
+await this.logActivity({
+  user_id: currentUser.id,
+  activity_type: 'work_order_created',
+  description: `Created work order: ${workOrderData.title}`,
+  ip_address: await this.getClientIP()
+});
+
+// ✅ NOTIFY ADMIN about new work order request
+// ✅ NOTIFY ADMIN about new work order request
+console.log('🔔 Starting notification process...');
+console.log('📋 Work order data for notification:', {
+  work_order_id: data.work_order_id,
+  title: data.title,
+  organization_id: currentUser.organizationId,
+  created_by: currentUser.id
+});
+
+try {
+  // Get user's full name for notification
+  console.log('👤 Fetching user full name...');
+  const { data: userData, error: userError } = await supabase
+    .from('users')
+    .select('full_name')
+    .eq('user_id', currentUser.id)
+    .single();
+
+  if (userError) {
+    console.error('❌ Error fetching user data:', userError);
+  } else {
+    console.log('✅ User data fetched:', userData);
+  }
+
+  const notificationData = {
+    notification_type_id: 9,
+    created_by: currentUser.id,
+    title: 'New Work Order Request',
+    message: `${userData?.full_name || 'A user'} submitted a new work order request: "${workOrderData.title}"`,
+    target_roles: 'admin',
+    priority_id: priorityData.priority_id,
+    related_table: 'work_orders',
+    related_id: data.work_order_id,
+    organization_id: currentUser.organizationId,
+    is_active: true
+  };
+
+  console.log('📤 Inserting notification with data:', notificationData);
+
+  const { data: notifData, error: notifError } = await supabase
+    .from('notifications')
+    .insert(notificationData)
+    .select();
+
+  if (notifError) {
+    console.error('❌ Notification insert error:', notifError);
+    console.error('❌ Error details:', {
+      message: notifError.message,
+      details: notifError.details,
+      hint: notifError.hint,
+      code: notifError.code
     });
-    
+  } else {
+    console.log('✅ Admin notified successfully!');
+    console.log('✅ Notification created:', notifData);
+  }
+  
+} catch (notifError) {
+  console.error('❌ Failed to notify admin (caught exception):', notifError);
+  console.error('❌ Exception stack:', notifError.stack);
+}
 
-    return { success: true, data };
-
+return { success: true, data };
 
   } catch (error) {
     console.error('WorkOrderService.submitWorkOrder error:', error);
@@ -250,7 +311,7 @@ static async cancelWorkOrder(workOrderId) {
   // Inayos ko rin yung order ng display para pareho sa admin view.
 
 static async getStatusCounts() {
-  console.log('🚀 getStatusCounts method called!');
+  console.log('ðŸš€ getStatusCounts method called!');
   try {
     const currentUser = this.getCurrentUser();
     if (!currentUser) {
@@ -266,7 +327,7 @@ static async getStatusCounts() {
       .eq('is_active', true);
 
     if (statusError) {
-      console.error('❌ Error getting statuses:', statusError);
+      console.error('âŒ Error getting statuses:', statusError);
       throw statusError;
     }
 
@@ -299,17 +360,17 @@ static async getStatusCounts() {
       }
     }
 
-    console.log('✅ Final status counts (ordered):', statusCounts);
+    console.log('âœ… Final status counts (ordered):', statusCounts);
     return { success: true, data: statusCounts };
 
   } catch (error) {
-    console.error('❌ WorkOrderService.getStatusCounts error:', error);
+    console.error('âŒ WorkOrderService.getStatusCounts error:', error);
     return { success: false, error: error.message, data: [] };
   }
 }
 
  // Dito ko nilagay ang icons per status (pang-UI purposes).
-  // Halimbawa, kapag "Completed" → check icon, kapag "Pending" → clock icon.
+  // Halimbawa, kapag "Completed" â†’ check icon, kapag "Pending" â†’ clock icon.
   static getStatusIcon(status) {
     switch (status) {
       case 'To Review': return 'bi bi-eye';
@@ -342,14 +403,14 @@ static async getStatusCounts() {
     }
   }
 
-// Activity logger – ginawa ko ito para lahat ng ginawa ng user
+// Activity logger â€“ ginawa ko ito para lahat ng ginawa ng user
   // (like create, cancel, etc.) may record sa "activity_tracking" table.
  static async logActivity(activityData) {
   try {
     const currentUser = this.getCurrentUser();
     const activityWithOrg = {
       ...activityData,
-      organization_id: currentUser?.organizationId  // ← ADD THIS
+      organization_id: currentUser?.organizationId  // â† ADD THIS
     };
     
     const { error } = await supabase

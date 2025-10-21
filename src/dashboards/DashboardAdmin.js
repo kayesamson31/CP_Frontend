@@ -321,7 +321,8 @@ const { data: personnel, error } = await supabase
             name: person.full_name,
             role: person.job_position || 'Personnel',
             status: status,
-            statusColor: statusColor
+            statusColor: statusColor,
+            activeTaskCount: activeTasks || 0
           };
         })
       );
@@ -451,17 +452,41 @@ const statCardStyle = {
       <Col md={12} className="p-4">
 {/* Welcome Section */}
 <div style={{
-  marginBottom: '24px'
+  backgroundColor: '#f8f9fa',
+  borderLeft: '4px solid #0d6efd',
+  borderRadius: '12px',
+  padding: '24px',
+  marginBottom: '30px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
 }}>
- <h3 style={{ margin: 0, fontWeight: 'bold', color: '#1a1a1a' }}>
-  Welcome back, {adminName}!
-</h3>
-  <p style={{ margin: '4px 0 0 0', color: '#6c757d', fontSize: '14px' }}>
-    {userRole} | {organizationName}
-  </p>
-  <p style={{ margin: '4px 0 0 0', color: '#6c757d', fontSize: '14px' }}>
-    {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-  </p>
+<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <Building size={28} style={{ color: '#0d6efd' }} />
+    <h1 style={{ margin: 0, fontWeight: '700', fontSize: '28px', color: '#1a1a1a' }}>
+      Welcome back, {adminName}!
+    </h1>
+  </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <CalendarIcon size={18} style={{ color: '#6c757d' }} />
+    <span style={{ color: '#6c757d', fontSize: '14px' }}>
+      {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+    </span>
+  </div>
+</div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', paddingLeft: '40px' }}>
+    <span style={{ 
+  backgroundColor: '#0d6efd15', 
+  color: '#0d6efd',
+      padding: '4px 12px', 
+      borderRadius: '6px',
+      fontSize: '15px',
+      fontWeight: '600'
+    }}>
+      {userRole}
+    </span>
+    <span style={{ color: '#6c757d', fontSize: '15px' }}>•</span>
+    <span style={{ color: '#495057', fontSize: '15px', fontWeight: '500' }}>{organizationName}</span>
+  </div>
 </div>
         {/* Stats Cards */}
         <div style={gridStyle}>
@@ -663,16 +688,26 @@ const statCardStyle = {
             {person.role}
           </div>
         </div>
-        <span style={{
-          backgroundColor: `${person.statusColor}15`,
-          color: person.statusColor,
-          fontSize: '10px',
-          fontWeight: '600',
-          padding: '4px 8px',
-          borderRadius: '12px'
-        }}>
-          {person.status}
-        </span>
+<div className="d-flex flex-column align-items-end gap-1">
+  <span style={{
+    backgroundColor: `${person.statusColor}15`,
+    color: person.statusColor,
+    fontSize: '10px',
+    fontWeight: '600',
+    padding: '4px 8px',
+    borderRadius: '12px'
+  }}>
+    {person.status}
+  </span>
+  {person.activeTaskCount > 0 && (
+    <span style={{
+      fontSize: '9px',
+      color: '#6c757d'
+    }}>
+      {person.activeTaskCount} active task{person.activeTaskCount > 1 ? 's' : ''}
+    </span>
+  )}
+</div>
       </div>
     ))
   )}

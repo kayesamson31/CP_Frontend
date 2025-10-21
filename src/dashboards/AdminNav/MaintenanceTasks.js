@@ -203,26 +203,39 @@ const fetchPersonnel = async () => {
     
     const { data, error } = await supabase
       .from('users')
-      .select('user_id, full_name, email, role_id, job_position') // ← ADD job_position
+      .select('user_id, full_name, email, role_id, job_position')
       .eq('organization_id', orgId)
       .eq('role_id', 3)
       .order('full_name');
 
-      if (error) throw error;
+    if (error) throw error;
 
-      const transformedPersonnel = data.map(user => ({
-        id: user.user_id,
-        name: user.full_name,
-        email: user.email,
-        department: user.job_position || 'Personnel' // ← ADD department field
-      }));
-      
-      setPersonnel(transformedPersonnel);
-    } catch (err) {
-      console.error('Error fetching personnel:', err);
-      setPersonnel([]);
-    }
-  };
+    // ← ADD THIS: Transform personnel and add active task count
+    const transformedPersonnel = await Promise.all(
+      data.map(async (user) => {
+        // Check active tasks for this personnel
+        const { count: activeTasks } = await supabase
+          .from('maintenance_tasks')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', user.user_id)
+          .in('status_id', [1, 2]); // Pending or In Progress
+
+        return {
+          id: user.user_id,
+          name: user.full_name,
+          email: user.email,
+          department: user.job_position || 'Personnel',
+          activeTaskCount: activeTasks || 0
+        };
+      })
+    );
+    
+    setPersonnel(transformedPersonnel);
+  } catch (err) {
+    console.error('Error fetching personnel:', err);
+    setPersonnel([]);
+  }
+};
 
   const fetchCategories = async () => {
     // Same categories as WorkOrder
@@ -859,13 +872,24 @@ const getStatusBadge = (status) => {
     onChange={(e) => setAssignedPersonnel(e.target.value)}
   >
     <option value="">Choose personnel...</option>
-    {personnel.map(person => (
-      <option key={person.id} value={person.id}>
-        {person.name}
-        {person.department && ` - ${person.department}`}
-      </option>
-    ))}
+ {personnel.map(person => (
+  <option key={person.id} value={person.id}>
+    {person.name}
+    {person.department && ` - ${person.department}`}
+    {person.activeTaskCount > 0 ? ` (${person.activeTaskCount} active)` : ''}
+  </option>
+))}
   </select>
+  
+  {/* ← ADD THIS WARNING BELOW */}
+  {assignedPersonnel && personnel.find(p => p.id === parseInt(assignedPersonnel))?.activeTaskCount > 0 && (
+    <div className="alert alert-warning mt-2 mb-0">
+      <small>
+        <i className="fas fa-exclamation-triangle me-1"></i>
+        <strong>Note:</strong> {personnel.find(p => p.id === parseInt(assignedPersonnel))?.name} currently has {personnel.find(p => p.id === parseInt(assignedPersonnel))?.activeTaskCount} active task(s)
+      </small>
+    </div>
+  )}
 </div>
 
 {/* ADD THESE - Due Date & Time Fields */}

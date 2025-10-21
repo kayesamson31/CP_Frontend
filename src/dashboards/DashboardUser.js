@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Button, Form, Badge, Card, InputGroup, FormControl, Modal } from 'react-bootstrap';
 import { WorkOrderService } from '../services/WorkOrderService';
 import { AuthUtils } from '../utils/AuthUtils';
+import { supabase } from '../supabaseClient';
+import { User, Calendar, Building } from 'lucide-react';
 // Ito ang mismong Dashboard component ng user
 export default function DashboardUser() {
   // States para sa filters (status at priority)
@@ -10,12 +12,16 @@ export default function DashboardUser() {
 const [selectedStatus, setSelectedStatus] = useState('To Review');
 const [selectedPriority, setSelectedPriority] = useState('All');
  // States para sa modals
+
 const [showWorkOrderModal, setShowWorkOrderModal] = useState(false);
 const [searchTerm, setSearchTerm] = useState(''); 
 const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
 const [showDetailsModal, setShowDetailsModal] = useState(false);
 const [showPriorityModal, setShowPriorityModal] = useState(false);
-
+// States for user info
+const [userName, setUserName] = useState('User');
+const [userRole, setUserRole] = useState('Standard User');
+const [organizationName, setOrganizationName] = useState('Organization');
   // States para sa data at errors
 const [historyData, setHistoryData] = useState([]);
 const [statusCounts, setStatusCounts] = useState([]);
@@ -58,6 +64,41 @@ const getStatusIcon = (status) => {
     default: return 'bi bi-question-circle';
   }
 };
+
+// Fetch user info
+useEffect(() => {
+  const fetchUserData = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('full_name, organization_id, job_position')
+        .eq('auth_uid', user.id)
+        .single();
+
+      if (userData) {
+        setUserName(userData.full_name);
+        setUserRole(userData.job_position || 'Standard User');
+        
+        const { data: orgData } = await supabase
+          .from('organizations')
+          .select('org_name')
+          .eq('organization_id', userData.organization_id)
+          .single();
+        
+        if (orgData) {
+          setOrganizationName(orgData.org_name);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  };
+
+  fetchUserData();
+}, []);
 
 // Initial load ng data (priorities, status counts, work orders)
 useEffect(() => {
@@ -303,20 +344,61 @@ return (
                                                              
 {/* Main Content */}
 
-  <Col
+<Col
     md={10}
-    className="p-4 d-flex justify-content-center align-items-start"
+    className="p-4"  // ✅ SIMPLE LANG
     style={{
      backgroundColor: '#FFFFFF',
      minHeight: '100vh',
-     paddingLeft: '15px', // Padding for better space utilization
-     paddingRight: '15px', // Padding to avoid content touching the edges
-     marginLeft: 'auto', // Centering the content
-     marginRight: 'auto', // Centering the content
-     flex: 1, // This ensures that the main content takes full available width
-            }}
-            >       
-
+     paddingLeft: '15px',
+     paddingRight: '15px',
+     marginLeft: 'auto',
+     marginRight: 'auto',
+     flex: 1,
+    }}
+>    
+{/* Welcome Section */}
+<Row className="w-100">
+  <Col md={12}>
+    <div style={{
+      backgroundColor: '#f8f9fa',
+      borderLeft: '4px solid #0d6efd',
+      borderRadius: '12px',
+      padding: '24px',
+      marginBottom: '30px',
+      boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <User size={28} style={{ color: '#0d6efd' }} />
+          <h1 style={{ margin: 0, fontWeight: '700', fontSize: '28px', color: '#1a1a1a' }}>
+            Welcome back, {userName}!
+          </h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <Calendar size={18} style={{ color: '#6c757d' }} />
+          <span style={{ color: '#6c757d', fontSize: '14px' }}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          </span>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', paddingLeft: '40px' }}>
+        <span style={{ 
+          backgroundColor: '#0d6efd15', 
+          color: '#0d6efd', 
+          padding: '4px 12px', 
+          borderRadius: '6px',
+          fontSize: '15px',
+          fontWeight: '600'
+        }}>
+          {userRole}
+        </span>
+        <span style={{ color: '#6c757d', fontSize: '15px' }}>•</span>
+        <span style={{ color: '#495057', fontSize: '15px', fontWeight: '500' }}>{organizationName}</span>
+      </div>
+    </div>
+  </Col>
+</Row>
 {/* Status Cards */}
  <Row className="w-100">
   {/* Error Alert */}
@@ -1078,19 +1160,19 @@ Cancel
                       <p><strong>Title:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.title}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Category:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.category || '—'}</span></p>
+                      <p><strong>Category:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.category || 'â€”'}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Location:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.location || '—'}</span></p>
+                      <p><strong>Location:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.location || 'â€”'}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Asset:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.asset || '—'}</span></p>
+                      <p><strong>Asset:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.asset || 'â€”'}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
                       <p><strong>Priority:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.priority}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Date Needed:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.dateNeeded || '—'}</span></p>
+                      <p><strong>Date Needed:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.dateNeeded || 'â€”'}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
                       <p><strong>Status:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.status}</span></p>
@@ -1112,7 +1194,7 @@ Cancel
                         }}
                       >
                     
-                       {selectedWorkOrder.description || '—'}
+                       {selectedWorkOrder.description || 'â€”'}
                       </span>
                      </div>
                       {/* Extension History Display - ADD THIS */}
@@ -1143,7 +1225,7 @@ Cancel
           marginBottom: '8px',
           fontSize: '13px'
         }}>
-          <div><strong>From:</strong> {ext.old_due_date.split('T')[0]} → <strong>To:</strong> {ext.new_due_date.split('T')[0]}</div>
+          <div><strong>From:</strong> {ext.old_due_date.split('T')[0]} â†’ <strong>To:</strong> {ext.new_due_date.split('T')[0]}</div>
           <div><strong>Reason:</strong> {ext.extension_reason}</div>
         </div>
       ))}

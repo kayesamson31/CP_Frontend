@@ -182,44 +182,50 @@ if (!data[0]?.incident_id) {
   }
 }
 // ✅ NOTIFY ADMIN about maintenance task update
-if (data[0]?.incident_id && (status === 'completed' || status === 'failed')) {
-try {
-  const statusMessage = status === 'completed' 
-    ? `Personnel completed maintenance task #${taskId}` 
-    : status === 'failed'
-    ? `Personnel marked maintenance task #${taskId} as failed${reason ? ': ' + reason : ''}`
-    : status === 'in-progress'
-    ? newDate 
-      ? `Personnel extended maintenance task #${taskId} due date to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`
-      : `Personnel started working on maintenance task #${taskId}`
-    : `Personnel updated maintenance task #${taskId} to ${status}`;
+// ✅ NOTIFY ADMIN about maintenance task update (FOR INCIDENT-RELATED TASKS)
+// PALITAN MO YUNG CONDITION MULA:
+// if (data[0]?.incident_id && (status === 'completed' || status === 'failed')) {
+// PAPUNTA SA:
+if (data[0]?.incident_id && (status === 'in-progress' || status === 'completed' || status === 'failed')) {
+  try {
+    const statusMessage = status === 'completed' 
+      ? `Personnel completed maintenance task #${taskId} for incident report` 
+      : status === 'failed'
+      ? `Personnel marked maintenance task #${taskId} as failed${reason ? ': ' + reason : ''}`
+      : status === 'in-progress'
+      ? newDate 
+        ? `Personnel extended maintenance task #${taskId} due date to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`
+        : `Personnel started working on incident-related maintenance task #${taskId}`
+      : `Personnel updated maintenance task #${taskId} to ${status}`;
 
-  const { data: userOrgData } = await supabase
-  .from('users')
-  .select('organization_id')
-  .eq('user_id', userProfile.user_id)
-  .single();
+    const { data: userOrgData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('user_id', userProfile.user_id)
+      .single();
 
-await supabase.from('notifications').insert({
-  notification_type_id: 3,
-  created_by: userProfile.user_id,
- title: `Maintenance Task ${
-  status === 'completed' ? 'Completed' : 
-  status === 'failed' ? 'Failed' : 
-  status === 'in-progress' ? (newDate ? 'Extended' : 'In Progress') : 
-  'Updated'
-}`,
-  message: statusMessage,
-  target_roles: '2',
-  priority_id: status === 'failed' ? 3 : 2,
-  related_table: 'maintenance_tasks',
-  related_id: taskId,
-  organization_id: userOrgData.organization_id, // ✅ ADD THIS
-  is_active: true
-});
-} catch (notifError) {
-  console.error('Failed to create admin notification:', notifError);
-}
+    await supabase.from('notifications').insert({
+      notification_type_id: 3,
+      created_by: userProfile.user_id,
+      title: `Maintenance Task ${
+        status === 'completed' ? 'Completed' : 
+        status === 'failed' ? 'Failed' : 
+        status === 'in-progress' ? (newDate ? 'Extended' : 'In Progress') : 
+        'Updated'
+      }`,
+      message: statusMessage,
+      target_roles: '2',
+      priority_id: status === 'failed' ? 3 : 2,
+      related_table: 'maintenance_tasks',
+      related_id: taskId,
+      organization_id: userOrgData.organization_id,
+      is_active: true
+    });
+    
+    console.log('✅ Admin notified about incident task update:', status);
+  } catch (notifError) {
+    console.error('❌ Failed to create admin notification:', notifError);
+  }
 }
 await logActivity('update_task_status', `Updated maintenance task #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);
 return { success: true, data: data?.[0] };
@@ -311,6 +317,9 @@ export default function DashboardPersonnel() {
   const [currentDate, setCurrentDate] = useState(new Date());  
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [tasks, setTasks] = useState([]);
+  const [personnelName, setPersonnelName] = useState('Personnel');
+  const [personnelRole, setPersonnelRole] = useState('Personnel');
+  const [organizationName, setOrganizationName] = useState('Organization');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -342,6 +351,40 @@ const capitalizePriority = (priority) => {
   // Load tasks from backend
   useEffect(() => {
     loadTasks();
+  }, []);
+// Fetch personnel info
+  useEffect(() => {
+    const fetchPersonnelData = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data: userData } = await supabase
+          .from('users')
+          .select('full_name, organization_id, job_position')
+          .eq('auth_uid', user.id)
+          .single();
+
+        if (userData) {
+          setPersonnelName(userData.full_name);
+          setPersonnelRole(userData.job_position || 'Personnel');
+          
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('org_name')
+            .eq('organization_id', userData.organization_id)
+            .single();
+          
+          if (orgData) {
+            setOrganizationName(orgData.org_name);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching personnel data:', error);
+      }
+    };
+
+    fetchPersonnelData();
   }, []);
 
 const loadTasks = async () => {
@@ -991,9 +1034,43 @@ const twoColumnGrid = {
 
   return (
       <Col md={12} className="p-4">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-          <h2 style={{ margin: 0 }}>Welcome back!</h2>
-        </div>
+<div style={{
+  backgroundColor: '#f8f9fa',
+  borderLeft: '4px solid #0d6efd',
+  borderRadius: '12px',
+  padding: '24px',
+  marginBottom: '30px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+}}>
+<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <Wrench size={28} style={{ color: '#0d6efd' }} />
+    <h1 style={{ margin: 0, fontWeight: '700', fontSize: '28px', color: '#1a1a1a' }}>
+      Welcome back, {personnelName}!
+    </h1>
+  </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <CalendarIcon size={18} style={{ color: '#6c757d' }} />
+    <span style={{ color: '#6c757d', fontSize: '14px' }}>
+      {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+    </span>
+  </div>
+</div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', paddingLeft: '40px' }}>
+<span style={{ 
+  backgroundColor: '#0d6efd15', 
+  color: '#0d6efd',
+      padding: '4px 12px', 
+      borderRadius: '6px',
+      fontSize: '15px',
+      fontWeight: '600'
+    }}>
+      {personnelRole}
+    </span>
+    <span style={{ color: '#6c757d', fontSize: '15px' }}>•</span>
+    <span style={{ color: '#495057', fontSize: '15px', fontWeight: '500' }}>{organizationName}</span>
+  </div>
+</div>
 
         {/* Error Message */}
         {error && (

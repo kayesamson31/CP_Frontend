@@ -15,7 +15,7 @@ const getCurrentUserOrganization = async () => {
     const { data: userData, error } = await supabase
       .from('users')
       .select('organization_id, user_id')
-      .eq('email', user.email)  // ✅ Use email instead of auth_uid
+      .eq('email', user.email)  // âœ… Use email instead of auth_uid
       .single();
 
     if (error || !userData) {
@@ -23,8 +23,8 @@ const getCurrentUserOrganization = async () => {
       throw new Error('User organization not found');
     }
     
-    console.log('✅ Organization ID:', userData.organization_id);
-    console.log('✅ User ID:', userData.user_id);
+    console.log('âœ… Organization ID:', userData.organization_id);
+    console.log('âœ… User ID:', userData.user_id);
     return userData.organization_id;
   } catch (error) {
     console.error('Error getting user organization:', error);
@@ -98,23 +98,23 @@ const cleanupOldNotifications = async () => {
 
     // Soft delete read notifications older than 7 days
 if (readNotificationIds.length > 0) {
-  const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+  const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
   
   await supabase
     .from('notifications')
     .update({ is_active: false })
-    .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+    .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
     .in('notification_id', readNotificationIds);
 }
 
     // Soft delete unread notifications older than 30 days
 // Soft delete unread notifications older than 30 days
-const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
 
 await supabase
   .from('notifications')
   .update({ is_active: false })
-  .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+  .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
   .lt('created_at', unreadCutoffDate.toISOString())
   .eq('is_active', true);
 
@@ -128,9 +128,9 @@ const fetchNotifications = async () => {
   try {
     setLoading(true);
     const roleId = getRoleId(role);
-    const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+    const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
 
-    console.log('🔍 Fetching notifications for Org:', organizationId); // ✅ Debug
+    console.log('ðŸ” Fetching notifications for Org:', organizationId); // âœ… Debug
 
     // Fetch notifications for this role AND organization
     const { data: notificationsData, error } = await supabase
@@ -148,7 +148,7 @@ const fetchNotifications = async () => {
     priority_levels(priority_name, color_code),
     created_by
   `)
-  .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+  .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
   .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
   .eq('is_active', true)
   .order('created_at', { ascending: false});
@@ -280,12 +280,12 @@ const clearReadNotifications = async () => {
 
     // Soft delete by setting is_active to false
 // Soft delete by setting is_active to false
-const organizationId = await getCurrentUserOrganization(); // ✅ ADD THIS
+const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
 
 const { error } = await supabase
   .from('notifications')
   .update({ is_active: false })
-  .eq('organization_id', organizationId) // ✅ ADD THIS FILTER
+  .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
   .in('notification_id', readNotificationIds);
 
     if (error) throw error;

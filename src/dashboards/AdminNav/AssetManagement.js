@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { assetService } from '../../services/assetService';
 import { logActivity } from '../../utils/ActivityLogger';
 import { AuthUtils } from '../../utils/AuthUtils';
+import { supabase } from '../../supabaseClient';  // ← Make sure this line exists
 import {
   Container,
   Row,
@@ -130,7 +131,28 @@ const [newTask, setNewTask] = useState({
 const fetchPersonnel = async () => {
   try {
     const data = await assetService.fetchUsers();
-    setPersonnel(data);
+    
+    // Transform personnel and add active task count
+    const transformedPersonnel = await Promise.all(
+      data.map(async (user) => {
+        // Check active tasks for this personnel
+        const { count: activeTasks } = await supabase
+          .from('maintenance_tasks')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', user.id)
+          .in('status_id', [1, 2]); // Pending or In Progress
+
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          department: user.department || 'Personnel',
+          activeTaskCount: activeTasks || 0
+        };
+      })
+    );
+    
+    setPersonnel(transformedPersonnel);
   } catch (err) {
     console.error('Error fetching personnel:', err);
   }
@@ -1235,19 +1257,31 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
           </Form.Group>
         </Col>
         <Col md={6}>
-          <Form.Group>
-            <Form.Label>Assign To *</Form.Label>
-            <Form.Select
-              value={newTask.assigneeId}
-              onChange={(e) => setNewTask({...newTask, assigneeId: e.target.value})}
-              required
-            >
-              <option value="">Select Personnel</option>
-              {personnel.map(person => (
-                <option key={person.id} value={person.id}>{person.name} - {person.department}</option>
-              ))}
-            </Form.Select>
-          </Form.Group>
+<Form.Group>
+  <Form.Label>Assign To *</Form.Label>
+  <Form.Select
+    value={newTask.assigneeId}
+    onChange={(e) => setNewTask({...newTask, assigneeId: e.target.value})}
+    required
+  >
+    <option value="">Select Personnel</option>
+    {personnel.map(person => (
+      <option key={person.id} value={person.id}>
+        {person.name} - {person.department} {person.activeTaskCount > 0 ? `(${person.activeTaskCount} active)` : ''}
+      </option>
+    ))}
+  </Form.Select>
+  
+  {/* ← ADD THIS WARNING BELOW */}
+  {newTask.assigneeId && personnel.find(p => p.id === parseInt(newTask.assigneeId))?.activeTaskCount > 0 && (
+    <Alert variant="warning" className="mt-2 mb-0">
+      <small>
+        <i className="fas fa-exclamation-triangle me-1"></i>
+        <strong>Note:</strong> {personnel.find(p => p.id === parseInt(newTask.assigneeId))?.name} currently has {personnel.find(p => p.id === parseInt(newTask.assigneeId))?.activeTaskCount} active task(s)
+      </small>
+    </Alert>
+  )}
+</Form.Group>
         </Col>
         <Col xs={12}>
           <div className="d-flex gap-3 mb-3">
@@ -1476,11 +1510,12 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
               </Badge>
             </td>
             <td>{incident.reportedBy}</td>
-            <td>
-              <Badge bg={
-                incident.status === 'Reported' ? 'danger' : 
-                incident.status === 'Resolved' ? 'success' : 'secondary'
-              }>
+           <td>
+  <Badge bg={
+    incident.status === 'Reported' ? 'secondary' : 
+    incident.status === 'Completed' ? 'success' : 
+    incident.status === 'Failed' ? 'danger' : 'secondary'
+  }>
                 {incident.status}
               </Badge>
             </td>
@@ -1593,11 +1628,12 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
         </Badge>
       </td>
       <td>{incident.reportedBy}</td>
-      <td>
-        <Badge bg={
-          incident.status === 'Reported' ? 'danger' : 
-          incident.status === 'Resolved' ? 'success' : 'secondary'  // ⬅️ EDIT THIS LINE
-        }>
+     <td>
+  <Badge bg={
+    incident.status === 'Reported' ? 'secondary' : 
+    incident.status === 'Completed' ? 'success' : 
+    incident.status === 'Failed' ? 'danger' : 'secondary'
+  }>
           {incident.status}
         </Badge>
       </td>

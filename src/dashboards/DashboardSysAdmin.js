@@ -5,7 +5,7 @@ import Papa from 'papaparse'
 import { PasswordUtils } from '../utils/PasswordUtils';
 import { EmailService } from '../utils/EmailService';
 import EmailProgressModal from '../components/EmailProgressModal';
-
+import { Building2, CalendarDays } from 'lucide-react';
 
 
 export default function DashboardSyAdmin() {
@@ -913,18 +913,45 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
   return (
       <div className="container-fluid">
         {/* Header */}
-        <div className="d-flex justify-content-between align-items-center mb-4">
-<div>
-  <h2 className="mb-1 fw-bold">Welcome back, {sysAdminName}!</h2>
-  <p className="mb-1 text-muted" style={{ fontSize: '14px' }}>
-    System Administrator | {organizationData.name}
-  </p>
-  <small className="text-muted">
-    <i className="bi bi-clock me-1"></i>
-    Last updated: {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-  </small>
+{/* Header */}
+<div style={{
+  backgroundColor: '#f8f9fa',
+  borderLeft: '4px solid #0d6efd',
+  borderRadius: '12px',
+  padding: '16px 24px',
+  marginBottom: '30px',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+}}>
+<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    <Building2 size={28} style={{ color: '#0d6efd' }} />
+    <h1 style={{ margin: 0, fontWeight: '700', fontSize: '28px', color: '#1a1a1a' }}>
+      Welcome back, {sysAdminName}!
+    </h1>
+  </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <CalendarDays size={18} style={{ color: '#6c757d' }} />
+    <span style={{ color: '#6c757d', fontSize: '14px' }}>
+      {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+    </span>
+  </div>
 </div>
-        </div>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', paddingLeft: '36px' }}>
+    <span style={{ 
+      backgroundColor: '#0d6efd15', 
+      color: '#0d6efd', 
+      padding: '4px 12px', 
+      borderRadius: '6px',
+      fontSize: '14px',
+      fontWeight: '600'
+    }}>
+      System Administrator
+    </span>
+    <span style={{ color: '#6c757d', fontSize: '14px' }}>•</span>
+    <span style={{ color: '#495057', fontSize: '14px', fontWeight: '500' }}>{organizationData.name}</span>
+  </div>
+</div>
+
 
 
 {/* Email Progress Modal */}
