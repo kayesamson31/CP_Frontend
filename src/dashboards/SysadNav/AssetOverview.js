@@ -4,6 +4,7 @@ import SidebarLayout from "../../Layouts/SidebarLayout";
 import { assetService } from '../../services/assetService';
 import { supabase } from '../../supabaseClient';
 import Papa from 'papaparse';
+import { AuditLogger } from '../../utils/AuditLogger';
 import {
   Container,
   Row,
@@ -285,7 +286,23 @@ const handleBulkUpload = async () => {
         if (failedCount > 0) resultMessage += `✗ Failed: ${failedCount} assets\n`;
         
         alert(resultMessage);
+        // ✅ ADD: Audit log for bulk upload
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        const { data: currentUserData } = await supabase
+          .from('users')
+          .select('user_id')
+          .eq('email', authUser.email)
+          .single();
         
+        if (currentUserData) {
+          await AuditLogger.logWithIP({
+            userId: currentUserData.user_id,
+            actionTaken: `Bulk uploaded ${insertedCount} assets via CSV`,
+            tableAffected: 'assets',
+            recordId: 0, // Use 0 for bulk operations
+            organizationId: orgId
+          });
+        }
       } catch (innerError) {
         console.error('Error processing CSV:', innerError);
         alert(`Error: ${innerError.message}`);

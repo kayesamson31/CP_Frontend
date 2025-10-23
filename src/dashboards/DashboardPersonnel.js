@@ -266,57 +266,179 @@ return { success: true, data: data?.[0] };
         });
 
       // Update work_orders with extension data
-      const workOrderUpdate = {
-        status_id: statusId,
-        due_date: newDate,
-        original_due_date: currentWO.original_due_date || currentWO.due_date,
-        extension_count: (currentWO.extension_count || 0) + 1,
-        last_extension_date: new Date().toISOString(),
-        last_extension_reason: reason,
-        extended_by: userProfile.user_id
-      };
+// Update work_orders with extension data
+const workOrderUpdate = {
+  status_id: statusId,
+  due_date: newDate,
+  original_due_date: currentWO.original_due_date || currentWO.due_date,
+  extension_count: (currentWO.extension_count || 0) + 1,
+  last_extension_date: new Date().toISOString(),
+  last_extension_reason: reason,
+  extended_by: userProfile.user_id
+};
 
-      const { data: workOrderData, error: workOrderError } = await supabase
-        .from('work_orders')
-        .update(workOrderUpdate)
-        .eq('work_order_id', taskId)
-        .select();
+const { data: workOrderData, error: workOrderError } = await supabase
+  .from('work_orders')
+  .update(workOrderUpdate)
+  .eq('work_order_id', taskId)
+  .select();
 
-      if (workOrderError) throw workOrderError;
-      return { success: true, data: workOrderData?.[0] };
+if (workOrderError) throw workOrderError;
+
+// ✅ Notify admin and requester about extension
+// âœ… Notify admin and requester about extension
+try {
+  const { data: userOrgData } = await supabase
+    .from('users')
+    .select('organization_id')
+    .eq('user_id', userProfile.user_id)
+    .single();
+
+  const { data: woData } = await supabase
+    .from('work_orders')
+    .select('requested_by, title')
+    .eq('work_order_id', taskId)
+    .single();
+
+  const extensionMessage = `Personnel extended work order #${taskId}: "${woData?.title}" to ${new Date(newDate).toLocaleDateString()}${reason ? ' - Reason: ' + reason : ''}`;
+
+  // 1️⃣ Notification for ADMIN
+  await supabase.from('notifications').insert({
+    notification_type_id: 3,
+    created_by: userProfile.user_id,
+    title: 'Work Order Extended',
+    message: extensionMessage,
+    target_roles: '2',
+    target_user_id: null,
+    priority_id: 2,
+    related_table: 'work_orders',
+    related_id: taskId,
+    organization_id: userOrgData.organization_id,
+    is_active: true
+  });
+
+  // 2️⃣ Notification for REQUESTER
+  await supabase.from('notifications').insert({
+    notification_type_id: 3,
+    created_by: userProfile.user_id,
+    title: 'Your Work Order Extended',
+    message: extensionMessage,
+    target_roles: null,
+    target_user_id: woData?.requested_by,
+    priority_id: 2,
+    related_table: 'work_orders',
+    related_id: taskId,
+    organization_id: userOrgData.organization_id,
+    is_active: true
+  });
+  
+  console.log('âœ… Admin and requester notified about work order extension');
+} catch (notifError) {
+  console.error('âŒ Failed to notify about extension:', notifError);
+}
+
+await logActivity('request_task_extension', `Requested extension for work order #${taskId} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
+
+return { success: true, data: workOrderData?.[0] };
       // Log activity - Task extension request
     }
 
     // Regular status update (not extension)
-    const workOrderUpdate = {
-      status_id: statusId,
-      ...(status === 'completed' || status === 'failed' ? { date_resolved: new Date().toISOString() } : {}),
-      ...(status === 'failed' && reason ? { failure_reason: reason } : {})
-    };
+// Regular status update (not extension)
+const workOrderUpdate = {
+  status_id: statusId,
+  ...(status === 'completed' || status === 'failed' ? { date_resolved: new Date().toISOString() } : {}),
+  ...(status === 'failed' && reason ? { failure_reason: reason } : {})
+};
 
-    const { data: workOrderData, error: workOrderError } = await supabase
-      .from('work_orders')
-      .update(workOrderUpdate)
-      .eq('work_order_id', taskId)
-      .select();
+const { data: workOrderData, error: workOrderError } = await supabase
+  .from('work_orders')
+  .update(workOrderUpdate)
+  .eq('work_order_id', taskId)
+  .select('*, requested_by'); // ✅ Include requested_by
 
-    if (workOrderError) throw workOrderError;
+if (workOrderError) throw workOrderError;
 
-    // Optional work_order_details update wrapped in try-catch
-    try {
-      const detailsUpdate = {
-        status_id: statusId
-      };
+// Optional work_order_details update wrapped in try-catch
+try {
+  const detailsUpdate = {
+    status_id: statusId
+  };
 
-      await supabase
-        .from('work_order_details')
-        .update(detailsUpdate)
-        .eq('work_order_id', taskId);
-    } catch (detailsErr) {
-      console.warn('Work order details update failed, but continuing...');
-    }
+  await supabase
+    .from('work_order_details')
+    .update(detailsUpdate)
+    .eq('work_order_id', taskId);
+} catch (detailsErr) {
+  console.warn('Work order details update failed, but continuing...');
+}
+
+// ✅ Notify admin and requester about status update
+// âœ… Notify admin and requester about status update
+try {
+  const statusMessage = status === 'completed' 
+    ? `Personnel completed work order #${taskId}` 
+    : status === 'failed'
+    ? `Personnel marked work order #${taskId} as failed${reason ? ': ' + reason : ''}`
+    : status === 'in-progress'
+    ? `Personnel started working on work order #${taskId}`
+    : `Personnel updated work order #${taskId} to ${status}`;
+
+  const { data: userOrgData } = await supabase
+    .from('users')
+    .select('organization_id')
+    .eq('user_id', userProfile.user_id)
+    .single();
+
+  // âœ… SOLUTION: Create TWO separate notifications
+  
+  // 1️⃣ Notification for ADMIN (role-based)
+  await supabase.from('notifications').insert({
+    notification_type_id: 3,
+    created_by: userProfile.user_id,
+    title: `Work Order ${
+      status === 'completed' ? 'Completed' : 
+      status === 'failed' ? 'Failed' : 
+      status === 'in-progress' ? 'In Progress' : 
+      'Updated'
+    }`,
+    message: statusMessage,
+    target_roles: '2', // âœ… ONLY admin role
+    target_user_id: null, // âœ… NULL = all admins get it
+    priority_id: status === 'failed' ? 3 : 2,
+    related_table: 'work_orders',
+    related_id: taskId,
+    organization_id: userOrgData.organization_id,
+    is_active: true
+  });
+
+  // 2️⃣ Notification for REQUESTER (specific user)
+  await supabase.from('notifications').insert({
+    notification_type_id: 3,
+    created_by: userProfile.user_id,
+    title: `Your Work Order ${
+      status === 'completed' ? 'Completed' : 
+      status === 'failed' ? 'Failed' : 
+      status === 'in-progress' ? 'In Progress' : 
+      'Updated'
+    }`,
+    message: statusMessage,
+    target_roles: null, // âœ… NULL because we're targeting specific user
+    target_user_id: workOrderData[0]?.requested_by, // âœ… Specific requester
+    priority_id: status === 'failed' ? 3 : 2,
+    related_table: 'work_orders',
+    related_id: taskId,
+    organization_id: userOrgData.organization_id,
+    is_active: true
+  });
+  
+  console.log('âœ… Admin and requester notified about work order status update');
+} catch (notifError) {
+  console.error('âŒ Failed to create notification:', notifError);
+}
+
 await logActivity('update_task_status', `Updated work order #${taskId} status to: ${status}${reason ? ' - Reason: ' + reason : ''}`);
-    return { success: true, data: workOrderData?.[0] || workOrderData };
+return { success: true, data: workOrderData?.[0] || workOrderData };
     // Log activity - Work order status update
 } catch (error) {
     console.error('Error updating task status:', error);

@@ -32,23 +32,6 @@ const handleLogin = async (e) => {
 if (userError || !userData) {
   console.log('User not found in database:', userError);
   alert("Invalid email or password");
-  
-  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-  console.log('🔍 Current user from localStorage:', currentUser); // ADD THIS
-  
-  const ipAddress = await AuditLogger.getClientIP();
-  console.log('🔍 IP Address:', ipAddress); // ADD THIS
-  
-  const logResult = await AuditLogger.log({
-    userId: null,
-    actionTaken: `Failed login attempt - User not found: ${email.toLowerCase()}`,
-    tableAffected: 'users',
-    recordId: 0,
-    ipAddress: ipAddress,
-    organizationId: currentUser?.organizationId || null
-  });
-  
-  console.log('🔍 Audit log result:', logResult); // ADD THIS
   return;
 }
 
@@ -80,16 +63,6 @@ if (userError || !userData) {
     
 if (!PasswordUtils.verifyPassword(password, userData.password_hash)) {
   console.log('Database password verification failed');
-  
-  await AuditLogger.log({  // ✅ Use .log instead of .logWithIP for consistency
-    userId: userData.user_id,
-    actionTaken: 'Failed login attempt - Incorrect password',
-    tableAffected: 'users',
-    recordId: userData.user_id,
-    ipAddress: await AuditLogger.getClientIP(),
-    organizationId: userData.organization_id  // ✅ ADD THIS
-  });
-  
   alert("Invalid email or password");
   return;
 }

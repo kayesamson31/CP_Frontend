@@ -6,6 +6,7 @@ import { assetService } from '../../services/assetService';
 import { logActivity } from '../../utils/ActivityLogger';
 import { AuthUtils } from '../../utils/AuthUtils';
 import { supabase } from '../../supabaseClient';  // ← Make sure this line exists
+import { AuditLogger } from '../../utils/AuditLogger';
 import {
   Container,
   Row,
@@ -228,6 +229,15 @@ const handleAddAsset = async () => {
       alert('Asset added successfully!');
       // Log activity
 await logActivity('add_asset', `Added asset: ${newAsset.name} in ${newAsset.location}`);
+// ✅ ADD: Audit log for asset creation
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+      await AuditLogger.logWithIP({
+        userId: currentUser.userId,
+        actionTaken: `Created new asset: ${asset.name}`,
+        tableAffected: 'assets',
+        recordId: asset.id,
+        organizationId: currentUser.organizationId
+      });
     } catch (err) {
       console.error('Error adding asset:', err);
       alert('Failed to add asset. Please try again.');
@@ -323,6 +333,15 @@ const handleBulkUpload = async () => {
     alert(`Upload complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
     // Log activity
 await logActivity('bulk_add_assets', `Bulk uploaded ${successCount} assets to system`);
+// ✅ ADD: Audit log for bulk upload
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+    await AuditLogger.logWithIP({
+      userId: currentUser.userId,
+      actionTaken: `Bulk uploaded ${successCount} assets via CSV`,
+      tableAffected: 'assets',
+      recordId: 0, // Use 0 for bulk operations
+      organizationId: currentUser.organizationId
+    });
   } catch (err) {
     console.error('CSV Upload Error:', err);
     alert('Failed to upload CSV: ' + err.message);

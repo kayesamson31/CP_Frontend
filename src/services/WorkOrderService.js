@@ -122,7 +122,7 @@ try {
     created_by: currentUser.id,
     title: 'New Work Order Request',
     message: `${userData?.full_name || 'A user'} submitted a new work order request: "${workOrderData.title}"`,
-    target_roles: '2,3,4', // ✅ Notify admin(2), personnel(3), standard(4)
+    target_roles: '2', // ✅ Notify admin(2), personnel(3), standard(4)
     priority_id: priorityData.priority_id,
     related_table: 'work_orders',
     related_id: data.work_order_id,

@@ -22,10 +22,8 @@ const [dateTo, setDateTo] = useState(() => {
   
   const [systemSummary, setSystemSummary] = useState({
     successfulLogins: 0,
-    failedLogins: 0,
     passwordResets: 0,
-    accountLockouts: 0,
-    suspiciousAttempts: 0
+    totalUsers: 0, 
   });
   const [securityEvents, setSecurityEvents] = useState([]);
   const [error, setError] = useState(null);
@@ -46,7 +44,14 @@ const [dateTo, setDateTo] = useState(() => {
       if (!currentUser || !currentUser.organizationId) {
         throw new Error('Session expired. Please log in again.');
       }
+// ✅ NEW: Fetch total users count
+const { count: userCount, error: userError } = await supabase
+  .from('users')
+  .select('*', { count: 'exact', head: true })
+  .eq('organization_id', currentUser.organizationId)
+  .eq('user_status', 'active');
 
+if (userError) console.error('Error fetching user count:', userError);
 const { data: auditData, error: auditError } = await supabase
   .from('audit_logs')
   .select(`
@@ -83,7 +88,8 @@ const events = auditData.map(log => ({
   created_at: log.timestamp
 }));
 
-      const summary = calculateSummaryFromEvents(events);
+     const summary = calculateSummaryFromEvents(events);
+summary.totalUsers = userCount || 0;  // ✅ ADD: Set total users count
       
       // NEW: Generate chart data
       const trendData = generateLoginTrendData(events);
@@ -99,13 +105,11 @@ const events = auditData.map(log => ({
     } catch (err) {
       console.error('Error fetching reports data:', err);
       setError('Failed to load reports data. Please try again.');
-      setSystemSummary({
-        successfulLogins: 0,
-        failedLogins: 0,
-        passwordResets: 0,
-        accountLockouts: 0,
-        suspiciousAttempts: 0
-      });
+setSystemSummary({
+  successfulLogins: 0,
+  passwordResets: 0,
+  totalUsers: 0  // ✅ CHANGE
+});
       setSecurityEvents([]);
       setLoginTrendData([]);
       setEventTypeDistribution([]);
@@ -147,7 +151,18 @@ const determineEventType = (action) => {
   if (actionLower.includes('created') && actionLower.includes('user')) {
     return 'User Created';
   }
+  // Asset Management
+  if (actionLower.includes('created') && actionLower.includes('asset')) {
+    return 'Asset Created';
+  }
   
+  if (actionLower.includes('uploaded') && actionLower.includes('asset')) {
+    return 'Asset Upload';
+  }
+  
+  if (actionLower.includes('bulk') && actionLower.includes('asset')) {
+    return 'Bulk Asset Upload';
+  }
   if (actionLower.includes('updated') && actionLower.includes('user')) {
     return 'User Updated';
   }
@@ -169,13 +184,11 @@ const determineEventType = (action) => {
 };
 
 const calculateSummaryFromEvents = (events) => {
-  const summary = {
-    successfulLogins: 0,
-    failedLogins: 0,
-    passwordResets: 0,
-    accountLockouts: 0,
-    suspiciousAttempts: 0
-  };
+const summary = {
+  successfulLogins: 0,
+  passwordResets: 0,
+  totalUsers: 0,  // ✅ CHANGE: accountLockouts -> totalUsers
+};
 
   events.forEach(event => {
     const eventType = event.eventType.toLowerCase();
@@ -185,18 +198,11 @@ const calculateSummaryFromEvents = (events) => {
     if (eventType.includes('successful login') || eventType.includes('logout')) {
       summary.successfulLogins++;
     }
-    else if (eventType.includes('failed login')) {
-      summary.failedLogins++;
-    }
     else if (eventType.includes('password') || details.includes('password')) {
       summary.passwordResets++;
     }
-    else if (eventType.includes('lockout') || details.includes('locked')) {
-      summary.accountLockouts++;
-    }
-    else if (eventType.includes('suspicious')) {
-      summary.suspiciousAttempts++;
-    }
+ 
+  
   });
 
   return summary;
@@ -209,14 +215,13 @@ const calculateSummaryFromEvents = (events) => {
     events.forEach(event => {
       const date = event.date;
       if (!dateMap[date]) {
-        dateMap[date] = { date, successful: 0, failed: 0 };
+     dateMap[date] = { date, successful: 0 };
       }
       
       if (event.eventType.toLowerCase().includes('successful')) {
         dateMap[date].successful++;
-      } else if (event.eventType.toLowerCase().includes('failed')) {
-        dateMap[date].failed++;
-      }
+      } 
+    
     });
 
     return Object.values(dateMap).sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -322,10 +327,8 @@ const generateTopRolesData = (events) => {
         [''],
         ['SUMMARY'],
         [`Successful Logins: ${systemSummary.successfulLogins}`],
-        [`Failed Logins: ${systemSummary.failedLogins}`],
         [`Password Resets: ${systemSummary.passwordResets}`],
-        [`Account Lockouts: ${systemSummary.accountLockouts}`],
-        [`Suspicious Attempts: ${systemSummary.suspiciousAttempts}`],
+       [`Total System Users: ${systemSummary.totalUsers}`],
         [''],
         ['SECURITY EVENTS'],
         headers,
@@ -516,64 +519,42 @@ const generateTopRolesData = (events) => {
           </div>
         )}
 
-        {/* Summary Cards */}
-        <div className="row mb-4">
-          <div className="col">
-            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
-              <div className="card-body text-center py-3">
-                <div className="d-flex align-items-center justify-content-center mb-2">
-                  <i className="fas fa-check-circle text-success fs-5 me-1"></i>
-                  <h4 className="text-success mb-0">{systemSummary.successfulLogins.toLocaleString()}</h4>
-                </div>
-                <small className="text-muted">Successful Logins</small>
-              </div>
-            </div>
-          </div>
-          <div className="col">
-            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
-              <div className="card-body text-center py-3">
-                <div className="d-flex align-items-center justify-content-center mb-2">
-                  <i className="fas fa-exclamation-triangle text-warning fs-5 me-1"></i>
-                  <h4 className="text-warning mb-0">{systemSummary.failedLogins.toLocaleString()}</h4>
-                </div>
-                <small className="text-muted">Failed Logins</small>
-              </div>
-            </div>
-          </div>
-          <div className="col">
-            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
-              <div className="card-body text-center py-3">
-                <div className="d-flex align-items-center justify-content-center mb-2">
-                  <i className="fas fa-key text-info fs-5 me-1"></i>
-                  <h4 className="text-info mb-0">{systemSummary.passwordResets.toLocaleString()}</h4>
-                </div>
-                <small className="text-muted">Password Resets</small>
-              </div>
-            </div>
-          </div>
-          <div className="col">
-            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
-              <div className="card-body text-center py-3">
-                <div className="d-flex align-items-center justify-content-center mb-2">
-                  <i className="fas fa-lock text-danger fs-5 me-1"></i>
-                  <h4 className="text-danger mb-0">{systemSummary.accountLockouts.toLocaleString()}</h4>
-                </div>
-                <small className="text-muted">Account Lockouts</small>
-              </div>
-            </div>
-          </div>
-          <div className="col">
-            <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
-              <div className="card-body text-center py-3">
-                <div className="d-flex align-items-center justify-content-center mb-2">
-                  <i className="fas fa-shield-alt text-danger fs-5 me-1"></i>
-                  <h4 className="text-danger mb-0">{systemSummary.suspiciousAttempts.toLocaleString()}</h4>
-                </div>
-                <small className="text-muted">Suspicious Attempts</small>
-              </div>
-            </div>
-          </div>
+{/* Summary Cards */}
+<div className="row mb-4">
+  <div className="col-md-4">
+    <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+      <div className="card-body text-center py-3">
+        <div className="d-flex align-items-center justify-content-center mb-2">
+          <i className="fas fa-check-circle text-success fs-5 me-1"></i>
+          <h4 className="text-success mb-0">{systemSummary.successfulLogins.toLocaleString()}</h4>
         </div>
+        <small className="text-muted">Successful Logins</small>
+      </div>
+    </div>
+  </div>
+  <div className="col-md-4">
+    <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+      <div className="card-body text-center py-3">
+        <div className="d-flex align-items-center justify-content-center mb-2">
+          <i className="fas fa-key text-info fs-5 me-1"></i>
+          <h4 className="text-info mb-0">{systemSummary.passwordResets.toLocaleString()}</h4>
+        </div>
+        <small className="text-muted">Password Resets</small>
+      </div>
+    </div>
+  </div>
+<div className="col-md-4">
+  <div className="card border-2 h-100" style={{border: '4px solid #CACACCFF'}}>
+    <div className="card-body text-center py-3">
+      <div className="d-flex align-items-center justify-content-center mb-2">
+        <i className="fas fa-users text-primary fs-5 me-1"></i>
+        <h4 className="text-primary mb-0">{systemSummary.totalUsers.toLocaleString()}</h4>
+      </div>
+      <small className="text-muted">Total System Users</small>
+    </div>
+  </div>
+</div>
+</div>
 
         {/* NEW: Visual Analytics Section */}
         <div className="row mb-4">
@@ -592,7 +573,6 @@ const generateTopRolesData = (events) => {
                     <Tooltip />
                     <Legend />
                     <Line type="monotone" dataKey="successful" stroke="#198754" name="Successful" strokeWidth={2} />
-                    <Line type="monotone" dataKey="failed" stroke="#dc3545" name="Failed" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

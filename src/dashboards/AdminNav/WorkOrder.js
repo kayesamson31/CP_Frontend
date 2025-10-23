@@ -274,14 +274,46 @@ const confirmAssignment = async () => {
 
     if (updateError) throw updateError;
 
-    // Reload work orders
-    await fetchWorkOrders();
-    // Log activity
-await logActivity('assign_work_order', `Assigned work order ${selectedOrder.id} to ${assignedPersonnel}${adminPriority ? ` with ${adminPriority} priority` : ''}`);
-// Log activity
-await logActivity('reject_work_order', `Rejected work order ${selectedOrder.id} - Reason: ${rejectReason}`);
-    // Reset modal states
-    setShowAssignModal(false);
+ // Reload work orders
+await fetchWorkOrders();
+
+// ✅ Log activity
+await logActivity('assign_work_order', `Assigned work order ${selectedOrder.id} to personnel`);
+
+// ✅ Notify personnel about assignment
+try {
+  // Get current admin user
+  const { data: { user } } = await supabase.auth.getUser();
+  const { data: adminData } = await supabase
+    .from('users')
+    .select('user_id, organization_id')
+    .eq('auth_uid', user.id)
+    .single();
+
+  // Get personnel name for message
+  const personnelData = personnel.find(p => p.id === parseInt(assignedPersonnel));
+  
+  await supabase.from('notifications').insert({
+    notification_type_id: 9, // or create new type for "work_order_assigned"
+    created_by: adminData.user_id,
+    title: 'Work Order Assigned to You',
+    message: `Admin assigned you work order: "${selectedOrder.description}"${adminPriority ? ` with ${adminPriority} priority` : ''}`,
+    target_user_id: parseInt(assignedPersonnel), // ✅ Specific personnel
+    priority_id: adminPriority ? (adminPriority === 'High' ? 3 : adminPriority === 'Medium' ? 2 : 1) : 2,
+    related_table: 'work_orders',
+    related_id: selectedOrder.work_order_id,
+    organization_id: adminData.organization_id,
+    is_active: true
+  });
+  
+  console.log('✅ Personnel notified about work order assignment');
+} catch (notifError) {
+  console.error('❌ Failed to notify personnel:', notifError);
+}
+
+// Reset modal states
+setShowAssignModal(false);
+
     setAssignedPersonnel('');
     setAdminPriority('');
     setSelectedOrder(null);
@@ -322,11 +354,15 @@ const confirmRejection = async () => {
 
     if (updateError) throw updateError;
 
-    // Reload work orders
-    await fetchWorkOrders();
+ // Reload work orders
+await fetchWorkOrders();
 
-    // Reset modal states
-    setShowRejectModal(false);
+// ✅ Log activity - TAMA NA PLACEMENT NITO DITO!
+await logActivity('reject_work_order', `Rejected work order ${selectedOrder.id} - Reason: ${rejectReason}`);
+
+// Reset modal states
+setShowRejectModal(false);
+
     setRejectReason('');
     setAdminPriority('');
     setSelectedOrder(null);
