@@ -33,7 +33,7 @@ const [dateTo, setDateTo] = useState(() => {
   // NEW: Chart data states
   const [loginTrendData, setLoginTrendData] = useState([]);
   const [eventTypeDistribution, setEventTypeDistribution] = useState([]);
-  const [topUsersData, setTopUsersData] = useState([]);
+  const [topRolesData, setTopRolesData] = useState([]);
 
   const COLORS = ['#198754', '#dc3545', '#ffc107', '#0dcaf0', '#6c757d'];
 
@@ -47,50 +47,54 @@ const [dateTo, setDateTo] = useState(() => {
         throw new Error('Session expired. Please log in again.');
       }
 
-      const { data: auditData, error: auditError } = await supabase
-        .from('audit_logs')
-        .select(`
-          audit_id,
-          action_taken,
-          timestamp,
-          ip_address,
-          users!inner (
-            full_name,
-            email,
-            organization_id
-          )
-        `)
-        .eq('users.organization_id', currentUser.organizationId)
-        .gte('timestamp', dateFrom)
-        .lte('timestamp', dateTo)
-        .order('timestamp', { ascending: false });
+const { data: auditData, error: auditError } = await supabase
+  .from('audit_logs')
+  .select(`
+    audit_id,
+    action_taken,
+    timestamp,
+    ip_address,
+    organization_id,
+    users (
+      full_name,
+      email,
+      roles (
+        role_name
+      )
+    )
+  `)
+  .eq('organization_id', currentUser.organizationId)  // ✅ Filter by audit_logs.organization_id
+  .gte('timestamp', dateFrom)
+  .lte('timestamp', dateTo)
+  .order('timestamp', { ascending: false });
 
       if (auditError) throw auditError;
 
-      const events = auditData.map(log => ({
-        id: log.audit_id,
-        date: log.timestamp.split('T')[0],
-        time: log.timestamp.split('T')[1]?.split('.')[0],
-        eventType: determineEventType(log.action_taken),
-        user: log.users.email,
-        ipAddress: log.ip_address || 'N/A',
-        details: log.action_taken,
-        status: 'Completed',
-        created_at: log.timestamp
-      }));
+const events = auditData.map(log => ({
+  id: log.audit_id,
+  date: log.timestamp.split('T')[0],
+  time: log.timestamp.split('T')[1]?.split('.')[0],
+  eventType: determineEventType(log.action_taken),
+  user: log.users?.email || 'Unknown User',  // ✅ Handle NULL users
+  role: log.users?.roles?.role_name || 'Unknown',  // ✅ Handle NULL roles
+  ipAddress: log.ip_address || 'N/A',
+  details: log.action_taken,
+  status: 'Completed',
+  created_at: log.timestamp
+}));
 
       const summary = calculateSummaryFromEvents(events);
       
       // NEW: Generate chart data
       const trendData = generateLoginTrendData(events);
       const distributionData = generateEventDistribution(events);
-      const topUsers = generateTopUsersData(events);
+     const topRoles = generateTopRolesData(events);  // ✅ CHANGE FROM generateTopUsersData
 
       setSecurityEvents(events);
       setSystemSummary(summary);
       setLoginTrendData(trendData);
       setEventTypeDistribution(distributionData);
-      setTopUsersData(topUsers);
+ setTopRolesData(topRoles);  // ✅ CHANGE FROM setTopUsersData
       
     } catch (err) {
       console.error('Error fetching reports data:', err);
@@ -105,7 +109,7 @@ const [dateTo, setDateTo] = useState(() => {
       setSecurityEvents([]);
       setLoginTrendData([]);
       setEventTypeDistribution([]);
-      setTopUsersData([]);
+      setTopRolesData([]);
     } finally {
       setIsLoading(false);
     }
@@ -231,19 +235,20 @@ const calculateSummaryFromEvents = (events) => {
   };
 
   // NEW: Generate top users with most events
-  const generateTopUsersData = (events) => {
-    const userCount = {};
-    
-    events.forEach(event => {
-      const user = event.user;
-      userCount[user] = (userCount[user] || 0) + 1;
-    });
+// NEW: Generate top roles with most events (instead of users)
+const generateTopRolesData = (events) => {
+  const roleCount = {};
+  
+  events.forEach(event => {
+    const role = event.role || 'Unknown';
+    roleCount[role] = (roleCount[role] || 0) + 1;
+  });
 
-    return Object.entries(userCount)
-      .map(([user, count]) => ({ user: user.split('@')[0], count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-  };
+  return Object.entries(roleCount)
+    .map(([role, count]) => ({ role, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+};
 
   const saveReportMetadata = async (reportType, fileUrl = null) => {
     try {
@@ -625,25 +630,26 @@ const calculateSummaryFromEvents = (events) => {
           </div>
 
           {/* Top Users by Activity */}
-          <div className="col-12">
-            <div className="card border-2">
-              <div className="card-header bg-white border-0 py-3">
-                <h5 className="mb-0">Top 5 Most Active Users</h5>
-              </div>
-              <div className="card-body">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={topUsersData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="user" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="count" fill="#0d6efd" name="Total Events" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
+{/* Top Roles by Activity */}
+<div className="col-12">
+  <div className="card border-2">
+    <div className="card-header bg-white border-0 py-3">
+      <h5 className="mb-0">Top 5 Most Active User Roles</h5>  {/* ✅ CHANGE TITLE */}
+    </div>
+    <div className="card-body">
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={topRolesData}>  {/* ✅ CHANGE FROM topUsersData */}
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="role" />  {/* ✅ CHANGE FROM "user" */}
+          <YAxis />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="count" fill="#0d6efd" name="Total Events" />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+</div>
         </div>
 
         <ViewDetailsModal />

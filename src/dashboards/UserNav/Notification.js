@@ -302,49 +302,86 @@ const { error } = await supabase
 
 
 useEffect(() => {
-    fetchNotifications();
-     cleanupOldNotifications();
+  fetchNotifications();
+  cleanupOldNotifications();
+  
+  // Get org ID once at the start
+  let currentOrgId = null;
+  
+  const initSubscription = async () => {
+    try {
+      currentOrgId = await getCurrentUserOrganization();
+      console.log('🏢 Current Organization ID:', currentOrgId);
+    } catch (error) {
+      console.error('❌ Failed to get organization ID:', error);
+    }
     
     // Set up real-time subscription for new notifications
-const channel = supabase
-  .channel('notifications-channel')
-  .on(
-    'postgres_changes',
-    {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'notifications'
-    },
-    (payload) => {
-      console.log('New notification received:', payload);
-      const roleId = getRoleId(role);
-      // Check both role AND user_id
-      if (payload.new.target_roles === roleId.toString() || 
-          payload.new.target_user_id === userId) {
-        fetchNotifications();
-      }
-    }
-  )
-  .subscribe();
+    const channel = supabase
+      .channel('notifications-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications'
+        },
+        (payload) => {
+          console.log('🔔 New notification received:', payload);
+          
+          const roleId = getRoleId(role);
+          
+          // Check if notification is for current user
+          const targetRoles = payload.new.target_roles?.split(',').map(r => r.trim()) || [];
+          const isForMyRole = targetRoles.includes(roleId.toString());
+          const isForMe = payload.new.target_user_id === userId;
+          const isMyOrganization = payload.new.organization_id === currentOrgId;
+          
+          console.log('🔍 Checking notification:', {
+            notificationOrgId: payload.new.organization_id,
+            myOrgId: currentOrgId,
+            targetRoles,
+            myRole: roleId,
+            isForMyRole,
+            isForMe,
+            isMyOrganization
+          });
+          
+          if ((isForMyRole || isForMe) && isMyOrganization) {
+            console.log('✅ Notification is for me! Refreshing...');
+            fetchNotifications();
+          } else {
+            console.log('❌ Notification not for me, skipping...');
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Subscription status:', status);
+      });
 
-    // Refresh every 30 seconds as fallback
-    const intervalId = setInterval(() => {
-      fetchNotifications();
-    }, 30000);
+    return channel;
+  };
 
-   // Cleanup old notifications daily
-    const cleanupIntervalId = setInterval(() => {
-      cleanupOldNotifications();
-    }, 24 * 60 * 60 * 1000); // Run every 24 hours
+  const channelPromise = initSubscription();
 
-    return () => {
-      supabase.removeChannel(channel);
-      clearInterval(intervalId);
-      clearInterval(cleanupIntervalId); 
-      
-    };
-  }, [role, userId]);
+  // Refresh every 30 seconds as fallback
+  const intervalId = setInterval(() => {
+    fetchNotifications();
+  }, 30000);
 
+  // Cleanup old notifications daily
+  const cleanupIntervalId = setInterval(() => {
+    cleanupOldNotifications();
+  }, 24 * 60 * 60 * 1000);
+
+  return () => {
+    channelPromise.then(channel => {
+      if (channel) supabase.removeChannel(channel);
+    });
+    clearInterval(intervalId);
+    clearInterval(cleanupIntervalId);
+  };
+}, [role, userId]);
 
 
   const handleNotificationClick = (notification) => {

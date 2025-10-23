@@ -592,7 +592,7 @@ try {
     created_by: currentUser.user_id,
     title: 'New Maintenance Task Assigned',
     message: `You have been assigned: ${taskData.title} for ${assetData.asset_name}. Due: ${taskData.dueDate}`,
-    target_roles: '3', // Personnel role
+    target_roles: null, // Personnel role
     target_user_id: parseInt(taskData.assigneeId),
     priority_id: priorityMap[taskData.priority] || 2,
     related_table: 'maintenance_tasks',

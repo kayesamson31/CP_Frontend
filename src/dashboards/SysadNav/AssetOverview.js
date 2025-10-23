@@ -28,9 +28,10 @@ export default function AssetOverview() {
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   
-  // State for view modal
+// State for view modal
   const [selectedAsset, setSelectedAsset] = useState(null);
- 
+  const [showCombinedHistoryModal, setShowCombinedHistoryModal] = useState(false);
+  const [historyAsset, setHistoryAsset] = useState(null);
 const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
 const [csvFile, setCsvFile] = useState(null);
 const [csvPreview, setCsvPreview] = useState([]);
@@ -348,6 +349,15 @@ Monitor Samsung,Computer,Office Floor 2,Operational`;
     );
   }
 
+const formatDate = (dateString) => {
+  if (!dateString) return 'N/A';
+  const date = new Date(dateString);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const year = String(date.getFullYear()).slice(-2);
+  return `${month}-${day}-${year}`;
+};
+
   return (
     <SidebarLayout role="sysadmin">
       <Container fluid>
@@ -565,220 +575,149 @@ Monitor Samsung,Computer,Office Floor 2,Operational`;
       <Modal.Header closeButton>
         <Modal.Title>Asset Details (Read-Only)</Modal.Title>
       </Modal.Header>
+      
       <Modal.Body>
-        <Row>
-          {/* Main Asset Information */}
-          <Col lg={8}>
-            <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-              <div className="d-flex gap-2">
-                <span className={`badge ${
-                  selectedAsset.status === 'Operational' ? 'bg-success' :
-                  selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
-                  'bg-secondary'
-                }`}>
-                  {selectedAsset.status}
-                </span>
-                {selectedAsset.hasFailedMaintenance && (
-                  <span className="badge bg-danger">
-                    <i className="fas fa-exclamation-triangle me-1"></i>
-                    {selectedAsset.failedMaintenanceCount} Failed Task{selectedAsset.failedMaintenanceCount > 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Asset Details - Read Only */}
-            <div className="row g-3">
-              <div className="col-md-6">
-                <Form.Group>
-                  <Form.Label><strong>Asset Name/Code:</strong></Form.Label>
-                  <Form.Control type="text" value={selectedAsset.name} readOnly />
-                </Form.Group>
-              </div>
-              <div className="col-md-6">
-                <Form.Group>
-                  <Form.Label><strong>Category:</strong></Form.Label>
-                  <Form.Control type="text" value={selectedAsset.category} readOnly />
-                </Form.Group>
-              </div>
-              <div className="col-md-6">
-                <Form.Group>
-                  <Form.Label><strong>Acquisition Date:</strong></Form.Label>
-                  <Form.Control type="text" value={selectedAsset.acquisitionDate || 'N/A'} readOnly />
-                </Form.Group>
-              </div>
-              <div className="col-md-6">
-                <Form.Group>
-                  <Form.Label><strong>Location:</strong></Form.Label>
-                  <Form.Control type="text" value={selectedAsset.location} readOnly />
-                </Form.Group>
-              </div>
-              <div className="col-md-12">
-                <Form.Group>
-                  <Form.Label><strong>Next Maintenance:</strong></Form.Label>
-                  <Form.Control 
-                    type="text" 
-                    value={selectedAsset.nextMaintenance || 'Not scheduled'} 
-                    readOnly 
-                  />
-                  {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
-                    <Form.Text className="text-muted d-block mt-1">
-                      <i className="fas fa-repeat me-1"></i>
-                      Repeats: {selectedAsset.nextMaintenanceRepeat}
-                    </Form.Text>
-                  )}
-                </Form.Group>
-              </div>
-            </div>
-
-            {/* Maintenance History */}
-            <div className="mt-4 pt-3 border-top">
-              <h6 className="mb-3">
-                <i className="fas fa-history me-2"></i>
-                Maintenance History
-              </h6>
-              <Table bordered size="sm" className="mt-2">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Tasks</th>
-                    <th>Assigned</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {selectedAsset.maintenanceHistory?.length > 0 ? (
-                    selectedAsset.maintenanceHistory.map((entry, idx) => (
-                      <tr key={idx}>
-                        <td>{entry.date}</td>
-                        <td>{entry.task}</td>
-                        <td>{entry.assigned}</td>
-                        <td>
-                          <Badge bg={entry.status === 'completed' ? 'success' : entry.status === 'failed' ? 'danger' : 'secondary'}>
-                            {entry.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="4" className="text-center text-muted">
-                        No maintenance history available
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </Table>
-            </div>
-
-            {/* Incident History */}
-            {selectedAsset.incidentHistory && selectedAsset.incidentHistory.length > 0 && (
-              <div className="mt-4 pt-3 border-top">
-                <h6 className="mb-3">
-                  <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
-                  Incident Report History
-                </h6>
-                <Table bordered size="sm" className="mt-2">
-                  <thead>
-                    <tr>
-                      <th>Date Reported</th>
-                      <th>Type</th>
-                      <th>Severity</th>
-                      <th>Reported By</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {selectedAsset.incidentHistory.map((incident, idx) => (
-                      <tr key={idx}>
-                        <td>{new Date(incident.reportedAt).toLocaleDateString()}</td>
-                        <td>{incident.type}</td>
-                        <td>
-                          <Badge bg={
-                            incident.severity === 'Critical' ? 'danger' :
-                            incident.severity === 'Major' ? 'warning' : 'info'
-                          }>
-                            {incident.severity}
-                          </Badge>
-                        </td>
-                        <td>{incident.reportedBy}</td>
-                        <td>
-                          <Badge bg={
-                            incident.status === 'Reported' ? 'danger' : 
-                            incident.status === 'Resolved' ? 'success' : 'secondary'
-                          }>
-                            {incident.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
+        {/* Status Badge and View History Button */}
+        <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+          <div className="d-flex gap-2 align-items-center">
+            {/* Main Status */}
+            <span className={`badge ${
+              selectedAsset.status === 'Operational' ? 'bg-success' :
+              selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+              'bg-secondary'
+            }`}>
+              {selectedAsset.status}
+            </span>
+            
+            {/* Incident Badge */}
+            {selectedAsset.incidentReports && selectedAsset.incidentReports.length > 0 && (
+              <span className="badge bg-warning text-dark">
+                <i className="fas fa-exclamation-triangle me-1"></i>
+                {selectedAsset.incidentReports.length} Incident{selectedAsset.incidentReports.length > 1 ? 's' : ''}
+              </span>
             )}
-          </Col>
+          </div>
+          
+          {/* RIGHT SIDE - View History Button */}
+          <Button 
+            size="sm" 
+            variant="outline-primary"
+            onClick={() => {
+              setHistoryAsset(selectedAsset);
+              setSelectedAsset(null);
+              setShowCombinedHistoryModal(true);
+            }}
+          >
+            <i className="fas fa-history me-2"></i>
+            View History
+          </Button>
+        </div>
 
-          {/* Right Column - Incident Reports Panel */}
-          <Col lg={4}>
-            <div className="h-100 border-start ps-4">
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h6 className="mb-0">
-                  <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
-                  Active Incidents
-                </h6>
-                {selectedAsset.incidentReports?.length > 0 && (
-                  <Badge bg="danger">{selectedAsset.incidentReports.length}</Badge>
-                )}
-              </div>
-              
-              <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {selectedAsset.incidentReports?.length > 0 ? (
-                  selectedAsset.incidentReports.map((incident, index) => (
-                    <div key={index} className="mb-3 p-3 border rounded shadow-sm bg-light">
-                      <div className="d-flex justify-content-between align-items-start mb-2">
-                        <div>
-                          <strong className="text-danger">{incident.reportedBy}</strong>
-                          <div>
-                            <small className="text-muted">
-                              {new Date(incident.reportedAt).toLocaleDateString()}
-                            </small>
-                          </div>
-                        </div>
-                        <Badge bg={incident.status === 'Open' ? 'danger' : incident.status === 'Assigned to Task' ? 'warning' : 'secondary'}>
-                          {incident.status}
-                        </Badge>
-                      </div>
-                      
-                      <div className="mb-2">
-                        <span className="fw-bold">{incident.type}</span>
-                        <span className={`badge ms-2 ${
-                          incident.severity === 'High' ? 'bg-danger' :
-                          incident.severity === 'Medium' ? 'bg-warning' : 'bg-info'
-                        }`}>
-                          {incident.severity}
-                        </span>
-                      </div>
-                      
-                      <p className="small mb-0 text-muted">
-                        {incident.description.length > 80 
-                          ? `${incident.description.substring(0, 80)}...` 
-                          : incident.description
+        {/* Asset Information - Two Column Grid */}
+        <div className="row g-3">
+          <div className="col-md-6">
+            <Form.Group>
+              <Form.Label><strong>Asset Name/Code:</strong></Form.Label>
+              <Form.Control type="text" value={selectedAsset.name} readOnly />
+            </Form.Group>
+          </div>
+          <div className="col-md-6">
+            <Form.Group>
+              <Form.Label><strong>Category:</strong></Form.Label>
+              <Form.Control type="text" value={selectedAsset.category} readOnly />
+            </Form.Group>
+          </div>
+          <div className="col-md-6">
+            <Form.Group>
+              <Form.Label><strong>Acquisition Date:</strong></Form.Label>
+              <Form.Control type="text" value={selectedAsset.acquisitionDate || 'N/A'} readOnly />
+            </Form.Group>
+          </div>
+          <div className="col-md-6">
+            <Form.Group>
+              <Form.Label><strong>Location:</strong></Form.Label>
+              <Form.Control type="text" value={selectedAsset.location} readOnly />
+            </Form.Group>
+          </div>
+          <div className="col-md-12">
+            <Form.Group>
+              <Form.Label><strong>Next Maintenance:</strong></Form.Label>
+              <Form.Control 
+                type="text" 
+                value={selectedAsset.nextMaintenance || 'Not scheduled'} 
+                readOnly 
+              />
+              {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
+                <Form.Text className="text-muted d-block mt-1">
+                  <i className="fas fa-repeat me-1"></i>
+                  Repeats: {selectedAsset.nextMaintenanceRepeat}
+                </Form.Text>
+              )}
+            </Form.Group>
+          </div>
+        </div>
+
+        {/* Active Incidents Section */}
+        <div className="mt-4 pt-3 border-top">
+          <div className="d-flex justify-content-between align-items-center mb-3">
+            <h6 className="mb-0">
+              <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
+              Active Incidents
+            </h6>
+            {selectedAsset.incidentReports?.length > 0 && (
+              <Badge bg="danger" pill>{selectedAsset.incidentReports.length}</Badge>
+            )}
+          </div>
+          
+          {selectedAsset.incidentReports?.length > 0 ? (
+            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              {selectedAsset.incidentReports.map((incident, index) => (
+                <div key={index} className="mb-2 p-3 border border-warning rounded bg-light">
+                  {/* Single Row: Name, Date, Type, Severity, Status */}
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <span className="fw-semibold small">{incident.reportedBy}</span>
+                      <span className="text-muted small">•</span>
+                      <span className="text-muted small">
+                        {new Date(incident.reportedAt).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </span>
+                      <span className="text-muted small">•</span>
+                      <span className="fw-bold text-dark small">{incident.type}</span>
+                      <Badge 
+                        bg={
+                          incident.severity === 'High' ? 'danger' :
+                          incident.severity === 'Medium' ? 'warning' : 'info'
                         }
-                      </p>
+                        className="small"
+                      >
+                        {incident.severity}
+                      </Badge>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center text-muted py-5">
-                    <i className="fas fa-clipboard-check fa-3x mb-3 opacity-25"></i>
-                    <p className="mb-0">No active incidents</p>
-                    <small>All clear!</small>
+                    <Badge bg={incident.status === 'Reported' ? 'danger' : 'success'} className="small">
+                      {incident.status}
+                    </Badge>
                   </div>
-                )}
-              </div>
+                  
+                  {/* Description */}
+                  <p className="small mb-0 text-muted" style={{ lineHeight: '1.4' }}>
+                    {incident.description}
+                  </p>
+                </div>
+              ))}
             </div>
-          </Col>
-        </Row>
+          ) : (
+            <div className="text-center py-3 bg-light rounded">
+              <i className="fas fa-check-circle fa-2x mb-2 text-success opacity-25"></i>
+              <p className="mb-0 small text-muted">No active incidents</p>
+            </div>
+          )}
+        </div>
       </Modal.Body>
+      
       <Modal.Footer>
         <Button variant="secondary" onClick={() => setSelectedAsset(null)}>
           Close
@@ -787,6 +726,147 @@ Monitor Samsung,Computer,Office Floor 2,Operational`;
     </>
   )}
 </Modal>
+
+{/* Combined History Modal */}
+<Modal 
+  show={showCombinedHistoryModal} 
+  onHide={() => {
+    setShowCombinedHistoryModal(false);
+    setHistoryAsset(null);
+  }} 
+  size="xl"
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Asset History</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    {/* Maintenance History Section */}
+    <div className="mb-4">
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h5 className="mb-0">
+          <i className="fas fa-tools me-2 text-primary"></i>
+          Maintenance History
+        </h5>
+        {historyAsset?.maintenanceHistory?.length > 0 && (
+          <Badge bg="secondary">{historyAsset.maintenanceHistory.length} records</Badge>
+        )}
+      </div>
+      
+      {historyAsset?.maintenanceHistory?.length > 0 ? (
+        <Table bordered hover size="sm">
+          <thead className="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Task</th>
+              <th>Assigned To</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {historyAsset.maintenanceHistory.map((entry, idx) => (
+              <tr key={idx}>
+                <td>{formatDate(entry.date)}</td>
+                <td>{entry.task}</td>
+                <td>{entry.assigned}</td>
+                <td>
+                  <Badge bg={
+                    entry.status === 'completed' ? 'success' : 
+                    entry.status === 'failed' ? 'danger' : 'secondary'
+                  }>
+                    {entry.status || 'N/A'}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      ) : (
+        <Alert variant="light" className="text-center">
+          <i className="fas fa-clipboard-list fa-2x mb-2 opacity-25"></i>
+          <p className="mb-0">No maintenance history available</p>
+        </Alert>
+      )}
+    </div>
+
+    {/* Incident History Section */}
+    <div>
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <h5 className="mb-0">
+          <i className="fas fa-exclamation-triangle me-2 text-warning"></i>
+          Incident History
+        </h5>
+        {historyAsset?.incidentHistory?.length > 0 && (
+          <Badge bg="secondary">{historyAsset.incidentHistory.length} records</Badge>
+        )}
+      </div>
+      
+      {historyAsset?.incidentHistory?.length > 0 ? (
+        <Table bordered hover size="sm">
+          <thead className="table-light">
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Severity</th>
+              <th>Reported By</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {historyAsset.incidentHistory.map((incident, idx) => (
+              <tr key={idx}>
+                <td>{formatDate(incident.reportedAt)}</td>
+                <td>{incident.type}</td>
+                <td>
+                  <Badge bg={
+                    incident.severity === 'High' ? 'danger' :
+                    incident.severity === 'Medium' ? 'warning' : 'info'
+                  }>
+                    {incident.severity}
+                  </Badge>
+                </td>
+                <td>{incident.reportedBy}</td>
+                <td>
+                  <Badge bg={
+                    incident.status === 'Reported' ? 'secondary' :
+                    incident.status === 'Completed' ? 'success' : 
+                    incident.status === 'Failed' ? 'danger' : 'secondary'
+                  }>
+                    {incident.status}
+                  </Badge>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      ) : (
+        <Alert variant="light" className="text-center">
+          <i className="fas fa-check-circle fa-2x mb-2 text-success opacity-25"></i>
+          <p className="mb-0">No incident history available</p>
+        </Alert>
+      )}
+    </div>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button 
+      variant="outline-secondary" 
+      onClick={() => {
+        setShowCombinedHistoryModal(false);
+        setSelectedAsset(historyAsset);
+        setHistoryAsset(null);
+      }}
+    >
+      <i className="fas fa-arrow-left me-2"></i>
+      Back to Asset Details
+    </Button>
+    <Button variant="secondary" onClick={() => {
+      setShowCombinedHistoryModal(false);
+      setHistoryAsset(null);
+    }}>
+      Close
+    </Button>
+  </Modal.Footer>
+</Modal>
+
       </Container>
     </SidebarLayout>
   );

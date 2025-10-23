@@ -118,7 +118,7 @@ export default function SysadAuditLogs() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [recordsPerPage] = useState(50);
+  const [recordsPerPage] = useState(15);
 
   // Debounce search
   const [searchDebounce, setSearchDebounce] = useState("");
@@ -148,27 +148,27 @@ const fetchAuditLogs = async () => {
     }
 
     // ✅ Build query with filters
-    let query = supabase
-      .from('audit_logs')
-      .select(`
-        audit_id,
-        user_id,
-        action_taken,
-        table_affected,
-        record_id,
-        ip_address,
-        timestamp,
-        users!inner (
-          full_name,
-          email,
-          organization_id,
-          roles (
-            role_name
-          )
-        )
-      `, { count: 'exact' })
-      .eq('users.organization_id', currentUser.organizationId) // ✅ Filter by org
-      .order('timestamp', { ascending: false });
+let query = supabase
+  .from('audit_logs')
+  .select(`
+    audit_id,
+    user_id,
+    action_taken,
+    table_affected,
+    record_id,
+    ip_address,
+    timestamp,
+    organization_id,
+    users (
+      full_name,
+      email,
+      roles (
+        role_name
+      )
+    )
+  `, { count: 'exact' })
+  .eq('organization_id', currentUser.organizationId)  // ✅ Use audit_logs.organization_id
+  .order('timestamp', { ascending: false });
 
     // Apply search filter
     if (searchDebounce) {
@@ -197,20 +197,20 @@ const fetchAuditLogs = async () => {
     if (fetchError) throw fetchError;
 
     // ✅ Transform data to match existing UI format
-    const transformedLogs = data.map(log => ({
-      id: log.audit_id,
-      timestamp: log.timestamp,
-      user: log.users.email,
-      userName: log.users.full_name,
-      role: log.users.roles?.role_name || 'Unknown',
-      category: getCategoryFromTable(log.table_affected),
-      actionTaken: log.action_taken,
-      severity: getSeverityFromAction(log.action_taken),
-      ipAddress: log.ip_address || 'N/A',
-      details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
-      tableAffected: log.table_affected,
-      recordId: log.record_id
-    }));
+const transformedLogs = data.map(log => ({
+  id: log.audit_id,
+  timestamp: log.timestamp,
+  user: log.users?.email || 'Unknown User',  // ✅ Handle NULL
+  userName: log.users?.full_name || 'Unknown',  // ✅ Handle NULL
+  role: log.users?.roles?.role_name || 'Unknown',  // ✅ Handle NULL
+  category: getCategoryFromTable(log.table_affected),
+  actionTaken: log.action_taken,
+  severity: getSeverityFromAction(log.action_taken),
+  ipAddress: log.ip_address || 'N/A',
+  details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
+  tableAffected: log.table_affected,
+  recordId: log.record_id
+}));
 
     setLogs(transformedLogs);
     setTotalRecords(count || 0);
@@ -358,52 +358,91 @@ const getSeverityFromAction = (action) => {
   };
 
   // Simplified Pagination component
-  const Pagination = () => {
-    return (
-      <div className="d-flex justify-content-between align-items-center mt-3">
-        <div className="text-muted">
-          Showing {((currentPage - 1) * recordsPerPage) + 1} to {Math.min(currentPage * recordsPerPage, totalRecords)} of {totalRecords} entries
-        </div>
-        <div className="d-flex gap-2">
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(1)}
-          >
-            First
-          </Button>
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage(currentPage - 1)}
-          >
-            Previous
-          </Button>
-          <span className="px-3 py-2 bg-light rounded">
-            {currentPage} of {totalPages}
-          </span>
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(currentPage + 1)}
-          >
-            Next
-          </Button>
-          <Button
-            variant="outline-secondary"
-            size="sm"
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage(totalPages)}
-          >
-            Last
-          </Button>
-        </div>
+// Simplified Pagination component with page numbers
+const Pagination = () => {
+  const maxPageButtons = 5; // Show max 5 page buttons at a time
+  
+  // Calculate page range to show
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  
+  // Adjust if we're near the end
+  if (endPage - startPage < maxPageButtons - 1) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+  
+  const pageNumbers = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  return (
+    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+      <div className="text-muted">
+        Showing {((currentPage - 1) * recordsPerPage) + 1} to {Math.min(currentPage * recordsPerPage, totalRecords)} of {totalRecords} entries
       </div>
-    );
-  };
+      <div className="d-flex gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        
+        {/* Page Number Buttons */}
+        <div className="d-flex gap-1">
+          {startPage > 1 && (
+            <>
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => setCurrentPage(1)}
+              >
+                1
+              </Button>
+              {startPage > 2 && <span className="px-2">...</span>}
+            </>
+          )}
+          
+          {pageNumbers.map((pageNum) => (
+            <Button
+              key={pageNum}
+              variant={currentPage === pageNum ? "primary" : "outline-primary"}
+              size="sm"
+              onClick={() => setCurrentPage(pageNum)}
+            >
+              {pageNum}
+            </Button>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-2">...</span>}
+              <Button
+                variant="outline-primary"
+                size="sm"
+                onClick={() => setCurrentPage(totalPages)}
+              >
+                {totalPages}
+              </Button>
+            </>
+          )}
+        </div>
+        
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+};
 
   return ( 
     <SidebarLayout role="sysadmin">

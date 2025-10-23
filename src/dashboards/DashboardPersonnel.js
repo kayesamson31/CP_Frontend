@@ -131,14 +131,28 @@ if (status === 'completed' && data?.[0]?.asset_id) {
     .eq('asset_id', data[0].asset_id);
   
   // ✅ AUTO-RESOLVE RELATED INCIDENT
-  if (data[0].incident_id) {
-    try {
-      await assetService.autoResolveIncident(data[0].incident_id);
-      console.log('Auto-resolved incident:', data[0].incident_id);
-    } catch (incidentError) {
-      console.error('Failed to auto-resolve incident:', incidentError);
+// ✅ AUTO-UPDATE RELATED INCIDENT STATUS
+if (data[0].incident_id) {
+  try {
+    // Map maintenance task status to incident status
+    const incidentStatusMap = {
+      'completed': 'Completed',  // ✅ Success
+      'failed': 'Failed'         // ❌ Failed
+    };
+    
+    const incidentStatus = incidentStatusMap[status];
+    
+    if (incidentStatus) {
+      await assetService.updateIncidentStatus(
+        data[0].incident_id, 
+        incidentStatus
+      );
+      console.log(`✅ Incident ${data[0].incident_id} marked as ${incidentStatus}`);
     }
+  } catch (incidentError) {
+    console.error('Failed to update incident status:', incidentError);
   }
+}
 }
 
 // ✅ NOTIFY ADMIN about maintenance task update (exclude incident-related tasks to avoid duplicates)

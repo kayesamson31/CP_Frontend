@@ -93,8 +93,7 @@ await this.logActivity({
   ip_address: await this.getClientIP()
 });
 
-// ✅ NOTIFY ADMIN about new work order request
-// ✅ NOTIFY ADMIN about new work order request
+// ✅ NOTIFY ALL USERS about new work order request
 console.log('🔔 Starting notification process...');
 console.log('📋 Work order data for notification:', {
   work_order_id: data.work_order_id,
@@ -119,15 +118,15 @@ try {
   }
 
   const notificationData = {
-    notification_type_id: 9,
+    notification_type_id: 9, // "work_order_new_request"
     created_by: currentUser.id,
     title: 'New Work Order Request',
     message: `${userData?.full_name || 'A user'} submitted a new work order request: "${workOrderData.title}"`,
-    target_roles: 'admin',
+    target_roles: '2,3,4', // ✅ Notify admin(2), personnel(3), standard(4)
     priority_id: priorityData.priority_id,
     related_table: 'work_orders',
     related_id: data.work_order_id,
-    organization_id: currentUser.organizationId,
+    organization_id: currentUser.organizationId, // ✅ IMPORTANT!
     is_active: true
   };
 
@@ -147,12 +146,12 @@ try {
       code: notifError.code
     });
   } else {
-    console.log('✅ Admin notified successfully!');
+    console.log('✅ All users notified successfully!');
     console.log('✅ Notification created:', notifData);
   }
   
 } catch (notifError) {
-  console.error('❌ Failed to notify admin (caught exception):', notifError);
+  console.error('❌ Failed to notify users (caught exception):', notifError);
   console.error('❌ Exception stack:', notifError.stack);
 }
 

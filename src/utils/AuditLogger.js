@@ -11,29 +11,38 @@ export class AuditLogger {
    * @param {number} params.recordId - ID of affected record
    * @param {string} params.ipAddress - User's IP address (optional)
    */
-  static async log({ userId, actionTaken, tableAffected, recordId, ipAddress = null }) {
-    try {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .insert([{
-          user_id: userId,
-          action_taken: actionTaken,
-          table_affected: tableAffected,
-          record_id: recordId,
-          ip_address: ipAddress,
-          timestamp: new Date().toISOString()
-        }]);
-
-      if (error) {
-        console.error('Audit log failed:', error);
-        // Don't throw - audit logging should never break the main flow
-      }
-
-      return data;
-    } catch (err) {
-      console.error('Audit logging exception:', err);
+static async log({ userId, actionTaken, tableAffected, recordId, ipAddress = null, organizationId = null }) {
+  try {
+    // Get organization_id from current user if not provided
+    if (!organizationId) {
+      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+      organizationId = currentUser?.organizationId || null;
     }
+
+const { data, error } = await supabase
+  .from('audit_logs')
+  .insert([{
+    user_id: userId,
+    action_taken: actionTaken,
+    table_affected: tableAffected,
+    record_id: recordId,
+    ip_address: ipAddress,
+    organization_id: organizationId,
+    timestamp: new Date().toISOString()
+  }]);
+
+if (error) {
+  console.error('❌ Audit log failed:', error);
+  console.error('❌ Attempted to log:', { userId, actionTaken, tableAffected, recordId, ipAddress, organizationId }); // ADD THIS
+}
+
+console.log('✅ Audit log successful:', data); // ADD THIS
+
+    return data;
+  } catch (err) {
+    console.error('Audit logging exception:', err);
   }
+}
 
   /**
    * Get user's IP address (client-side approximation)
@@ -52,8 +61,8 @@ export class AuditLogger {
   /**
    * Convenience method to log with automatic IP detection
    */
-  static async logWithIP({ userId, actionTaken, tableAffected, recordId }) {
-    const ipAddress = await this.getClientIP();
-    return this.log({ userId, actionTaken, tableAffected, recordId, ipAddress });
-  }
+static async logWithIP({ userId, actionTaken, tableAffected, recordId, organizationId = null }) {
+  const ipAddress = await this.getClientIP();
+  return this.log({ userId, actionTaken, tableAffected, recordId, ipAddress, organizationId });
+}
 }
