@@ -111,14 +111,13 @@ export default function SysadAuditLogs() {
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState("all");
   const [roleFilter, setRoleFilter] = useState("all");
-  const [severityFilter, setSeverityFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [recordsPerPage] = useState(15);
+  const [recordsPerPage] = useState(19);
 
   // Debounce search
   const [searchDebounce, setSearchDebounce] = useState("");
@@ -131,11 +130,9 @@ export default function SysadAuditLogs() {
     
     return () => clearTimeout(timer);
   }, [search]);
-
-  useEffect(() => {
-    fetchAuditLogs();
-  }, [currentPage, searchDebounce, dateRange, roleFilter, severityFilter, categoryFilter]);
-
+useEffect(() => {
+  fetchAuditLogs();
+}, [currentPage, searchDebounce, dateRange, roleFilter, actionFilter]);  // ✅ ADD actionFilter
 const fetchAuditLogs = async () => {
   try {
     setLoading(true);
@@ -159,27 +156,37 @@ let query = supabase
     ip_address,
     timestamp,
     organization_id,
-    users (
+    users!inner (
       full_name,
       email,
-      roles (
+      role_id,
+      roles!inner (
         role_name
       )
     )
   `, { count: 'exact' })
-  .eq('organization_id', currentUser.organizationId)  // ✅ Use audit_logs.organization_id
+  .eq('organization_id', currentUser.organizationId)
   .order('timestamp', { ascending: false });
 
-    // Apply search filter
-    if (searchDebounce) {
-      query = query.or(`action_taken.ilike.%${searchDebounce}%,users.full_name.ilike.%${searchDebounce}%,users.email.ilike.%${searchDebounce}%,ip_address.ilike.%${searchDebounce}%`);
-    }
+   // Apply search filter
+// Apply search filter - Works with nested joins
+if (searchDebounce) {
+  // Search in audit_logs table fields only
+  query = query.or(
+    `action_taken.ilike.%${searchDebounce}%,` +
+    `table_affected.ilike.%${searchDebounce}%,` +
+    `ip_address.ilike.%${searchDebounce}%`
+  );
+}
 
-    // Apply role filter
-    if (roleFilter && roleFilter !== 'all') {
-      query = query.eq('users.roles.role_name', roleFilter);
-    }
-
+// Apply role filter 
+// Apply role filter - Case insensitive
+if (roleFilter && roleFilter !== 'all') {
+  query = query.ilike('users.roles.role_name', roleFilter);
+}
+if (actionFilter && actionFilter !== 'all') {
+  query = query.ilike('action_taken', `%${actionFilter}%`);
+}
     // Apply date range filter
     if (dateRange && dateRange !== 'all') {
       const daysBack = parseInt(dateRange);
@@ -192,25 +199,31 @@ let query = supabase
     query = query.range(startIndex, startIndex + recordsPerPage - 1);
 
     // Execute query
+// Execute query
     const { data, error: fetchError, count } = await query;
 
     if (fetchError) throw fetchError;
 
-    // ✅ Transform data to match existing UI format
-const transformedLogs = data.map(log => ({
-  id: log.audit_id,
-  timestamp: log.timestamp,
-  user: log.users?.email || 'Unknown User',  // ✅ Handle NULL
-  userName: log.users?.full_name || 'Unknown',  // ✅ Handle NULL
-  role: log.users?.roles?.role_name || 'Unknown',  // ✅ Handle NULL
-  category: getCategoryFromTable(log.table_affected),
-  actionTaken: log.action_taken,
-  severity: getSeverityFromAction(log.action_taken),
-  ipAddress: log.ip_address || 'N/A',
-  details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
-  tableAffected: log.table_affected,
-  recordId: log.record_id
-}));
+    // âœ… Filter out logs with missing user or role data
+    const validData = (data || []).filter(log => 
+      log.users && 
+      log.users.roles && 
+      log.users.roles.role_name
+    );
+
+    // âœ… Transform data to match existing UI format
+    const transformedLogs = validData.map(log => ({
+      id: log.audit_id,
+      timestamp: log.timestamp,
+      user: log.users.email,
+      userName: log.users.full_name,
+      role: log.users.roles.role_name,  // Safe na to kasi na-filter na
+      actionTaken: log.action_taken,
+      ipAddress: log.ip_address || 'N/A',
+      details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
+      tableAffected: log.table_affected,
+      recordId: log.record_id
+    }));
 
     setLogs(transformedLogs);
     setTotalRecords(count || 0);
@@ -224,57 +237,29 @@ const transformedLogs = data.map(log => ({
   }
 };
 
-// ✅ Helper function to determine category from table name
-const getCategoryFromTable = (tableName) => {
-  const categoryMap = {
-    'users': 'User Management',
-    'assets': 'Asset Management',
-    'roles': 'Role Management',
-    'organizations': 'System Config',
-    'work_orders': 'Maintenance',
-    'asset_assignments': 'Asset Assignment'
-  };
-  return categoryMap[tableName] || 'System Activity';
-};
 
-// ✅ Helper function to determine severity from action
-const getSeverityFromAction = (action) => {
-  const actionLower = action.toLowerCase();
-  
-  if (actionLower.includes('delete') || actionLower.includes('failed') || actionLower.includes('blocked')) {
-    return 'Critical';
-  }
-  if (actionLower.includes('update') || actionLower.includes('modify') || actionLower.includes('change')) {
-    return 'Warning';
-  }
-  return 'Info';
-};
 
-  const handleFilterChange = (filterType, value) => {
-    switch (filterType) {
-      case 'dateRange':
-        setDateRange(value);
-        break;
-      case 'role':
-        setRoleFilter(value);
-        break;
-      case 'severity':
-        setSeverityFilter(value);
-        break;
-      case 'category':
-        setCategoryFilter(value);
-        break;
-    }
-    setCurrentPage(1); // Reset to first page on filter change
-  };
+const handleFilterChange = (filterType, value) => {
+  switch (filterType) {
+    case 'dateRange':
+      setDateRange(value);
+      break;
+    case 'role':
+      setRoleFilter(value);
+      break;
+    case 'action':  // ✅ ADD THIS
+      setActionFilter(value);
+      break;
+  }
+  setCurrentPage(1);
+};
 
   const exportLogs = async (format, exportType = 'all') => {
     try {
       const timestamp = new Date().toISOString().split('T')[0];
       
-      // EXAMPLE: Use filtered example data for export
-      let exportData = [...EXAMPLE_LOGS];
-      
+// Use actual filtered logs from database
+let exportData = [...logs];
       // Apply current filters to export data
       if (searchDebounce) {
         const searchLower = searchDebounce.toLowerCase();
@@ -324,29 +309,6 @@ const getSeverityFromAction = (action) => {
     }
   };
 
-  const exportSingleLog = (log) => {
-    const csvContent = [
-      'Timestamp,User,Role,Category,Action,Severity,IP Address,Details',
-      [
-        `"${new Date(log.timestamp).toLocaleString()}"`,
-        `"${log.user}"`,
-        `"${log.role}"`,
-        `"${log.category}"`,
-        `"${log.actionTaken}"`,
-        `"${log.severity}"`,
-        `"${log.ipAddress || 'N/A'}"`,
-        `"${log.details}"`
-      ].join(',')
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `audit-log-${log.id}-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    window.URL.revokeObjectURL(url);
-  };
 
   const getSeverityColor = (severity) => {
     switch (severity) {
@@ -462,68 +424,33 @@ const Pagination = () => {
           >
             Export CSV
           </button>
-          <button 
-            className="btn btn-primary"
-            onClick={() => exportLogs('pdf')}
-            disabled={logs.length === 0}
-          >
-            Export PDF
-          </button>
         </div>
         </div>
 
-        {/* Filters */}
        {/* Filters */}
         <div className="row mb-4">
           <div className="col-md-4">
             <Form.Control
               type="text"
-              placeholder="Search by user, action, category, IP address..."
+              placeholder="Search by action,IP address..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+    
           
-          <div className="col-md-2">
-            <Form.Select
-              value={severityFilter}
-              onChange={(e) => handleFilterChange('severity', e.target.value)}
-            >
-              <option value="all">All Levels</option>
-              <option value="Critical">Critical</option>
-              <option value="Warning">Warning</option>
-              <option value="Info">Info</option>
-            </Form.Select>
-          </div>
-
 <div className="col-md-2">
-         <Form.Select
-         
-  value={categoryFilter}
-  onChange={(e) => handleFilterChange('category', e.target.value)}
->
-  <option value="all">All Categories</option>
-  <option value="User Management">User Management</option>
-  <option value="Asset Management">Asset Management</option>
-  <option value="Role Management">Role Management</option>
-  <option value="System Config">System Config</option>
-  <option value="Maintenance">Maintenance</option>
-  <option value="Asset Assignment">Asset Assignment</option>
-</Form.Select>
+  <Form.Select
+    value={roleFilter}
+    onChange={(e) => handleFilterChange('role', e.target.value)}
+  >
+    <option value="all">All Roles</option>
+    <option value="System Admin">System Admin</option>  {/* ✅ FIXED - removed "istrator" */}
+    <option value="Admin Official">Admin Official</option>
+    <option value="Personnel">Personnel</option>
+    <option value="Standard User">Standard User</option>
+  </Form.Select>
 </div>
-          
-          <div className="col-md-2">
-            <Form.Select
-              value={roleFilter}
-              onChange={(e) => handleFilterChange('role', e.target.value)}
-            >
-              <option value="all">All Roles</option>
-              <option value="System Administrator">System Administrator</option>
-              <option value="Admin Official">Admin Official</option>
-              <option value="Personnel">Personnel</option>
-              <option value="External Auditor">External Auditor</option>
-            </Form.Select>
-          </div>
 
           <div className="col-md-2">
             <Form.Select
@@ -537,6 +464,21 @@ const Pagination = () => {
               <option value="90">Last 90 Days</option>
             </Form.Select>
           </div>
+          
+<div className="col-md-2">
+    <Form.Select
+      value={actionFilter}
+      onChange={(e) => handleFilterChange('action', e.target.value)}
+    >
+      <option value="all">All Actions</option>
+      <option value="logged in">User Login</option>
+      <option value="logged out">User Logout</option>
+      <option value="password changed">Password Changes</option>
+      <option value="Created new user">User Creation</option>
+      <option value="Updated user profile">Profile Updates</option>
+    </Form.Select>
+  </div>
+
         </div>
 
         {/* Loading */}
@@ -555,10 +497,10 @@ const Pagination = () => {
           <Alert variant="Info" className="text-center">
             <h5>No Audit Logs Found</h5>
             <p className="mb-0">
-              {search || dateRange !== 'all' || roleFilter !== 'all' || severityFilter !== 'all' || categoryFilter !== 'all'
-                ? 'No audit events match your current filters.'
-                : 'No audit events have been recorded yet.'
-              }
+{search || dateRange !== 'all' || roleFilter !== 'all'
+  ? 'No audit events match your current filters.'
+  : 'No audit events have been recorded yet.'
+}
             </p>
           </Alert>
         )}
@@ -571,12 +513,10 @@ const Pagination = () => {
                 <table className="table table-hover mb-0">
                   <thead className="table-light">
                     <tr>
-                      <th>Timestamp</th>
-                      <th>Severity</th>
-                      <th>User</th>
-                      <th>Role</th>
-                      <th>Action</th>
-                      <th>IP Address</th>
+                   <th>Timestamp</th>
+                  <th>User</th>
+                  <th>Action</th>
+                   <th>Ip Address</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -586,29 +526,23 @@ const Pagination = () => {
                         style={{ cursor: "pointer" }}
                         onClick={() => setSelectedLog(log)}
                       >
+                    <td>
+  <small className="text-muted">
+    {new Date(log.timestamp).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    })}, {new Date(log.timestamp).toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })}
+  </small>
+</td>
                         <td>
-                        <small className="text-muted">
-                          {new Date(log.timestamp).toLocaleString()}
-                        </small>
-                      </td>
-                        <td>
-                          <span 
-                            className="fw-bold small"
-                            style={{ color: getSeverityColor(log.severity) }}
-                          >
-                            {log.severity}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="fw-semibold" title={log.user}>
-                            {log.user}
-                          </div>
-                        </td>
-                        <td>
-                          <div className="text-muted small" title={log.role}>
-                            {log.role}
-                          </div>
-                        </td>
+  <div className="fw-semibold">{log.user}</div>
+  <div className="text-muted small">{log.role}</div>
+</td>
                         <td>
                           <div title={log.actionTaken}>
                             {log.actionTaken}
@@ -644,100 +578,60 @@ const Pagination = () => {
               Audit Log Details
             </Modal.Title>
           </Modal.Header>
-          <Modal.Body>
-            {selectedLog && (
-              <div className="row g-3">
-                <div className="col-12">
-                  <div className="border rounded p-3 bg-light">
-                    <div className="row g-3">
-                      <div className="col-md-6">
-                        <div className="mb-2">
-                          <strong className="text-primary">⏰ Timestamp:</strong>
-                          <div>{new Date(selectedLog.timestamp).toLocaleString()}</div>
-                        </div>
-                        <div className="mb-2">
-                          <strong className="text-primary">👤 User:</strong>
-                          <div>{selectedLog.user}</div>
-                        </div>
-                        <div className="mb-2">
-                          <strong className="text-primary">🛡️ Role:</strong>
-                          <div>{selectedLog.role}</div>
-                        </div>
-                      </div>
-                      <div className="col-md-6">
-                        <div className="mb-2">
-                          <strong className="text-primary">⚠️ Severity:</strong>
-                          <div>
-                            <span 
-                              className="fw-bold"
-                              style={{ color: getSeverityColor(selectedLog.severity) }}
-                            >
-                              {selectedLog.severity.charAt(0).toUpperCase() + selectedLog.severity.slice(1)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="mb-2">
-                          <strong className="text-primary">🏷️ Category:</strong>
-                          <div>{selectedLog.category}</div>
-                        </div>
-                        <div className="mb-2">
-                          <strong className="text-primary">🌐 IP Address:</strong>
-                          <div><code>{selectedLog.ipAddress || 'N/A'}</code></div>
-                        </div>
-                      </div>
-                      <div className="col-12">
-                        <div className="mb-2">
-                          <strong className="text-primary">⚡ Action Taken:</strong>
-                          <div>{selectedLog.actionTaken}</div>
-                        </div>
-                        <div className="mb-2">
-                          <strong className="text-primary">📝 Details:</strong>
-                          <div className="bg-white p-2 rounded border">
-                            {selectedLog.details}
-                          </div>
-                        </div>
-                        {selectedLog.userAgent && (
-                          <div className="mb-2">
-                            <strong className="text-primary">🖥️ User Agent:</strong>
-                            <div><small className="text-muted font-monospace">{selectedLog.userAgent}</small></div>
-                          </div>
-                        )}
-                        {selectedLog.sessionId && (
-                          <div className="mb-2">
-                            <strong className="text-primary">🔒 Session ID:</strong>
-                            <div><small className="text-muted font-monospace">{selectedLog.sessionId}</small></div>
-                          </div>
-                        )}
-                        {selectedLog.beforeValue && (
-                          <div className="mb-2">
-                            <strong className="text-primary">📊 Previous State:</strong>
-                            <div className="bg-white p-2 rounded border">
-                              <pre className="mb-0 small">{JSON.stringify(selectedLog.beforeValue, null, 2)}</pre>
-                            </div>
-                          </div>
-                        )}
-                        {selectedLog.afterValue && (
-                          <div className="mb-2">
-                            <strong className="text-primary">📈 New State:</strong>
-                            <div className="bg-white p-2 rounded border">
-                              <pre className="mb-0 small">{JSON.stringify(selectedLog.afterValue, null, 2)}</pre>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </Modal.Body>
+<Modal.Body>
+  {selectedLog && (
+    <div className="row g-3">
+      <div className="col-md-6">
+        <div className="mb-3">
+          <strong className="text-primary">⏰ Timestamp:</strong>
+         <div>
+  {new Date(selectedLog.timestamp).toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric'
+  })} at {new Date(selectedLog.timestamp).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true
+  })}
+</div>
+        </div>
+        <div className="mb-3">
+          <strong className="text-primary">👤 User:</strong>
+          <div>{selectedLog.userName}</div>
+          <div className="text-muted small">{selectedLog.user}</div>
+        </div>
+        <div className="mb-3">
+          <strong className="text-primary">🛡️ Role:</strong>
+          <div>{selectedLog.role}</div>
+        </div>
+      </div>
+      <div className="col-md-6">
+        <div className="mb-3">
+          <strong className="text-primary">⚡ Action:</strong>
+          <div>{selectedLog.actionTaken}</div>
+        </div>
+        <div className="mb-3">
+          <strong className="text-primary">📋 Table Affected:</strong>
+          <div>{selectedLog.tableAffected}</div>
+        </div>
+        <div className="mb-3">
+          <strong className="text-primary">🔢 Record ID:</strong>
+          <div>{selectedLog.recordId}</div>
+        </div>
+        <div className="mb-3">
+          <strong className="text-primary">🌐 IP Address:</strong>
+          <div><code>{selectedLog.ipAddress}</code></div>
+        </div>
+      </div>
+    </div>
+  )}
+</Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setSelectedLog(null)}>
               Close
             </Button>
-            <Button variant="outline-primary" onClick={() => exportSingleLog(selectedLog)}>
-              Export This Log
-            </Button>
+
           </Modal.Footer>
         </Modal>
       </div>

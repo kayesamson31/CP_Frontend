@@ -13,6 +13,12 @@ export class AuditLogger {
    */
 static async log({ userId, actionTaken, tableAffected, recordId, ipAddress = null, organizationId = null }) {
   try {
+
+    if (!userId) {
+      console.warn('⚠️ No userId provided for audit log:', actionTaken);
+      return null; // Don't log if no user
+    }
+    
     // Get organization_id from current user if not provided
     if (!organizationId) {
       const currentUser = JSON.parse(localStorage.getItem('currentUser'));

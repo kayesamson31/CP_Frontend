@@ -75,13 +75,16 @@ const { data: auditData, error: auditError } = await supabase
 
       if (auditError) throw auditError;
 
-const events = auditData.map(log => ({
+const events = auditData
+.filter(log => log.users !== null)
+.map(log => ({
+  
   id: log.audit_id,
   date: log.timestamp.split('T')[0],
   time: log.timestamp.split('T')[1]?.split('.')[0],
   eventType: determineEventType(log.action_taken),
-  user: log.users?.email || 'Unknown User',  // ✅ Handle NULL users
-  role: log.users?.roles?.role_name || 'Unknown',  // ✅ Handle NULL roles
+  user: log.users?.email || 'System Action',  // ✅ Handle NULL users
+  role: log.users?.roles?.role_name || 'System',  // ✅ Handle NULL roles
   ipAddress: log.ip_address || 'N/A',
   details: log.action_taken,
   status: 'Completed',

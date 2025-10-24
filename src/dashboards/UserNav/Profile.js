@@ -225,13 +225,29 @@ const { data, error: updateError } = await supabase
     }
 
     console.log('Profile updated successfully:', data);
-      await AuditLogger.logWithIP({
+    // Build detailed action message
+let actionDetails = [];
+
+if (profileData.name !== originalData.name) {
+  actionDetails.push(`name changed to "${profileData.name}"`);
+}
+if (profileData.email !== originalData.email) {
+  actionDetails.push(`email changed to "${profileData.email}"`);
+}
+if (isChangingPassword) {
+  actionDetails.push('password changed');
+}
+
+const actionMessage = actionDetails.length > 0 
+  ? `Updated profile: ${actionDetails.join(', ')}`
+  : 'Updated profile information';
+
+await AuditLogger.logWithIP({
   userId: data.user_id,
-  actionTaken: isChangingPassword 
-    ? 'Updated profile and changed password'
-    : 'Updated profile information',
+  actionTaken: actionMessage,
   tableAffected: 'users',
-  recordId: data.user_id
+  recordId: data.user_id,
+  organizationId: currentUser.organizationId  // ✅ ADD THIS
 });
     // Update localStorage
     localStorage.setItem('userName', profileData.name);

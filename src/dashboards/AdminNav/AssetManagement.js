@@ -238,6 +238,28 @@ await logActivity('add_asset', `Added asset: ${newAsset.name} in ${newAsset.loca
         recordId: asset.id,
         organizationId: currentUser.organizationId
       });
+
+      // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN
+try {
+  await supabase
+    .from('notifications')
+    .insert([{
+      notification_type_id: 12, // asset_created (or create new type if needed)
+      created_by: currentUser.userId,
+      title: 'New Asset Added',
+      message: `${currentUser.fullName || 'Admin Official'} added new asset: ${asset.name} (${newAsset.category}) in ${newAsset.location}`,
+      target_roles: '1', // System Admin
+      priority_id: 1, // Low priority
+      related_table: 'assets',
+      related_id: asset.id,
+      organization_id: currentUser.organizationId,
+      is_active: true
+    }]);
+  
+  console.log('✅ System Admin notified about new asset');
+} catch (notifErr) {
+  console.error('❌ Notification failed:', notifErr);
+}
     } catch (err) {
       console.error('Error adding asset:', err);
       alert('Failed to add asset. Please try again.');
@@ -342,6 +364,28 @@ await logActivity('bulk_add_assets', `Bulk uploaded ${successCount} assets to sy
       recordId: 0, // Use 0 for bulk operations
       organizationId: currentUser.organizationId
     });
+      // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN
+try {
+  await supabase
+    .from('notifications')
+    .insert([{
+      notification_type_id: 12, // asset_created
+      created_by: currentUser.userId,
+      title: 'Bulk Asset Upload Completed',
+      message: `${currentUser.fullName || 'Admin Official'} uploaded ${successCount} assets via CSV`,
+      target_roles: '1', // System Admin
+      priority_id: 2, // Medium priority
+      related_table: 'assets',
+      related_id: 0, // Bulk operation
+      organization_id: currentUser.organizationId,
+      is_active: true
+    }]);
+  
+  console.log('✅ System Admin notified about bulk asset upload');
+} catch (notifErr) {
+  console.error('❌ Notification failed:', notifErr);
+}
+
   } catch (err) {
     console.error('CSV Upload Error:', err);
     alert('Failed to upload CSV: ' + err.message);

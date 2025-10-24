@@ -8,6 +8,7 @@ import { EmailService } from '../../utils/EmailService';
 import EmailProgressModal from '../../components/EmailProgressModal';
 import { logActivity } from '../../utils/ActivityLogger';
 import { AuthUtils } from '../../utils/AuthUtils';
+import { AuditLogger } from '../../utils/AuditLogger';
 export default function UserManagement() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
@@ -253,6 +254,51 @@ const createUser = async (userData) => {
       if (emailResult.success) {
         console.log('✓ Welcome email sent successfully');
           await logActivity('add_user', `Added user: ${userData.name} (${userData.email}) as ${userData.role}`);
+          if (emailResult.success) {
+  console.log('✓ Welcome email sent successfully');
+  await logActivity('add_user', `Added user: ${userData.name} (${userData.email}) as ${userData.role}`);
+  
+  // ✅ ADD AUDIT LOG
+  const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+  await AuditLogger.logWithIP({
+    userId: currentUser.userId,
+    actionTaken: `Created new user: ${userData.name} (${userData.email})`,
+    tableAffected: 'users',
+    recordId: insertResult.user_id.toString()
+  });
+
+  // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN
+try {
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const { data: adminUserData } = await supabase
+    .from('users')
+    .select('organization_id')
+    .eq('email', authUser.email)
+    .single();
+
+  await supabase
+    .from('notifications')
+    .insert([{
+      notification_type_id: 1, // user_created
+      created_by: currentUser.userId,
+      title: 'New User Added',
+      message: `${currentUser.fullName || 'Admin Official'} added new user: ${userData.name} (${userData.email}) as ${userData.role}`,
+      target_roles: '1', // System Admin role
+      priority_id: 1, // Low priority
+      related_table: 'users',
+      related_id: insertResult.user_id,
+      organization_id: adminUserData.organization_id,
+      is_active: true
+    }]);
+  
+  console.log('✅ System Admin notified about new user');
+} catch (notifErr) {
+  console.error('❌ Notification failed:', notifErr);
+  // Don't throw - user was created successfully
+}
+}
+
+
       } else {
         console.error('✗ Email failed:', emailResult.error);
         alert(
@@ -329,7 +375,66 @@ const updateUser = async (userId, userData) => {
     
     // Refresh user list
     await fetchUsers();
+    console.log('✓ User updated successfully:', data);
+
+// ✅ ADD AUDIT LOG
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+await AuditLogger.logWithIP({
+  userId: currentUser.userId,
+  actionTaken: `Updated user profile: ${userData.name} (${userData.email})`,
+  tableAffected: 'users',
+  recordId: userId.toString()
+});
+// ✅ ADD NOTIFICATION FOR SYSTEM ADMIN (only for critical changes)
+try {
+  // Check if role or status changed (critical changes only)
+  const oldUser = users.find(u => u.id === userId);
+  const roleChanged = oldUser && oldUser.role !== userData.role;
+  const statusChanged = oldUser && oldUser.status !== userData.status;
+  
+  if (roleChanged || statusChanged) {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const { data: adminUserData } = await supabase
+      .from('users')
+      .select('organization_id')
+      .eq('email', authUser.email)
+      .single();
+
+    let changeDescription = '';
+    if (roleChanged && statusChanged) {
+      changeDescription = `Role: ${oldUser.role} → ${userData.role}, Status: ${oldUser.status} → ${userData.status}`;
+    } else if (roleChanged) {
+      changeDescription = `Role changed: ${oldUser.role} → ${userData.role}`;
+    } else {
+      changeDescription = `Status changed: ${oldUser.status} → ${userData.status}`;
+    }
+
+    await supabase
+      .from('notifications')
+      .insert([{
+        notification_type_id: 2, // user_updated
+        created_by: currentUser.userId,
+        title: 'User Role/Status Changed',
+        message: `${currentUser.fullName || 'Admin Official'} updated ${userData.name}: ${changeDescription}`,
+        target_roles: '1', // System Admin
+        priority_id: 2, // Medium priority
+        related_table: 'users',
+        related_id: userId,
+        organization_id: adminUserData.organization_id,
+        is_active: true
+      }]);
     
+    console.log('✅ System Admin notified about user update');
+  }
+} catch (notifErr) {
+  console.error('❌ Notification failed:', notifErr);
+}
+
+
+// Refresh user list
+await fetchUsers();
+
+alert('User updated successfully!');
     alert('User updated successfully!');
     
   } catch (err) {
@@ -717,7 +822,37 @@ const usersWithPasswords = csvRows.map((row) => {
 
         console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
           // Log bulk activity
-await logActivity('bulk_add_users', `Bulk uploaded ${insertedCount} users to system`);
+        await logActivity('bulk_add_users', `Bulk uploaded ${insertedCount} users to system`);
+        const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+        await AuditLogger.logWithIP({
+           userId: currentUser.userId,
+          actionTaken: `Bulk uploaded ${insertedCount} users to system`,
+          tableAffected: 'users',
+          recordId: 'bulk_operation'
+        });
+          // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN
+try {
+  await supabase
+    .from('notifications')
+    .insert([{
+      notification_type_id: 1, // user_created
+      created_by: currentUser.userId,
+      title: 'Bulk User Upload Completed',
+      message: `${currentUser.fullName || 'Admin Official'} uploaded ${insertedCount} users via CSV`,
+      target_roles: '1', // System Admin
+      priority_id: 2, // Medium priority
+      related_table: 'users',
+      related_id: 0, // Bulk operation
+      organization_id: orgId,
+      is_active: true
+    }]);
+  
+  console.log('✅ System Admin notified about bulk upload');
+} catch (notifErr) {
+  console.error('❌ Notification failed:', notifErr);
+}
+
+
       } catch (error) {
         console.error('Error processing CSV:', error);
         alert(`Error: ${error.message}`);

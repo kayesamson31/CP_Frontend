@@ -801,7 +801,16 @@ const usersWithPasswords = csvRows.map((row) => {
           }));
         }
 
-        console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
+       console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
+
+// ✅ ADD AUDIT LOG
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+await AuditLogger.logWithIP({
+  userId: currentUser.id,
+  actionTaken: `Bulk uploaded ${insertedCount} users to system`,
+  tableAffected: 'users',
+  recordId: 'bulk_operation'
+});
 
       } catch (error) {
         console.error('Error processing CSV:', error);
@@ -1232,8 +1241,29 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
                     </div>
                   </div>
                 </div>
-              {editingUser.role === 'Personnel' && (
-  <div className="row">
+             
+
+                <div className="row">
+  <div className="col-md-6">
+    <div className="mb-3">
+      <label className="form-label">User Role</label>
+      <select
+        className="form-select"
+        value={editingUser.role}
+        onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
+        disabled={loading}
+      >
+        {roles.map(role => (
+          <option key={role} value={role}>{role}</option>
+        ))}
+      </select>
+      <div className="form-text">
+        <small>System Admin can assign any role including System Administrator</small>
+      </div>
+    </div>
+  </div>
+
+  {editingUser.role === 'Personnel' && (
     <div className="col-md-6">
       <div className="mb-3">
         <label className="form-label">Job Position</label>
@@ -1250,28 +1280,8 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
         </select>
       </div>
     </div>
-  </div>
-)}
-
-                <div className="row">
-                  <div className="col-md-6">
-                    <div className="mb-3">
-                      <label className="form-label">User Role</label>
-                      <select
-                        className="form-select"
-                        value={editingUser.role}
-                        onChange={(e) => setEditingUser({...editingUser, role: e.target.value})}
-                        disabled={loading}
-                      >
-                        {roles.map(role => (
-                          <option key={role} value={role}>{role}</option>
-                        ))}
-                      </select>
-                      <div className="form-text">
-                        <small>System Admin can assign any role including System Administrator</small>
-                      </div>
-                    </div>
-                  </div>
+  )}
+</div>
 
                   
                   <div className="col-md-6">
@@ -1295,7 +1305,6 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
                     </div>
                   </div>
                 </div>
-              </div>
             )}
             
           
@@ -1306,18 +1315,6 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
                 <div className="alert alert-danger">
                   <h6 className="alert-heading">⚠️ This action cannot be undone!</h6>
                   <p className="mb-0">You are about to permanently delete this user from the system.</p>
-                </div>
-                
-                <div className="bg-light p-3 rounded mb-3">
-                  <h6>User Details:</h6>
-                  <ul className="mb-0">
-                    <li><strong>Name:</strong> {editingUser.name}</li>
-                    <li><strong>Email:</strong> {editingUser.email}</li>
-                    <li><strong>Role:</strong> {editingUser.role}</li>
-                    <li><strong>Status:</strong> {editingUser.status}</li>
-                    <li><strong>Total Logins:</strong> {editingUser.loginCount || 0}</li>
-                    <li><strong>Reports Downloaded:</strong> {editingUser.reportsDownloaded || 0}</li>
-                  </ul>
                 </div>
                 
                 <div className="mb-3">
