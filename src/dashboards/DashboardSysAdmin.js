@@ -344,7 +344,7 @@ const fetchRecentAuditLogs = async () => {
       icon: 'bi-clock-history',
       title: log.action_taken,
       user: log.users.full_name || log.users.email,
-      timestamp: log.timestamp,
+      timestamp: new Date(log.timestamp + 'Z').toISOString(), 
       color: 'info'
     }));
 

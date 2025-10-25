@@ -261,7 +261,7 @@ const createUser = async (userData) => {
   // ✅ ADD AUDIT LOG
   const currentUser = JSON.parse(localStorage.getItem('currentUser'));
   await AuditLogger.logWithIP({
-    userId: currentUser.userId,
+    userId: currentUser.id,
     actionTaken: `Created new user: ${userData.name} (${userData.email})`,
     tableAffected: 'users',
     recordId: insertResult.user_id.toString()
@@ -280,7 +280,7 @@ try {
     .from('notifications')
     .insert([{
       notification_type_id: 1, // user_created
-      created_by: currentUser.userId,
+       created_by: currentUser.id, 
       title: 'New User Added',
       message: `${currentUser.fullName || 'Admin Official'} added new user: ${userData.name} (${userData.email}) as ${userData.role}`,
       target_roles: '1', // System Admin role
@@ -371,71 +371,106 @@ const updateUser = async (userId, userData) => {
       throw new Error(`Failed to update user: ${error.message}`);
     }
 
-    console.log('✓ User updated successfully:', data);
-    
-    // Refresh user list
-    await fetchUsers();
-    console.log('✓ User updated successfully:', data);
+  console.log('✓ User updated successfully:', data);
 
 // ✅ ADD AUDIT LOG
 const currentUser = JSON.parse(localStorage.getItem('currentUser'));
 await AuditLogger.logWithIP({
-  userId: currentUser.userId,
+   userId: currentUser.id,
   actionTaken: `Updated user profile: ${userData.name} (${userData.email})`,
   tableAffected: 'users',
   recordId: userId.toString()
 });
+
+// ✅ ADD NOTIFICATION FOR SYSTEM ADMIN (only for critical changes)
 // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN (only for critical changes)
 try {
-  // Check if role or status changed (critical changes only)
+  // Store old values BEFORE any async operations
   const oldUser = users.find(u => u.id === userId);
-  const roleChanged = oldUser && oldUser.role !== userData.role;
-  const statusChanged = oldUser && oldUser.status !== userData.status;
   
-  if (roleChanged || statusChanged) {
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    const { data: adminUserData } = await supabase
-      .from('users')
-      .select('organization_id')
-      .eq('email', authUser.email)
-      .single();
+  console.log('🔍 Checking for changes...');
+  console.log('Old user:', oldUser);
+  console.log('New data:', userData);
+  
+  if (!oldUser) {
+    console.warn('⚠️ Cannot find old user data, skipping notification');
+  } else {
+    const roleChanged = oldUser.role !== userData.role;
+    const statusChanged = oldUser.status !== userData.status;
+    
+    console.log('Role changed?', roleChanged, `(${oldUser.role} → ${userData.role})`);
+    console.log('Status changed?', statusChanged, `(${oldUser.status} → ${userData.status})`);
+    
+    if (roleChanged || statusChanged) {
+      console.log('✅ Changes detected! Creating notification...');
+      
+      // Get current admin user info
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const { data: adminUserData } = await supabase
+        .from('users')
+        .select('user_id, full_name, organization_id')
+        .eq('email', authUser.email)
+        .single();
+      
+      if (!adminUserData) {
+        throw new Error('Admin user not found in database');
+      }
+      
+      console.log('Admin user data:', adminUserData);
 
-    let changeDescription = '';
-    if (roleChanged && statusChanged) {
-      changeDescription = `Role: ${oldUser.role} → ${userData.role}, Status: ${oldUser.status} → ${userData.status}`;
-    } else if (roleChanged) {
-      changeDescription = `Role changed: ${oldUser.role} → ${userData.role}`;
-    } else {
-      changeDescription = `Status changed: ${oldUser.status} → ${userData.status}`;
-    }
+      // Build change message
+      let changeDescription = '';
+      if (roleChanged && statusChanged) {
+        changeDescription = `Role: ${oldUser.role} → ${userData.role}, Status: ${oldUser.status} → ${userData.status}`;
+      } else if (roleChanged) {
+        changeDescription = `Role: ${oldUser.role} → ${userData.role}`;
+      } else {
+        changeDescription = `Status: ${oldUser.status} → ${userData.status}`;
+      }
 
-    await supabase
-      .from('notifications')
-      .insert([{
-        notification_type_id: 2, // user_updated
-        created_by: currentUser.userId,
+      // Create notification object
+      const notificationData = {
+        notification_type_id: 2,
+        created_by: adminUserData.user_id,
         title: 'User Role/Status Changed',
-        message: `${currentUser.fullName || 'Admin Official'} updated ${userData.name}: ${changeDescription}`,
-        target_roles: '1', // System Admin
-        priority_id: 2, // Medium priority
+        message: `${adminUserData.full_name} updated ${userData.name}: ${changeDescription}`,
+        target_roles: '1',
+        priority_id: 2,
         related_table: 'users',
         related_id: userId,
         organization_id: adminUserData.organization_id,
-        is_active: true
-      }]);
-    
-    console.log('✅ System Admin notified about user update');
+        is_active: true,
+        created_at: new Date().toISOString()
+      };
+      
+      console.log('📤 Inserting notification:', notificationData);
+      
+      // Insert notification
+      const { data: notifResult, error: notifError } = await supabase
+        .from('notifications')
+        .insert([notificationData])
+        .select();
+      
+      if (notifError) {
+        console.error('❌ Notification insert error:', notifError);
+        console.error('Error details:', JSON.stringify(notifError, null, 2));
+      } else {
+        console.log('✅ Notification created:', notifResult);
+      }
+    } else {
+      console.log('ℹ️ No role/status changes, skipping notification');
+    }
   }
+  
 } catch (notifErr) {
   console.error('❌ Notification failed:', notifErr);
+  console.error('Stack trace:', notifErr.stack);
 }
 
-
-// Refresh user list
+// Refresh user list ONCE at the end
 await fetchUsers();
 
 alert('User updated successfully!');
-    alert('User updated successfully!');
     
   } catch (err) {
     setError(err.message);
@@ -708,7 +743,6 @@ const processUpload = async () => {
 
         console.log(`Processing ${csvRows.length} users from CSV`);
 
-        // Generate passwords and prepare user data
 const usersWithPasswords = csvRows.map((row) => {
   const tempPassword = PasswordUtils.generateSecurePassword(10);
   const hashedPassword = PasswordUtils.hashPassword(tempPassword);
@@ -716,7 +750,7 @@ const usersWithPasswords = csvRows.map((row) => {
   const name = (row.Name || row.name || '').trim();
   const email = (row.Email || row.email || '').trim().toLowerCase();
   const role = (row.Role || row.role || 'Standard User').trim();
-  const jobPosition = (row.job_position || row.Job_Position || '').trim(); // ADD THIS
+  const jobPosition = (row.job_position || row.Job_Position || '').trim(); // ✅ ADD THIS LINE
 
   return {
     full_name: name,
@@ -727,7 +761,7 @@ const usersWithPasswords = csvRows.map((row) => {
     username: PasswordUtils.generateUsername(email),
     password_hash: hashedPassword,
     auth_uid: null,
-    job_position: role === 'Personnel' ? (jobPosition || null) : null, // ADD THIS
+    job_position: role === 'Personnel' ? (jobPosition || null) : null, // ✅ ADD THIS LINE
     tempPassword: tempPassword
   };
 });
@@ -825,7 +859,7 @@ const usersWithPasswords = csvRows.map((row) => {
         await logActivity('bulk_add_users', `Bulk uploaded ${insertedCount} users to system`);
         const currentUser = JSON.parse(localStorage.getItem('currentUser'));
         await AuditLogger.logWithIP({
-           userId: currentUser.userId,
+           userId: currentUser.id,
           actionTaken: `Bulk uploaded ${insertedCount} users to system`,
           tableAffected: 'users',
           recordId: 'bulk_operation'
@@ -836,7 +870,7 @@ try {
     .from('notifications')
     .insert([{
       notification_type_id: 1, // user_created
-      created_by: currentUser.userId,
+      created_by: currentUser.id,
       title: 'Bulk User Upload Completed',
       message: `${currentUser.fullName || 'Admin Official'} uploaded ${insertedCount} users via CSV`,
       target_roles: '1', // System Admin
