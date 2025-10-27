@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSysAdminDashboard } from '../contexts/SysAdminDashboardContext';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient'; 
 import Papa from 'papaparse'
@@ -11,6 +12,7 @@ import { Building2, CalendarDays } from 'lucide-react';
 export default function DashboardSyAdmin() {
 
   const [sysAdminName, setSysAdminName] = useState('System Administrator');
+  const { dashboardData, loading: contextLoading, refreshData } = useSysAdminDashboard();
   const navigate = useNavigate();
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [showSetupDetails, setShowSetupDetails] = useState(false);
@@ -18,10 +20,11 @@ export default function DashboardSyAdmin() {
   const [assetsList, setAssetsList] = useState([]);
   const [recentActivities, setRecentActivities] = useState([]);
   const [editingOrgInfo, setEditingOrgInfo] = useState(false);
-const [editedOrgData, setEditedOrgData] = useState({});
+  const [editedOrgData, setEditedOrgData] = useState({});
   const [organizationTypes, setOrganizationTypes] = useState([]);
-const [countries, setCountries] = useState([]);
-const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [countries, setCountries] = useState([]);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   // Function to add new activity
 const addActivity = (type, title, user = organizationData.contactPerson) => {
   const newActivity = {
@@ -44,7 +47,7 @@ const handleEmailProgressClose = () => {
   // Show final summary if there were any failures
   const { successCount, failedCount } = emailProgress;
   if (failedCount > 0) {
-    alert(`Email Summary:\nÃƒÆ’Ã‚Â¢Ãƒâ€¦Ã¢â‚¬Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ ${successCount} emails sent successfully\nÃƒÆ’Ã‚Â¢Ãƒâ€šÃ‚ÂÃƒâ€¦Ã¢â‚¬â„¢ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+    alert(`Email Summary:\nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ ${successCount} emails sent successfully\nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Â¦ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
   }
 };
 
@@ -153,7 +156,10 @@ const getOrganizationData = async () => {
       countryId: orgData.country_id, // ADD THIS - store the ID too
       website: orgData.website || "https://openfms.io",
       contactPerson: orgData.contact_person || "System Administrator",
-      contactEmail: orgData.contact_email || userEmail
+      contactEmail: orgData.contact_email || userEmail,
+      setupCompleted: orgData.setup_completed || false,  
+      setupCompletedAt: orgData.setup_completed_at || null
+
     };
   } catch (error) {
     console.error('Error loading organization data:', error);
@@ -191,7 +197,7 @@ const [organizationData, setOrganizationData] = useState({
   isUsersDataSkipped: false,
   isAssetsDataSkipped: false
 });
-  const [dashboardData, setDashboardData] = useState({
+  const [localDashboardData, setLocalDashboardData] = useState({
     totalUsers: 0,
     totalAssets: 0,
     setupStatus: {
@@ -466,10 +472,10 @@ const updateSetupProgress = async () => {
       hasOrganizationInfo = orgData?.org_name && orgData?.contact_email;
     }
     
-    // Ã¢Å“â€¦ Check if users exist (based on DATABASE, not localStorage)
+    // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Check if users exist (based on DATABASE, not localStorage)
     const hasUsers = (dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials) > 0;
     
-    // Ã¢Å“â€¦ Check if assets exist (based on DATABASE, not localStorage)
+    // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ Check if assets exist (based on DATABASE, not localStorage)
     const hasAssets = dbStats.totalAssets > 0;
     
     const setupStatus = {
@@ -482,19 +488,20 @@ const updateSetupProgress = async () => {
     const newProgress = (completedSteps / 3) * 100;
     
     // Update dashboard data state
-    setDashboardData(prev => ({
+    setLocalDashboardData(prev => ({
       ...prev,
       setupStatus: setupStatus,
       setupProgress: newProgress,
       systemHealth: newProgress > 66 ? 'Good' : newProgress > 33 ? 'Warning' : 'Critical'
     }));
     
-    // Ã¢Å“â€¦ CRITICAL FIX: Automatically set setupCompleted to true when all requirements are met
+    // ÃƒÂ¢Ã…â€œÃ¢â‚¬Â¦ CRITICAL FIX: Automatically set setupCompleted to true when all requirements are met
+    // Check if setup should be marked complete
     if (completedSteps === 3) {
+      // Update database to mark setup as completed
+      await markSetupAsCompleted();
       setSetupCompleted(true);
-      // Ã¢Å“â€¦ Remove the setup wizard data since it's complete
       localStorage.removeItem('setupWizardData');
-      localStorage.setItem('justCompleted', 'true');
     } else {
       setSetupCompleted(false);
     }
@@ -511,6 +518,48 @@ const updateSetupProgress = async () => {
   }
 };
 
+
+const markSetupAsCompleted = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    const userEmail = user?.email;
+    
+    if (!userEmail) return;
+
+    // Get organization ID
+    const { data: orgData } = await supabase
+      .from('organizations')
+      .select('organization_id, setup_completed')
+      .eq('contact_email', userEmail)
+      .single();
+
+    if (!orgData) return;
+
+    // Only update if not already completed (prevents repeated updates)
+    if (!orgData.setup_completed) {
+      const { error } = await supabase
+        .from('organizations')
+        .update({
+          setup_completed: true,
+          setup_completed_at: new Date().toISOString()
+        })
+        .eq('organization_id', orgData.organization_id);
+
+      if (error) {
+        console.error('Error marking setup as completed:', error);
+      } else {
+        console.log('Setup marked as completed in database');
+        // Add audit log
+        addActivity('setup_completed', 
+          `${organizationData.name} system setup completed successfully`,
+          organizationData.contactPerson
+        );
+      }
+    }
+  } catch (error) {
+    console.error('Error in markSetupAsCompleted:', error);
+  }
+};
 
 const handleSaveOrgInfo = async () => {
   try {
@@ -648,7 +697,7 @@ const completedSteps = Object.values(setupStatus).filter(Boolean).length;
         
         const newProgress = (completedSteps / 3) * 100;
         
-        setDashboardData(prev => ({
+       setLocalDashboardData(prev => ({
           ...prev,
           [type === 'users' ? 'totalUsers' : 'totalAssets']: rowCount,
           setupStatus: {
@@ -684,104 +733,30 @@ alert(`${type === 'users' ? 'Users' : 'Assets'} uploaded successfully! Found ${r
     reader.readAsText(file);
   };
 
+
 useEffect(() => {
-  const loadDashboardData = async () => {
-    try {
-      const types = await fetchOrganizationTypes();
-      setOrganizationTypes(types);
-      // Check if just completed setup or needs forced refresh
-      const justCompleted = localStorage.getItem('setupJustCompleted');
-      const forceRefresh = localStorage.getItem('forceRefreshDashboard');
-      const countries = await fetchCountries();
-      setCountries(countries);
-      if (justCompleted === 'true' || forceRefresh === 'true') {
-        // Small delay to ensure all database operations are complete
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        localStorage.removeItem('setupJustCompleted');
-        localStorage.removeItem('forceRefreshDashboard');
-      }
-
-      // Get organization info
-      const baseOrgData = await getOrganizationData();
-      
-      // Get all statistics from database
-      const dbStats = await fetchDatabaseStats();
-      
-      // Ã¢Å“â€¦ ADD THIS LINE - Fetch recent audit logs
-      const recentLogs = await fetchRecentAuditLogs();
-      
-      // Merge organization info with database statistics
-      const mergedOrgData = {
-        ...baseOrgData,
-        ...dbStats
-      };
-      
-      setOrganizationData(mergedOrgData);
-      
-      // Ã¢Å“â€¦ ADD THIS LINE - Set recent activities with audit logs
-      setRecentActivities(recentLogs);
-      
-      // Update dashboard data
-      const totalUsers = dbStats.personnel + dbStats.standardUsers + dbStats.adminOfficials;
-      setDashboardData(prev => ({
-        ...prev,
-        totalUsers: totalUsers,
-        totalAssets: dbStats.totalAssets,
-        systemHealth: dbStats.systemHealthPercentage > 80 ? 'Good' : 
-                     dbStats.systemHealthPercentage > 50 ? 'Warning' : 'Critical'
-      }));
-
-      console.log('Dashboard loaded with stats:', dbStats);
-
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-      setIsDataLoaded(true); 
-      // Fallback to default values
-      setOrganizationData(prev => ({
-        ...prev,
-        personnel: 0,
-        standardUsers: 0,
-        adminOfficials: 0,
-        systemAdmins: 1,
-        totalAssets: 0,
-        systemHealthPercentage: 25
-      }));
+  if (dashboardData && !contextLoading) {
+    setSysAdminName(dashboardData.sysAdminName);
+    setOrganizationData(dashboardData.organizationData);
+    setRecentActivities(dashboardData.recentActivities);
+    setOrganizationTypes(dashboardData.organizationTypes);
+    setCountries(dashboardData.countries);
+    setIsDataLoaded(true);
+    // Load setup completion status from database
+    if (dashboardData.organizationData?.setupCompleted) {
+      setSetupCompleted(true);
     }
     
-    await updateSetupProgress();
-    setIsDataLoaded(true);
-  };
-
-  loadDashboardData();
-}, []); // Remove dependency array issues
-  useEffect(() => {
-  const fetchSysAdminData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: userData } = await supabase
-        .from('users')
-        .select('full_name')
-        .eq('auth_uid', user.id)
-        .single();
-
-      if (userData) {
-        setSysAdminName(userData.full_name);
-      }
-    } catch (error) {
-      console.error('Error fetching sysadmin data:', error);
-    }
-  };
-
-  fetchSysAdminData();
-}, []);
+    // Update setup progress
+    updateSetupProgress();
+  }
+}, [dashboardData, contextLoading]);
   // Auto-dismiss completion message
   useEffect(() => {
     if (setupCompleted && localStorage.getItem('justCompleted') === 'true') {
       const timer = setTimeout(() => {
         localStorage.removeItem('justCompleted');
-        setDashboardData(prev => ({...prev}));
+        setLocalDashboardData(prev => ({...prev}));
       }, 5000);
 
       return () => clearTimeout(timer);
@@ -860,7 +835,7 @@ const handleCompleteSetup = () => {
     organizationData.contactPerson
   );
   
-  setDashboardData({
+  setLocalDashboardData({
     totalUsers: userCount,
     totalAssets: assetCount,
     setupStatus: {
@@ -910,10 +885,20 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
   }
 ];
 
-  return (
-      <div className="container-fluid">
+ return (
+  <>
+    <style>{`
+      @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      .spin {
+        animation: spin 1s linear infinite;
+      }
+    `}</style>
+    
+    <div className="container-fluid">
         {/* Header */}
-{/* Header */}
 <div style={{
   backgroundColor: '#f8f9fa',
   borderLeft: '4px solid #0d6efd',
@@ -929,11 +914,50 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
       Welcome back, {sysAdminName}!
     </h1>
   </div>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-    <CalendarDays size={18} style={{ color: '#6c757d' }} />
-    <span style={{ color: '#6c757d', fontSize: '14px' }}>
-      {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-    </span>
+  
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    {/* ADD THIS REFRESH BUTTON */}
+<button 
+  onClick={async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshData();
+      // Optional: show success message
+      alert('✅ Dashboard updated successfully!');
+    } catch (error) {
+      console.error('Refresh error:', error);
+      alert('❌ Failed to refresh. Please try again.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }}
+  className="btn btn-sm"
+  disabled={isRefreshing}
+  style={{
+    backgroundColor: isRefreshing ? '#6c757d' : '#0d6efd',
+    color: 'white',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    fontWeight: '500',
+    cursor: isRefreshing ? 'not-allowed' : 'pointer',
+    opacity: isRefreshing ? 0.7 : 1
+  }}
+  title="Refresh dashboard data"
+>
+  <i className={`bi ${isRefreshing ? 'bi-arrow-clockwise spin' : 'bi-arrow-clockwise'}`}></i>
+  {isRefreshing ? 'Refreshing...' : 'Refresh'}
+</button>
+    
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <CalendarDays size={18} style={{ color: '#6c757d' }} />
+      <span style={{ color: '#6c757d', fontSize: '14px' }}>
+        {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+      </span>
+    </div>
   </div>
 </div>
   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px', paddingLeft: '36px' }}>
@@ -947,7 +971,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     }}>
       System Administrator
     </span>
-    <span style={{ color: '#6c757d', fontSize: '14px' }}>•</span>
+    <span style={{ color: '#6c757d', fontSize: '14px' }}>|</span>
     <span style={{ color: '#495057', fontSize: '14px', fontWeight: '500' }}>{organizationData.name}</span>
   </div>
 </div>
@@ -966,35 +990,35 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
 />
 
         {/* Setup Status Alert */}
-        {!setupCompleted && (
+       {!setupCompleted && !organizationData.setupCompleted && (
           <div className="alert alert-warning mb-4" role="alert" style={{borderRadius: '12px'}}>
             <div className="d-flex align-items-center">
               <i className="bi bi-exclamation-triangle-fill me-2"></i>
               <div className="flex-grow-1">
                 <div className="d-flex justify-content-between align-items-center mb-2">
                   <strong>Setup Required</strong>
-                  <small>{Math.round(dashboardData.setupProgress)}% Complete</small>
+                  <small>{Math.round(localDashboardData.setupProgress)}% Complete</small>
                 </div>
                 <div className="progress mb-2" style={{height: '6px', borderRadius: '6px'}}>
                   <div 
                     className="progress-bar bg-warning" 
-                    style={{width: `${dashboardData.setupProgress}%`, borderRadius: '6px'}}
+                    style={{width: `${localDashboardData.setupProgress}%`, borderRadius: '6px'}}
                   ></div>
                 </div>
                 <p className="mb-0">Complete the setup wizard to upload users and assets to your system.</p>
                 
-                {showSetupDetails && dashboardData.wizardData && (
+                {showSetupDetails && localDashboardData.wizardData &&(
   <div className="mt-3 p-3 bg-light rounded">
     <h6 className="mb-2">Setup Status:</h6>
     
     <div className="mb-2">
-      <i className={`bi ${dashboardData.setupStatus.organizationInfo ? 'bi-check-circle text-success' : 'bi-circle text-danger'} me-2`}></i>
-      <span>Organization Information {dashboardData.setupStatus.organizationInfo ? '(Complete)' : '(Required)'}</span>
+      <i className={`bi ${localDashboardData.setupStatus.organizationInfo ? 'bi-check-circle text-success' : 'bi-circle text-danger'} me-2`}></i>
+      <span>Organization Information {localDashboardData.setupStatus.organizationInfo? '(Complete)' : '(Required)'}</span>
     </div>
     
     <div className="mb-2">
-      <i className={`bi ${dashboardData.setupStatus.usersUpload ? 'bi-check-circle text-success' : 'bi-circle text-warning'} me-2`}></i>
-      <span>Users Upload {dashboardData.setupStatus.usersUpload ? '(Complete)' : '(Upload at least one user type)'}</span>
+      <i className={`bi ${localDashboardData.setupStatus.usersUpload ? 'bi-check-circle text-success' : 'bi-circle text-warning'} me-2`}></i>
+      <span>Users Upload {localDashboardData.setupStatus.usersUpload ? '(Complete)' : '(Upload at least one user type)'}</span>
     </div>
     
     <div className="mb-3">
@@ -1002,8 +1026,8 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
       <span>Assets Upload {dashboardData.setupStatus.assetsUpload ? '(Complete)' : '(Upload assets)'}</span>
     </div>
 {(() => {
-  const canComplete = dashboardData.setupStatus.organizationInfo && 
-                     dashboardData.setupStatus.usersUpload && 
+  const canComplete = localDashboardData.setupStatus.organizationInfo && 
+                    localDashboardData.setupStatus.usersUpload && 
                      dashboardData.setupStatus.assetsUpload;
   
   return (
@@ -1045,7 +1069,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         )}
 
         {/* Congratulatory Message */}
-        {setupCompleted && localStorage.getItem('justCompleted') === 'true' && (
+       {setupCompleted && !organizationData.setupCompleted && (
           <div className="alert alert-success alert-dismissible fade show mb-4" role="alert" style={{borderRadius: '12px'}}>
             <div className="d-flex align-items-center">
               <i className="bi bi-check-circle-fill me-2 fs-4"></i>
@@ -1231,12 +1255,12 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
       transition: 'transform 0.2s, box-shadow 0.2s'
     }}
-    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  // Ã¢â€ Â ADD THIS
-    onMouseEnter={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
+    onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}  // ÃƒÂ¢Ã¢â‚¬ Ã‚Â ADD THIS
+    onMouseEnter={(e) => {  // ÃƒÂ¢Ã¢â‚¬ Ã‚Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(-4px)';
       e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
     }}
-    onMouseLeave={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
+    onMouseLeave={(e) => {  // ÃƒÂ¢Ã¢â‚¬ Ã‚Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(0)';
       e.currentTarget.style.boxShadow = '';
     }}
@@ -1261,11 +1285,11 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
     <div className="card shadow-sm" style={{borderRadius: '16px', height: '120px', border: '1px solid #dee2e6',cursor: 'pointer',
       transition: 'transform 0.2s, box-shadow 0.2s'}}
       onClick={() => navigate('/dashboard-sysadmin/SysadUserManagement')}
-       onMouseEnter={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
+       onMouseEnter={(e) => {  // ÃƒÂ¢Ã¢â‚¬ Ã‚Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(-4px)';
       e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.15)';
     }}
-    onMouseLeave={(e) => {  // Ã¢â€ Â ADD THIS (optional hover effect)
+    onMouseLeave={(e) => {  // ÃƒÂ¢Ã¢â‚¬ Ã‚Â ADD THIS (optional hover effect)
       e.currentTarget.style.transform = 'translateY(0)';
       e.currentTarget.style.boxShadow = '';
     }}
@@ -1414,7 +1438,7 @@ onMouseLeave={(e) => {
     <button 
       className="btn btn-link text-primary fw-semibold text-decoration-none p-0"
        onClick={(e) => {
-        e.stopPropagation(); // Ã¢â€ Â ADD THIS to prevent card click
+        e.stopPropagation(); // ÃƒÂ¢Ã¢â‚¬ Ã‚Â ADD THIS to prevent card click
         navigate('/dashboard-sysadmin/SysadAuditLogs');
       }}
     >
@@ -1437,5 +1461,6 @@ onMouseLeave={(e) => {
           </div>
         </div>
       </div>
-  );
+  </>
+);
 }

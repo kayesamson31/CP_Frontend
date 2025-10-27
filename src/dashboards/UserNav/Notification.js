@@ -15,7 +15,7 @@ const getCurrentUserOrganization = async () => {
     const { data: userData, error } = await supabase
       .from('users')
       .select('organization_id, user_id')
-      .eq('email', user.email)  // âœ… Use email instead of auth_uid
+      .eq('email', user.email)  // Ã¢Å“â€¦ Use email instead of auth_uid
       .single();
 
     if (error || !userData) {
@@ -23,8 +23,8 @@ const getCurrentUserOrganization = async () => {
       throw new Error('User organization not found');
     }
     
-    console.log('âœ… Organization ID:', userData.organization_id);
-    console.log('âœ… User ID:', userData.user_id);
+    console.log('Ã¢Å“â€¦ Organization ID:', userData.organization_id);
+    console.log('Ã¢Å“â€¦ User ID:', userData.user_id);
     return userData.organization_id;
   } catch (error) {
     console.error('Error getting user organization:', error);
@@ -98,23 +98,23 @@ const cleanupOldNotifications = async () => {
 
     // Soft delete read notifications older than 7 days
 if (readNotificationIds.length > 0) {
-  const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
+  const organizationId = await getCurrentUserOrganization(); // Ã¢Å“â€¦ ADD THIS
   
   await supabase
     .from('notifications')
     .update({ is_active: false })
-    .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
+    .eq('organization_id', organizationId) // Ã¢Å“â€¦ ADD THIS FILTER
     .in('notification_id', readNotificationIds);
 }
 
     // Soft delete unread notifications older than 30 days
 // Soft delete unread notifications older than 30 days
-const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
+const organizationId = await getCurrentUserOrganization(); // Ã¢Å“â€¦ ADD THIS
 
 await supabase
   .from('notifications')
   .update({ is_active: false })
-  .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
+  .eq('organization_id', organizationId) // Ã¢Å“â€¦ ADD THIS FILTER
   .lt('created_at', unreadCutoffDate.toISOString())
   .eq('is_active', true);
 
@@ -128,9 +128,9 @@ const fetchNotifications = async () => {
   try {
     setLoading(true);
     const roleId = getRoleId(role);
-    const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
+    const organizationId = await getCurrentUserOrganization(); // Ã¢Å“â€¦ ADD THIS
 
-    console.log('ðŸ” Fetching notifications for Org:', organizationId); // âœ… Debug
+    console.log('Ã°Å¸â€Â Fetching notifications for Org:', organizationId); // Ã¢Å“â€¦ Debug
 
     // Fetch notifications for this role AND organization
     const { data: notificationsData, error } = await supabase
@@ -148,7 +148,7 @@ const fetchNotifications = async () => {
     priority_levels(priority_name, color_code),
     created_by
   `)
-  .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
+  .eq('organization_id', organizationId) // Ã¢Å“â€¦ ADD THIS FILTER
   .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
   .eq('is_active', true)
   .order('created_at', { ascending: false});
@@ -280,12 +280,12 @@ const clearReadNotifications = async () => {
 
     // Soft delete by setting is_active to false
 // Soft delete by setting is_active to false
-const organizationId = await getCurrentUserOrganization(); // âœ… ADD THIS
+const organizationId = await getCurrentUserOrganization(); // Ã¢Å“â€¦ ADD THIS
 
 const { error } = await supabase
   .from('notifications')
   .update({ is_active: false })
-  .eq('organization_id', organizationId) // âœ… ADD THIS FILTER
+  .eq('organization_id', organizationId) // Ã¢Å“â€¦ ADD THIS FILTER
   .in('notification_id', readNotificationIds);
 
     if (error) throw error;
@@ -311,9 +311,9 @@ useEffect(() => {
   const initSubscription = async () => {
     try {
       currentOrgId = await getCurrentUserOrganization();
-      console.log('🏢 Current Organization ID:', currentOrgId);
+      console.log('ðŸ¢ Current Organization ID:', currentOrgId);
     } catch (error) {
-      console.error('❌ Failed to get organization ID:', error);
+      console.error('âŒ Failed to get organization ID:', error);
     }
     
     // Set up real-time subscription for new notifications
@@ -327,7 +327,7 @@ useEffect(() => {
           table: 'notifications'
         },
         (payload) => {
-          console.log('🔔 New notification received:', payload);
+          console.log('ðŸ”” New notification received:', payload);
           
           const roleId = getRoleId(role);
           
@@ -337,7 +337,7 @@ useEffect(() => {
           const isForMe = payload.new.target_user_id === userId;
           const isMyOrganization = payload.new.organization_id === currentOrgId;
           
-          console.log('🔍 Checking notification:', {
+          console.log('ðŸ” Checking notification:', {
             notificationOrgId: payload.new.organization_id,
             myOrgId: currentOrgId,
             targetRoles,
@@ -348,15 +348,15 @@ useEffect(() => {
           });
           
           if ((isForMyRole || isForMe) && isMyOrganization) {
-            console.log('✅ Notification is for me! Refreshing...');
+            console.log('âœ… Notification is for me! Refreshing...');
             fetchNotifications();
           } else {
-            console.log('❌ Notification not for me, skipping...');
+            console.log('âŒ Notification not for me, skipping...');
           }
         }
       )
       .subscribe((status) => {
-        console.log('📡 Subscription status:', status);
+        console.log('ðŸ“¡ Subscription status:', status);
       });
 
     return channel;
@@ -497,10 +497,12 @@ useEffect(() => {
                               {notification.message}
                             </p>
 
-                           <div className="d-flex align-items-center gap-3">
-  <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-    #{notification.workOrderId}
-  </small>
+<div className="d-flex align-items-center gap-3">
+  {notification.workOrderId && notification.workOrderId !== 0 ? (
+    <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+      #{notification.workOrderId}
+    </small>
+  ) : null}
   {notification.priority === 'high' || notification.priority === 'critical' ? (
     <span className="text-danger fw-bold" style={{ fontSize: '0.75rem' }}>
       {notification.priority.toUpperCase()}

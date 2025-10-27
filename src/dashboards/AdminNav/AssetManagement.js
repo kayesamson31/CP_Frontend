@@ -5,8 +5,9 @@ import { useNavigate } from "react-router-dom";
 import { assetService } from '../../services/assetService';
 import { logActivity } from '../../utils/ActivityLogger';
 import { AuthUtils } from '../../utils/AuthUtils';
-import { supabase } from '../../supabaseClient';  // ← Make sure this line exists
+import { supabase } from '../../supabaseClient';  // Ã¢â€ Â Make sure this line exists
 import { AuditLogger } from '../../utils/AuditLogger';
+
 import {
   Container,
   Row,
@@ -31,7 +32,11 @@ const [categories, setCategories] = useState([]);
   // Add these state variables for task management
 const [tasks, setTasks] = useState([]);
 const [personnel, setPersonnel] = useState([]);
-
+// Pagination state
+const [currentPage, setCurrentPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
+const [totalRecords, setTotalRecords] = useState(0);
+const [recordsPerPage] = useState(17);
 
 const [previousAsset, setPreviousAsset] = useState(null);
 
@@ -64,7 +69,6 @@ const [newAsset, setNewAsset] = useState({
   status: 'Operational',
   acquisitionDate: '',
   nextMaintenance: '',
-  task: ''
 });
 const [csvFile, setCsvFile] = useState(null);
 const [csvPreview, setCsvPreview] = useState([]);
@@ -173,14 +177,24 @@ useEffect(() => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingAsset, setEditingAsset] = useState(null);
 
-  // Filtered assets
-  const filteredAssets = assets.filter(
-    (asset) =>
-      (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
-        asset.id?.toLowerCase().includes(search.toLowerCase())) &&
-      (statusFilter === "" || asset.status === statusFilter) &&
-      (categoryFilter === "" || asset.category === categoryFilter)
-  );
+// First filter all assets
+const allFilteredAssets = assets.filter(
+  (asset) =>
+    (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
+      asset.id?.toLowerCase().includes(search.toLowerCase())) &&
+    (statusFilter === "" || asset.status === statusFilter) &&
+    (categoryFilter === "" || asset.category === categoryFilter)
+);
+
+// Update total records and pages
+useEffect(() => {
+  setTotalRecords(allFilteredAssets.length);
+  setTotalPages(Math.ceil(allFilteredAssets.length / recordsPerPage));
+}, [allFilteredAssets.length, recordsPerPage]);
+
+// Apply pagination
+const startIndex = (currentPage - 1) * recordsPerPage;
+const filteredAssets = allFilteredAssets.slice(startIndex, startIndex + recordsPerPage);
 
 const handleUpdateAsset = async () => {
   if (editingAsset) {
@@ -223,36 +237,44 @@ const handleAddAsset = async () => {
         status: 'Operational',
         acquisitionDate: '',
         nextMaintenance: '',
-        task: ''
       });
       
-      alert('Asset added successfully!');
-      // Log activity
-await logActivity('add_asset', `Added asset: ${newAsset.name} in ${newAsset.location}`);
-// ✅ ADD: Audit log for asset creation
-      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-      await AuditLogger.logWithIP({
-        userId: currentUser.userId,
-        actionTaken: `Created new asset: ${asset.name}`,
-        tableAffected: 'assets',
-        recordId: asset.id,
-        organizationId: currentUser.organizationId
-      });
+     alert('Asset added successfully!');
 
-      // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN
+// 📝 Log activity
+await logActivity('add_asset', `Added asset: ${newAsset.name} in ${newAsset.location}`);
+
+// 🔐 Audit Log
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+await AuditLogger.logWithIP({
+  userId: currentUser.id, 
+  actionTaken: `Created new asset: ${asset.name}`,
+  tableAffected: 'assets',
+ recordId: asset.assetId,
+  organizationId: currentUser.organizationId
+});
+
+// 🔔 Notification for System Admin
 try {
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const { data: adminUserData } = await supabase
+    .from('users')
+    .select('user_id, organization_id')
+    .eq('email', authUser.email)
+    .single();
+
   await supabase
     .from('notifications')
     .insert([{
-      notification_type_id: 12, // asset_created (or create new type if needed)
-      created_by: currentUser.userId,
+      notification_type_id: 21,
+      created_by: currentUser.id,
       title: 'New Asset Added',
       message: `${currentUser.fullName || 'Admin Official'} added new asset: ${asset.name} (${newAsset.category}) in ${newAsset.location}`,
-      target_roles: '1', // System Admin
-      priority_id: 1, // Low priority
+      target_roles: '1',
+      priority_id: 1,
       related_table: 'assets',
-      related_id: asset.id,
-      organization_id: currentUser.organizationId,
+       related_id: asset.assetId,
+      organization_id: adminUserData.organization_id,
       is_active: true
     }]);
   
@@ -300,7 +322,12 @@ const handleBulkUpload = async () => {
     const lines = text.split('\n');
     const headers = lines[0].split(',').map(h => h.trim());
     
-    const newAssets = [];
+const newAssets = [];
+    const duplicates = [];
+    
+    // Get existing assets for duplicate checking
+    const existingAssets = assets;
+    
     for (let i = 1; i < lines.length; i++) {
       if (lines[i].trim()) {
         const values = lines[i].split(',').map(v => v.trim());
@@ -322,29 +349,95 @@ const handleBulkUpload = async () => {
         
         const asset = {
           name: values[headers.indexOf('name')] || values[0],
-          category: matchedCategory ? matchedCategory.category_name : 'HVAC Equipment', // Use matched or default
+          category: matchedCategory ? matchedCategory.category_name : 'HVAC Equipment',
           location: values[headers.indexOf('location')] || values[2],
           status: values[headers.indexOf('status')] || values[3] || 'Operational',
           acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || ''
         };
-        newAssets.push(asset);
+        
+        // Ã¢Å“â€¦ CHECK FOR DUPLICATES (name + location)
+        const isDuplicate = existingAssets.some(existing => 
+          existing.name.toLowerCase().trim() === asset.name.toLowerCase().trim() &&
+          existing.location.toLowerCase().trim() === asset.location.toLowerCase().trim()
+        );
+        
+        if (isDuplicate) {
+          duplicates.push(asset);
+        } else {
+          newAssets.push(asset);
+        }
       }
     }
     
-    // Upload one by one with better error handling
-    let successCount = 0;
-    let failCount = 0;
-    
-    for (const asset of newAssets) {
-      try {
-        await assetService.addAsset(asset);
-        successCount++;
-        console.log('Ã¢Å“â€œ Uploaded:', asset.name);
-      } catch (uploadErr) {
-        failCount++;
-        console.error('Ã¢Å“â€” Failed:', asset.name, uploadErr.message);
+    // Ã¢Å“â€¦ SHOW DUPLICATE WARNING IF FOUND
+    if (duplicates.length > 0) {
+      const duplicateList = duplicates
+        .slice(0, 5)
+        .map(d => `Ã¢â‚¬Â¢ ${d.name} (${d.location})`)
+        .join('\n');
+      const moreText = duplicates.length > 5 ? `\n...and ${duplicates.length - 5} more` : '';
+      
+      const userChoice = window.confirm(
+        `Ã¢Å¡ Ã¯Â¸Â DUPLICATE DETECTION\n\n` +
+        `Found ${duplicates.length} asset(s) that already exist in the system:\n\n` +
+        `${duplicateList}${moreText}\n\n` +
+        `These duplicates will be SKIPPED.\n` +
+        `${newAssets.length} new asset(s) will be uploaded.\n\n` +
+        `Click OK to continue, or CANCEL to abort.`
+      );
+      
+      if (!userChoice) {
+        alert('Upload cancelled by user.');
+        return;
       }
     }
+    
+    // Ã¢Å“â€¦ CHECK IF NO NEW ASSETS TO UPLOAD
+    if (newAssets.length === 0) {
+      alert('Ã¢ÂÅ’ No new assets to upload.\n\nAll assets in the CSV already exist in the system.');
+      setShowBulkUploadModal(false);
+      setCsvFile(null);
+      setCsvPreview([]);
+      return;
+    }
+    
+// Upload one by one with better error handling AND database duplicate check
+let successCount = 0;
+let failCount = 0;
+
+// Get organization ID for duplicate checking
+const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+const orgId = currentUser.organizationId;
+
+for (const asset of newAssets) {
+  try {
+    // Ã¢Å“â€¦ EXTRA CHECK: Verify this asset doesn't exist in database before inserting
+    const assetNameClean = asset.name.trim().replace(/\s+/g, '_');
+    
+    const { data: existingCheck } = await supabase
+      .from('assets')
+      .select('asset_id, asset_code')
+      .eq('organization_id', orgId)
+      .ilike('asset_code', `%${assetNameClean}%`)
+      .ilike('location', asset.location)
+      .limit(1);
+    
+    if (existingCheck && existingCheck.length > 0) {
+      console.log(`Ã¢Å¡ Ã¯Â¸Â Skipping duplicate in DB: ${asset.name}`);
+      failCount++;
+      continue; // Skip this asset
+    }
+    
+    // Proceed with insert if no duplicate found in database
+    await assetService.addAsset(asset);
+    successCount++;
+    console.log('Ã¢Å“â€¦ Uploaded:', asset.name);
+    
+  } catch (uploadErr) {
+    failCount++;
+    console.error('Ã¢ÂÅ’ Failed:', asset.name, uploadErr.message);
+  }
+}
     
     await fetchAssets();
     
@@ -352,38 +445,85 @@ const handleBulkUpload = async () => {
     setCsvFile(null);
     setCsvPreview([]);
     
-    alert(`Upload complete!\nSuccess: ${successCount}\nFailed: ${failCount}`);
-    // Log activity
+// Ã¢Å“â€¦ SIMPLE & DIRECT MESSAGE
+let resultMessage = '';
+
+if (successCount > 0) {
+  // SUCCESS SCENARIO
+  resultMessage = `Ã¢Å“â€¦ Upload Successful!\n\n`;
+  resultMessage += `${successCount} asset(s) added successfully`;
+  
+  // Show what was skipped
+  if (duplicates.length > 0 || failCount > 0) {
+    resultMessage += `\n\nSkipped:`;
+    if (duplicates.length > 0) {
+      resultMessage += `\nÃ¢â‚¬Â¢ ${duplicates.length} duplicate(s)`;
+    }
+    if (failCount > 0) {
+      resultMessage += `\nÃ¢â‚¬Â¢ ${failCount} asset(s) already exist in database`;
+    }
+  }
+  
+} else {
+  // FAILURE SCENARIO - Nothing was uploaded
+  resultMessage = `Ã¢ÂÅ’ Upload Failed\n\n`;
+  resultMessage += `No assets were added to the system.\n\n`;
+  
+  // Explain WHY
+  if (duplicates.length > 0 && failCount > 0) {
+    resultMessage += `Reason: All ${duplicates.length + failCount} asset(s) already exist in the system.`;
+  } else if (duplicates.length > 0) {
+    resultMessage += `Reason: All ${duplicates.length} asset(s) in the CSV already exist (duplicates).`;
+  } else if (failCount > 0) {
+    resultMessage += `Reason: All ${failCount} asset(s) already exist in the database.`;
+  } else {
+    resultMessage += `Reason: No valid assets found in CSV file.`;
+  }
+}
+
+alert(resultMessage);
+// Log activity
 await logActivity('bulk_add_assets', `Bulk uploaded ${successCount} assets to system`);
-// ✅ ADD: Audit log for bulk upload
-    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
-    await AuditLogger.logWithIP({
-      userId: currentUser.userId,
-      actionTaken: `Bulk uploaded ${successCount} assets via CSV`,
-      tableAffected: 'assets',
-      recordId: 0, // Use 0 for bulk operations
-      organizationId: currentUser.organizationId
-    });
-      // ✅ ADD NOTIFICATION FOR SYSTEM ADMIN
+// Ã¢Å“â€¦ ADD: Audit log for bulk upload
+   // Ã¢Å“â€¦ ONLY LOG IF SUCCESSFUL
+if (successCount > 0) {
+  await AuditLogger.logWithIP({
+   userId: currentUser.id,  
+    actionTaken: `Bulk uploaded ${successCount} assets via CSV`,
+    tableAffected: 'assets',
+    recordId: 0,
+    organizationId: currentUser.organizationId
+  });
+}
+      // Ã¢Å“â€¦ ADD NOTIFICATION FOR SYSTEM ADMIN
+// Line 472-486 - NEW FIXED VERSION
 try {
+  // Get organization_id from database
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const { data: adminUserData } = await supabase
+    .from('users')
+    .select('user_id, organization_id')
+    .eq('email', authUser.email)
+    .single();
+
   await supabase
     .from('notifications')
     .insert([{
-      notification_type_id: 12, // asset_created
-      created_by: currentUser.userId,
+      notification_type_id: 21,
+      created_by: currentUser.id,  // âœ… FIXED - use .id
       title: 'Bulk Asset Upload Completed',
       message: `${currentUser.fullName || 'Admin Official'} uploaded ${successCount} assets via CSV`,
-      target_roles: '1', // System Admin
-      priority_id: 2, // Medium priority
+      target_roles: '1',
+      priority_id: 2,
       related_table: 'assets',
-      related_id: 0, // Bulk operation
-      organization_id: currentUser.organizationId,
+      related_id: 0,
+      organization_id: adminUserData.organization_id,  // âœ… FIXED - from DB
       is_active: true
     }]);
   
-  console.log('✅ System Admin notified about bulk asset upload');
+  console.log('âœ… System Admin notified about bulk asset upload');
 } catch (notifErr) {
-  console.error('❌ Notification failed:', notifErr);
+  console.error('âŒ Notification failed:', notifErr);
 }
 
   } catch (err) {
@@ -543,6 +683,79 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
     });
   };
 
+// Pagination Component
+const Pagination = () => {
+  const maxPageButtons = 5;
+  
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  
+  if (endPage - startPage < maxPageButtons - 1) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+  
+  const pageNumbers = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  return (
+    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+      <div className="text-muted">
+        Showing {startIndex + 1} to {Math.min(startIndex + recordsPerPage, totalRecords)} of {totalRecords} entries
+      </div>
+      <div className="d-flex gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        
+        <div className="d-flex gap-1">
+          {startPage > 1 && (
+            <>
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(1)}>1</Button>
+              {startPage > 2 && <span className="px-2">...</span>}
+            </>
+          )}
+          
+          {pageNumbers.map((pageNum) => (
+            <Button
+              key={pageNum}
+              variant={currentPage === pageNum ? "primary" : "outline-primary"}
+              size="sm"
+              onClick={() => setCurrentPage(pageNum)}
+            >
+              {pageNum}
+            </Button>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-2">...</span>}
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(totalPages)}>
+                {totalPages}
+              </Button>
+            </>
+          )}
+        </div>
+        
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+};
+
   // Show loading state
   if (loading) {
     return (
@@ -696,18 +909,7 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
           />
         </Form.Group>
       </Col>
-      <Col xs={12}>
-        <Form.Group>
-          <Form.Label>Task/Notes</Form.Label>
-          <Form.Control
-            as="textarea"
-            rows={2}
-            value={newAsset.task}
-            onChange={(e) => setNewAsset({...newAsset, task: e.target.value})}
-            placeholder="Enter any initial tasks or notes"
-          />
-        </Form.Group>
-      </Col>
+     
     </Row>
   </Modal.Body>
   <Modal.Footer>
@@ -866,7 +1068,7 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
       {asset.status}
     </span>
     
-    {/* ✅ IMPROVED: Show failed badge regardless of status */}
+    {/* Ã¢Å“â€¦ IMPROVED: Show failed badge regardless of status */}
     {asset.hasFailedMaintenance && (
       <span 
         className="badge bg-danger" 
@@ -920,6 +1122,8 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
           </tbody>
         </table>
          </div>
+         {/* Render pagination after table */}
+{!loading && !error && filteredAssets.length > 0 && <Pagination />}
 </div>
 
         {/* Show info message when no assets exist */}
@@ -963,7 +1167,7 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
       {selectedAsset.status}
     </span>
     
-    {/* ✅ IMPROVED: Show failed badge with better label */}
+    {/* Ã¢Å“â€¦ IMPROVED: Show failed badge with better label */}
     {selectedAsset.hasFailedMaintenance && (
       <span className="badge bg-danger">
         <i className="fas fa-wrench me-1"></i>
@@ -1335,7 +1539,7 @@ await logActivity('assign_maintenance_task', `Assigned maintenance task: ${newTa
     ))}
   </Form.Select>
   
-  {/* ← ADD THIS WARNING BELOW */}
+  {/* Ã¢â€ Â ADD THIS WARNING BELOW */}
   {newTask.assigneeId && personnel.find(p => p.id === parseInt(newTask.assigneeId))?.activeTaskCount > 0 && (
     <Alert variant="warning" className="mt-2 mb-0">
       <small>

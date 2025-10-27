@@ -28,7 +28,11 @@ export default function AssetOverview() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  
+  // Pagination state
+const [currentPage, setCurrentPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
+const [totalRecords, setTotalRecords] = useState(0);
+const [recordsPerPage] = useState(17);
 // State for view modal
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [showCombinedHistoryModal, setShowCombinedHistoryModal] = useState(false);
@@ -67,13 +71,24 @@ const [uploadingAssets, setUploadingAssets] = useState(false);
   }, []);
 
   // Filtered assets
-  const filteredAssets = assets.filter(
-    (asset) =>
-      (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
-        asset.id?.toLowerCase().includes(search.toLowerCase())) &&
-      (statusFilter === "" || asset.status === statusFilter) &&
-      (categoryFilter === "" || asset.category === categoryFilter)
-  );
+// First filter all assets
+const allFilteredAssets = assets.filter(
+  (asset) =>
+    (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
+      asset.id?.toLowerCase().includes(search.toLowerCase())) &&
+    (statusFilter === "" || asset.status === statusFilter) &&
+    (categoryFilter === "" || asset.category === categoryFilter)
+);
+
+// Update total records and pages
+useEffect(() => {
+  setTotalRecords(allFilteredAssets.length);
+  setTotalPages(Math.ceil(allFilteredAssets.length / recordsPerPage));
+}, [allFilteredAssets.length, recordsPerPage]);
+
+// Apply pagination
+const startIndex = (currentPage - 1) * recordsPerPage;
+const filteredAssets = allFilteredAssets.slice(startIndex, startIndex + recordsPerPage);
 
   // Export function
   const handleExportReport = () => {
@@ -193,8 +208,77 @@ const handleBulkUpload = async () => {
           throw new Error('No valid asset data found in CSV');
         }
 
-        // Get unique categories from CSV
-        const uniqueCategories = [...new Set(csvRows.map(row => row.Category.trim()))];
+        // âœ… CHECK FOR DUPLICATES
+        const existingAssets = assets;
+console.log('First existing asset structure:', existingAssets[0]);
+console.log('CSV row structure:', csvRows[0]); // Current assets in state
+        const duplicates = [];
+        const uniqueRows = [];
+        
+        console.log('Checking for duplicates...');
+        console.log('Existing assets count:', existingAssets.length);
+        console.log('CSV rows count:', csvRows.length);
+        
+        for (const row of csvRows) {
+          const assetName = row['Asset Name'].trim();
+          const assetLocation = row.Location ? row.Location.trim() : 'Not specified';
+          
+          // Check if asset already exists (case-insensitive comparison)
+          const isDuplicate = existingAssets.some(existing => 
+            existing.name.toLowerCase() === assetName.toLowerCase() &&
+            existing.location.toLowerCase() === assetLocation.toLowerCase()
+          );
+          
+          if (isDuplicate) {
+            duplicates.push({ name: assetName, location: assetLocation });
+            console.log('Duplicate found:', assetName, assetLocation);
+          } else {
+            uniqueRows.push(row);
+          }
+        }
+        
+        console.log('Duplicates found:', duplicates.length);
+        console.log('Unique rows:', uniqueRows.length);
+        
+        // âœ… SHOW DUPLICATE WARNING IF FOUND
+        if (duplicates.length > 0) {
+          const duplicateList = duplicates
+            .slice(0, 5)
+            .map(d => `â€¢ ${d.name} (${d.location})`)
+            .join('\n');
+          const moreText = duplicates.length > 5 ? `\n...and ${duplicates.length - 5} more` : '';
+          
+          const userChoice = window.confirm(
+            `âš ï¸ DUPLICATE DETECTION\n\n` +
+            `Found ${duplicates.length} asset(s) that already exist in the system:\n\n` +
+            `${duplicateList}${moreText}\n\n` +
+            `These duplicates will be SKIPPED.\n` +
+            `${uniqueRows.length} new asset(s) will be uploaded.\n\n` +
+            `Click OK to continue, or CANCEL to abort.`
+          );
+          
+          if (!userChoice) {
+            alert('Upload cancelled by user.');
+            setUploadingAssets(false);
+            setShowBulkUploadModal(false);
+            setCsvFile(null);
+            setCsvPreview([]);
+            return;
+          }
+        }
+        
+        // âœ… CHECK IF NO NEW ASSETS TO UPLOAD
+        if (uniqueRows.length === 0) {
+          alert('âŒ No new assets to upload.\n\nAll assets in the CSV already exist in the system.');
+          setUploadingAssets(false);
+          setShowBulkUploadModal(false);
+          setCsvFile(null);
+          setCsvPreview([]);
+          return;
+        }
+
+       // Get unique categories from CSV (use uniqueRows instead of csvRows)
+        const uniqueCategories = [...new Set(uniqueRows.map(row => row.Category.trim()))];
         console.log('Categories to process:', uniqueCategories);
 
         // Create/get asset categories first
@@ -234,8 +318,8 @@ const handleBulkUpload = async () => {
 
         console.log('Category mapping:', categoryMap);
 
-        // Prepare assets for insertion
-        const assetsToInsert = csvRows.map((row, index) => ({
+       // Prepare assets for insertion (use uniqueRows instead of csvRows)
+        const assetsToInsert = uniqueRows.map((row, index) => ({
           asset_code: `${row['Asset Name'].trim().replace(/\s+/g, '_')}_${Date.now()}_${index}`,
           asset_category_id: categoryMap[row.Category.trim()],
           asset_status: (row.Status || 'operational').toLowerCase(),
@@ -245,33 +329,53 @@ const handleBulkUpload = async () => {
 
         console.log('Assets to insert:', assetsToInsert);
 
-        // Insert assets one by one to handle individual failures
-        const insertedAssets = [];
-        const failedAssets = [];
+      // Insert assets one by one to handle individual failures
+const insertedAssets = [];
+const failedAssets = [];
 
-        for (const assetData of assetsToInsert) {
-          try {
-            const { data, error } = await supabase
-              .from('assets')
-              .insert([assetData])
-              .select()
-              .single();
+for (const assetData of assetsToInsert) {
+  try {
+    // ✅ EXTRA CHECK: Verify this asset doesn't exist before inserting
+    const assetNameFromCode = assetData.asset_code.split('_').slice(0, -2).join('_'); // Remove timestamp and index
+    const { data: existingCheck } = await supabase
+      .from('assets')
+      .select('asset_id')
+      .eq('organization_id', orgId)
+      .ilike('asset_code', `%${assetNameFromCode}%`)
+      .eq('location', assetData.location)
+      .limit(1);
+    
+    if (existingCheck && existingCheck.length > 0) {
+      console.log(`⚠️ Skipping duplicate: ${assetData.asset_code}`);
+      failedAssets.push({ 
+        asset_code: assetData.asset_code, 
+        error: 'Duplicate asset (already exists in database)' 
+      });
+      continue; // Skip this asset
+    }
+    
+    // Proceed with insert if no duplicate found
+    const { data, error } = await supabase
+      .from('assets')
+      .insert([assetData])
+      .select()
+      .single();
 
-            if (error) {
-              console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
-              failedAssets.push({ asset_code: assetData.asset_code, error: error.message });
-            } else {
-              insertedAssets.push(data);
-            }
-          } catch (insertError) {
-            console.error(`Error inserting asset ${assetData.asset_code}:`, insertError);
-            failedAssets.push({ asset_code: assetData.asset_code, error: insertError.message });
-          }
-        }
+    if (error) {
+      console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
+      failedAssets.push({ asset_code: assetData.asset_code, error: error.message });
+    } else {
+      insertedAssets.push(data);
+      console.log(`✅ Successfully inserted: ${assetData.asset_code}`);
+    }
+  } catch (insertError) {
+    console.error(`Error inserting asset ${assetData.asset_code}:`, insertError);
+    failedAssets.push({ asset_code: assetData.asset_code, error: insertError.message });
+  }
+}
 
-        const insertedCount = insertedAssets.length;
-        const failedCount = failedAssets.length;
-
+        const successCount = insertedAssets.length;
+const failCount = failedAssets.length;
         // Refresh assets list
         await fetchAssets();
 
@@ -280,13 +384,45 @@ const handleBulkUpload = async () => {
         setCsvFile(null);
         setCsvPreview([]);
         
-        // Show detailed results
-        let resultMessage = `Asset upload completed!\n\n`;
-        resultMessage += `✓ Successfully inserted: ${insertedCount} assets\n`;
-        if (failedCount > 0) resultMessage += `✗ Failed: ${failedCount} assets\n`;
-        
-        alert(resultMessage);
-        // ✅ ADD: Audit log for bulk upload
+      // âœ… DETAILED SUCCESS MESSAGE
+    // ✅ SIMPLE & DIRECT MESSAGE
+let resultMessage = '';
+
+if (successCount > 0) {
+  // SUCCESS SCENARIO
+  resultMessage = `✅ Upload Successful!\n\n`;
+  resultMessage += `${successCount} asset(s) added successfully`;
+  
+  // Show what was skipped
+  if (duplicates.length > 0 || failCount > 0) {
+    resultMessage += `\n\nSkipped:`;
+    if (duplicates.length > 0) {
+      resultMessage += `\n• ${duplicates.length} duplicate(s)`;
+    }
+    if (failCount > 0) {
+      resultMessage += `\n• ${failCount} asset(s) already exist in database`;
+    }
+  }
+  
+} else {
+  // FAILURE SCENARIO - Nothing was uploaded
+  resultMessage = `❌ Upload Failed\n\n`;
+  resultMessage += `No assets were added to the system.\n\n`;
+  
+  // Explain WHY
+  if (duplicates.length > 0 && failCount > 0) {
+    resultMessage += `Reason: All ${duplicates.length + failCount} asset(s) already exist in the system.`;
+  } else if (duplicates.length > 0) {
+    resultMessage += `Reason: All ${duplicates.length} asset(s) in the CSV already exist (duplicates).`;
+  } else if (failCount > 0) {
+    resultMessage += `Reason: All ${failCount} asset(s) already exist in the database.`;
+  } else {
+    resultMessage += `Reason: No valid assets found in CSV file.`;
+  }
+}
+
+alert(resultMessage);
+        // âœ… ADD: Audit log for bulk upload
         const { data: { user: authUser } } = await supabase.auth.getUser();
         const { data: currentUserData } = await supabase
           .from('users')
@@ -294,15 +430,16 @@ const handleBulkUpload = async () => {
           .eq('email', authUser.email)
           .single();
         
-        if (currentUserData) {
-          await AuditLogger.logWithIP({
-            userId: currentUserData.user_id,
-            actionTaken: `Bulk uploaded ${insertedCount} assets via CSV`,
-            tableAffected: 'assets',
-            recordId: 0, // Use 0 for bulk operations
-            organizationId: orgId
-          });
-        }
+      // ✅ ONLY LOG IF SUCCESSFUL
+if (currentUserData && successCount > 0) {
+  await AuditLogger.logWithIP({
+    userId: currentUserData.user_id,
+    actionTaken: `Bulk uploaded ${successCount} assets via CSV`,
+    tableAffected: 'assets',
+    recordId: 0,
+    organizationId: orgId
+  });
+}
       } catch (innerError) {
         console.error('Error processing CSV:', innerError);
         alert(`Error: ${innerError.message}`);
@@ -375,6 +512,78 @@ const formatDate = (dateString) => {
   return `${month}-${day}-${year}`;
 };
 
+// Pagination Component
+const Pagination = () => {
+  const maxPageButtons = 5;
+  
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  
+  if (endPage - startPage < maxPageButtons - 1) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+  
+  const pageNumbers = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  return (
+    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+      <div className="text-muted">
+        Showing {startIndex + 1} to {Math.min(startIndex + recordsPerPage, totalRecords)} of {totalRecords} entries
+      </div>
+      <div className="d-flex gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        
+        <div className="d-flex gap-1">
+          {startPage > 1 && (
+            <>
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(1)}>1</Button>
+              {startPage > 2 && <span className="px-2">...</span>}
+            </>
+          )}
+          
+          {pageNumbers.map((pageNum) => (
+            <Button
+              key={pageNum}
+              variant={currentPage === pageNum ? "primary" : "outline-primary"}
+              size="sm"
+              onClick={() => setCurrentPage(pageNum)}
+            >
+              {pageNum}
+            </Button>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-2">...</span>}
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(totalPages)}>
+                {totalPages}
+              </Button>
+            </>
+          )}
+        </div>
+        
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+};
   return (
     <SidebarLayout role="sysadmin">
       <Container fluid>
@@ -506,6 +715,11 @@ const formatDate = (dateString) => {
     </p>
   </Alert>
 )}
+
+
+
+{/* Render pagination after table */}
+{!loading && !error && filteredAssets.length > 0 && <Pagination />}
 
 {/* Bulk Upload Modal */}
 <Modal show={showBulkUploadModal} onHide={() => setShowBulkUploadModal(false)} size="xl">
@@ -694,7 +908,7 @@ const formatDate = (dateString) => {
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <span className="fw-semibold small">{incident.reportedBy}</span>
-                      <span className="text-muted small">•</span>
+                      <span className="text-muted small">â€¢</span>
                       <span className="text-muted small">
                         {new Date(incident.reportedAt).toLocaleDateString('en-US', { 
                           month: 'short', 
@@ -702,7 +916,7 @@ const formatDate = (dateString) => {
                           year: 'numeric'
                         })}
                       </span>
-                      <span className="text-muted small">•</span>
+                      <span className="text-muted small">â€¢</span>
                       <span className="fw-bold text-dark small">{incident.type}</span>
                       <Badge 
                         bg={

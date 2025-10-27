@@ -445,6 +445,7 @@ async fetchMyTasks() {
       // Return in component-expected format
       return {
         id: data.asset_code,
+        assetId: data.asset_id,    
         name: data.asset_name || data.asset_code,
         category: data.asset_categories.category_name,
         location: data.location || '',

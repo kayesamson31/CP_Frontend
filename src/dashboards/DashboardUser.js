@@ -112,43 +112,44 @@ useEffect(() => {
   }
 }, [selectedStatus, selectedPriority, searchTerm]);
 
+// Real-time updates for "To Review" status only
+useEffect(() => {
+  if (selectedStatus !== 'To Review') return;
 
+  // Subscribe to work_orders changes
+  const channel = supabase
+    .channel('work-orders-updates')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'work_orders'
+      },
+      async (payload) => {
+        console.log('Work order change detected:', payload);
+        // Refresh data when changes occur
+        await loadStatusCounts();
+        await loadWorkOrders();
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [selectedStatus]);
 
  //  Ito ang medyo complex: Polling mechanism
   // Gusto kong mag-refresh ng data automatically kada ilang seconds
   // Depende kung anong tab ang tinitingnan (faster if "To Review" or "Pending")
 useEffect(() => {
-  let pollInterval;
-  
-  // Faster polling when user is actively viewing "To Review" or recent orders
-  const shouldPollFast = selectedStatus === 'To Review' || selectedStatus === 'Pending';
-  const pollInterval_ms = shouldPollFast ? 15000 : 60000; // 15s for active, 60s for others
-  
-  const pollForUpdates = async () => {
-    if (!loading && document.visibilityState === 'visible') { // Only poll when tab is active
-      setBackgroundRefreshing(true);
-      await loadWorkOrders();
-      setBackgroundRefreshing(false);
-    }
-  };
-  
-  pollInterval = setInterval(pollForUpdates, pollInterval_ms);
-  
-  // Gumamit din ako ng event listener para kapag binalikan ng user yung tab, mag-refresh agad
-  const handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible') {
-      // User came back to tab, refresh immediately
-      pollForUpdates();
-    }
-  };
-  
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-  
-  return () => {
-    clearInterval(pollInterval);
-    document.removeEventListener('visibilitychange', handleVisibilityChange);
-  };
-}, [selectedStatus, loading]);
+  // Only refresh when user switches to "To Review" status
+  // This catches new work orders without constant polling
+  if (selectedStatus === 'To Review' && !loading) {
+    loadWorkOrders();
+  }
+}, [selectedStatus]);
 
   //Initial load function
 const loadInitialData = async () => {
@@ -529,26 +530,60 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 <div className="mb-3 d-flex justify-content-between align-items-center">
   <h5 style={{color: '#284386' }}>History</h5>
   
-  {/* Background refresh indicator */}
-  {backgroundRefreshing && (
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: '8px',
-      color: '#6c757d',
-      fontSize: '13px'
-    }}>
-      <div className="spinner-border spinner-border-sm" style={{ width: '14px', height: '14px' }}></div>
-      <span>Checking for updates...</span>
-    </div>
-  )}
-  
-  {/* Last updated timestamp */}
-  {!backgroundRefreshing && (
-    <small style={{ color: '#6c757d' }}>
-      Last updated: {new Date().toLocaleTimeString()}
-    </small>
-  )}
+  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+    {/* Manual Refresh Button */}
+    <button
+      onClick={async () => {
+        setBackgroundRefreshing(true);
+        await loadStatusCounts();
+        await loadWorkOrders();
+        setBackgroundRefreshing(false);
+      }}
+      disabled={backgroundRefreshing}
+      style={{
+        background: backgroundRefreshing ? '#6c757d' : '#284CFF',
+        color: 'white',
+        border: 'none',
+        borderRadius: '6px',
+        padding: '6px 12px',
+        fontSize: '13px',
+        cursor: backgroundRefreshing ? 'not-allowed' : 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        transition: 'all 0.2s'
+      }}
+      onMouseEnter={(e) => {
+        if (!backgroundRefreshing) {
+          e.currentTarget.style.background = '#1a3acc';
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!backgroundRefreshing) {
+          e.currentTarget.style.background = '#284CFF';
+        }
+      }}
+    >
+      {backgroundRefreshing ? (
+        <>
+          <div className="spinner-border spinner-border-sm" style={{ width: '12px', height: '12px' }}></div>
+          <span>Refreshing...</span>
+        </>
+      ) : (
+        <>
+          <i className="bi bi-arrow-clockwise"></i>
+          <span>Refresh</span>
+        </>
+      )}
+    </button>
+    
+    {/* Last updated timestamp */}
+    {!backgroundRefreshing && (
+      <small style={{ color: '#6c757d' }}>
+        Updated: {new Date().toLocaleTimeString()}
+      </small>
+    )}
+  </div>
 </div>
                     
                 <table className="table table-hover align-middle mb-0 ">

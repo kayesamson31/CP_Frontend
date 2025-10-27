@@ -50,7 +50,7 @@ export default function SidebarLayout({ children }) {
   const [role, setRole] = useState('standard');
   const [loading, setLoading] = useState(true);
   const menus = menuConfig[role] || menuConfig.standard;
-
+  const [notificationsFetched, setNotificationsFetched] = useState(false);
   useEffect(() => {
     const getUserRoleFromSupabase = async () => {
       try {
@@ -105,6 +105,9 @@ export default function SidebarLayout({ children }) {
   }, []);
 
 useEffect(() => {
+  // Skip if role is still loading
+  if (loading || !role) return;
+
   const fetchNotificationCount = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -112,43 +115,31 @@ useEffect(() => {
 
       const { data: userData } = await supabase
         .from('users')
-        .select('user_id, role_id')
+        .select('user_id, role_id, organization_id')
         .eq('email', user.email)
         .single();
 
       if (!userData) return;
 
-      const roleId = userData.role_id;
-      const userId = userData.user_id;
-
-    // Get user's organization
-const { data: orgData } = await supabase
-  .from('users')
-  .select('organization_id')
-  .eq('email', user.email)
-  .single();
-
-const organizationId = orgData?.organization_id;
-
-const { data: notifications, error } = await supabase
-  .from('notifications')
-  .select('notification_id')
-  .eq('organization_id', organizationId)  // ✅ ADD THIS
-  .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
-  .eq('is_active', true);
+      const { data: notifications, error } = await supabase
+        .from('notifications')
+        .select('notification_id')
+        .eq('organization_id', userData.organization_id)
+        .or(`target_roles.eq.${userData.role_id},target_user_id.eq.${userData.user_id}`)
+        .eq('is_active', true);
 
       if (error) throw error;
 
       const { data: readNotifs } = await supabase
         .from('notification_user_reads')
         .select('notification_id')
-        .eq('user_id', userId);
+        .eq('user_id', userData.user_id);
 
       const readIds = (readNotifs || []).map(r => r.notification_id);
       const unreadCount = notifications.filter(n => !readIds.includes(n.notification_id)).length;
 
-      console.log('Sidebar notification count:', unreadCount);
       setNotificationCount(unreadCount);
+      setNotificationsFetched(true);
 
     } catch (error) {
       console.error('Error fetching notification count:', error);
@@ -156,14 +147,13 @@ const { data: notifications, error } = await supabase
     }
   };
   
-  if (role && role !== 'standard') {
-    fetchNotificationCount();
-  } else if (role === 'standard') {
-    fetchNotificationCount();
-  }
+  // Initial fetch
+  fetchNotificationCount();
   
-  const interval = setInterval(fetchNotificationCount, 10000);
+  // Poll every 30 seconds instead of 10 (reduces load)
+  const interval = setInterval(fetchNotificationCount, 30000);
   
+  // Real-time subscription for instant updates
   const channel = supabase
     .channel('sidebar-notifications-' + role)
     .on(
@@ -174,7 +164,6 @@ const { data: notifications, error } = await supabase
         table: 'notifications'
       },
       () => {
-        console.log('Notification change detected');
         fetchNotificationCount();
       }
     )
@@ -186,7 +175,6 @@ const { data: notifications, error } = await supabase
         table: 'notification_user_reads'
       },
       () => {
-        console.log('Notification read change detected');
         fetchNotificationCount();
       }
     )
@@ -196,7 +184,7 @@ const { data: notifications, error } = await supabase
     clearInterval(interval);
     supabase.removeChannel(channel);
   };
-}, [role]);
+}, [role, loading]); // Only re-run when role or loading changes
 
   const handleLogout = async () => {
     try {
@@ -290,25 +278,29 @@ const { data: notifications, error } = await supabase
                 {renderIcon(tab, isActive)}
                 {tab.label}
                 
-                {(tab.label === 'Notification' || tab.label === 'Notifications') && notificationCount > 0 && (
-                  <span
-                    style={{
-                      backgroundColor: '#DC3545',
-                      color: 'white',
-                      borderRadius: '50%',
-                      width: '20px',
-                      height: '20px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '12px',
-                      fontWeight: 'bold',
-                      marginLeft: 'auto'
-                    }}
-                  >
-                    {notificationCount > 99 ? '99+' : notificationCount}
-                  </span>
-                )}
+                {(tab.label === 'Notification' || tab.label === 'Notifications') && (
+  notificationsFetched ? (
+    notificationCount > 0 && (
+      <span
+        style={{
+          backgroundColor: '#DC3545',
+          color: 'white',
+          borderRadius: '50%',
+          width: '20px',
+          height: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '12px',
+          fontWeight: 'bold',
+          marginLeft: 'auto'
+        }}
+      >
+        {notificationCount > 99 ? '99+' : notificationCount}
+      </span>
+    )
+  ) : null
+)}
               </Nav.Link>
             );
           })}

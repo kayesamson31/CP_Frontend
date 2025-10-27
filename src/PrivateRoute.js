@@ -71,7 +71,7 @@ const PrivateRoute = ({ children, allowedRoles }) => {
     };
 
     checkAuth();  // tawagin yung function pag-load ng component
-  }, [allowedRoles]);
+  }, []); // ✅ Run only once on mount
 
    // Habang chine-check pa yung authentication/authorization
   if (loading) {

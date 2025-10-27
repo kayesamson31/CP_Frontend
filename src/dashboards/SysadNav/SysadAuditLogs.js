@@ -4,104 +4,6 @@ import { Modal, Button, Table, Form, Card, Spinner, Alert, Dropdown, ButtonGroup
 import SidebarLayout from "../../Layouts/SidebarLayout";
 import { supabase } from '../../supabaseClient';
 
-// EXAMPLE HARDCODED DATA - Remove this when connecting to real API
-const EXAMPLE_LOGS = [
-  {
-    id: 1,
-    timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // 30 minutes ago
-    user: "admin@dlsud.edu.ph",
-    role: "System Administrator",
-    category: "Security",
-    actionTaken: "Failed login attempt detected from suspicious IP",
-    severity: "Critical",
-    ipAddress: "192.168.1.100",
-    details: "Multiple failed login attempts (5) detected from IP address 192.168.1.100. Account temporarily locked for security.",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    sessionId: "sess_abc123def456",
-    beforeValue: { loginAttempts: 4, accountStatus: "active" },
-    afterValue: { loginAttempts: 5, accountStatus: "locked" }
-  },
-  {
-    id: 2,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // 2 hours ago
-    user: "maria.santos@dlsud.edu.ph",
-    role: "Admin Official",
-    category: "User Management",
-    actionTaken: "Created new personnel account",
-    severity: "Info",
-    ipAddress: "192.168.1.50",
-    details: "New personnel account created for Juan Dela Cruz (juan.delacruz@dlsud.edu.ph) with Personnel role.",
-    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-    sessionId: "sess_xyz789ghi012",
-    beforeValue: null,
-    afterValue: { 
-      userId: "usr_456", 
-      email: "juan.delacruz@dlsud.edu.ph", 
-      role: "Personnel", 
-      status: "active" 
-    }
-  },
-  {
-    id: 3,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4).toISOString(), // 4 hours ago
-    user: "system.admin@dlsud.edu.ph",
-    role: "System Administrator",
-    category: "System Config",
-    actionTaken: "Updated system configuration settings",
-    severity: "Warning",
-    ipAddress: "192.168.1.10",
-    details: "Modified system backup retention policy from 30 days to 90 days. Previous configuration backed up automatically.",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    sessionId: "sess_mno345pqr678",
-    beforeValue: { backupRetentionDays: 30, autoBackup: true },
-    afterValue: { backupRetentionDays: 90, autoBackup: true }
-  },
-  {
-    id: 4,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), // 6 hours ago
-    user: "external.auditor@pwc.com",
-    role: "External Auditor",
-    category: "Authentication",
-    actionTaken: "Successful login from external network",
-    severity: "Info",
-    ipAddress: "203.177.12.45",
-    details: "External auditor successfully authenticated for quarterly compliance review. VPN connection established.",
-    userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
-    sessionId: "sess_stu901vwx234",
-    beforeValue: { lastLogin: "2024-08-15T10:30:00Z", loginCount: 15 },
-    afterValue: { lastLogin: "2024-09-10T08:45:00Z", loginCount: 16 }
-  },
-  {
-    id: 5,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 8).toISOString(), // 8 hours ago
-    user: "pedro.reyes@dlsud.edu.ph",
-    role: "Personnel",
-    category: "Role Management",
-    actionTaken: "Role permission modification attempted",
-    severity: "Critical",
-    ipAddress: "192.168.1.75",
-    details: "Personnel user attempted to modify their own role permissions. Action blocked by system security policy.",
-    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
-    sessionId: "sess_yza567bcd890",
-    beforeValue: { permissions: ["read", "create"], roleModifyAttempts: 0 },
-    afterValue: { permissions: ["read", "create"], roleModifyAttempts: 1 }
-  },
-  {
-    id: 6,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(), // 12 hours ago
-    user: "admin@dlsud.edu.ph",
-    role: "System Administrator",
-    category: "Security",
-    actionTaken: "Database backup completed successfully",
-    severity: "Info",
-    ipAddress: "192.168.1.10",
-    details: "Automated daily database backup completed. Backup file size: 2.4GB. Stored in encrypted cloud storage.",
-    userAgent: "System/Automated",
-    sessionId: "system_automated",
-    beforeValue: { lastBackup: "2024-09-09T00:00:00Z", backupSize: "2.3GB" },
-    afterValue: { lastBackup: "2024-09-10T00:00:00Z", backupSize: "2.4GB" }
-  }
-];
 
 export default function SysadAuditLogs() {
   const [logs, setLogs] = useState([]);
@@ -117,7 +19,7 @@ export default function SysadAuditLogs() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
-  const [recordsPerPage] = useState(19);
+  const [recordsPerPage] = useState(17);
 
   // Debounce search
   const [searchDebounce, setSearchDebounce] = useState("");
@@ -526,13 +428,12 @@ const Pagination = () => {
                         style={{ cursor: "pointer" }}
                         onClick={() => setSelectedLog(log)}
                       >
-                    <td>
+<td>
   <small className="text-muted">
-    {new Date(log.timestamp).toLocaleDateString('en-US', {
+    {new Date(new Date(log.timestamp).getTime() + (8 * 60 * 60 * 1000)).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
-      year: 'numeric'
-    })}, {new Date(log.timestamp).toLocaleTimeString('en-US', {
+      year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true
@@ -584,12 +485,11 @@ const Pagination = () => {
       <div className="col-md-6">
         <div className="mb-3">
           <strong className="text-primary">⏰ Timestamp:</strong>
-         <div>
-  {new Date(selectedLog.timestamp).toLocaleDateString('en-US', {
+      <div>
+  {new Date(new Date(selectedLog.timestamp).getTime() + (8 * 60 * 60 * 1000)).toLocaleString('en-US', {
     month: 'long',
     day: 'numeric',
-    year: 'numeric'
-  })} at {new Date(selectedLog.timestamp).toLocaleTimeString('en-US', {
+    year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true

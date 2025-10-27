@@ -22,6 +22,7 @@ export default function Assets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
+  
   // Sample hardcoded data for visualization
   const sampleAssets = [
     {

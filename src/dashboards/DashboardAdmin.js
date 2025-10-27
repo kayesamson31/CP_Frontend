@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAdminDashboard } from '../contexts/AdminDashboardContext';
 import { useNavigate } from 'react-router-dom';
 import { Col, Modal, Badge } from 'react-bootstrap';
 import { supabase } from '../supabaseClient';
@@ -14,6 +15,7 @@ import {
 import{AuthUtils} from '../utils/AuthUtils'
 
 export default function DashboardAdmin() {
+  const { dashboardData, loading: contextLoading, refreshData } = useAdminDashboard();
   const navigate = useNavigate();
   const [loadingCalendar, setLoadingCalendar] = useState(false);
 const [calendarError, setCalendarError] = useState(null);
@@ -78,231 +80,55 @@ const sampleEvents = [
 const [recentActivities, setRecentActivities] = useState([]);
 const [availablePersonnel, setAvailablePersonnel] = useState([]);
 const [adminName, setAdminName] = useState('Admin');
+
+
 useEffect(() => {
-  const fetchAdminData = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-const { data: userData } = await supabase
-  .from('users')
-  .select('full_name, organization_id, job_position')
-  .eq('auth_uid', user.id)
-  .single();
-
-      if (userData) {
-        setAdminName(userData.full_name);
-        setUserRole(userData.job_position || 'Admin Official');
-        
-        // Fetch organization name
-        const { data: orgData } = await supabase
-          .from('organizations')
-          .select('org_name')
-          .eq('organization_id', userData.organization_id)
-          .single();
-        
-        if (orgData) {
-          setOrganizationName(orgData.org_name);
-        }
+  if (dashboardData && !contextLoading) {
+    setAdminName(dashboardData.adminName);
+    setUserRole(dashboardData.userRole);
+    setOrganizationName(dashboardData.organizationName);
+    
+    // Map stats data with icons from component
+    setStatsData([
+      {
+        title: "Pending Approvals",
+        value: dashboardData.statsData[0]?.value || 0,
+        subtitle: "Work orders awaiting review",
+        color: "#dc3545",
+        icon: AlertTriangle,
+        route: "/dashboard-admin/WorkOrder"
+      },
+      {
+        title: "Overdue Tasks",
+        value: dashboardData.statsData[1]?.value || 0,
+        subtitle: "Maintenance past due",
+        color: "#fd7e14",
+        icon: Clock,
+        route: "/dashboard-admin/MaintenanceTasks"
+      },
+      {
+        title: "Extended Tasks",
+        value: dashboardData.statsData[2]?.value || 0,
+        subtitle: "Extended due dates",
+        color: "#ffc107",
+        icon: CalendarDays,
+        route: "/dashboard-admin/MaintenanceTasks"
+      },
+      {
+        title: "Asset Maintenance",
+        value: dashboardData.statsData[3]?.value || 0,
+        subtitle: "Assets needing service",
+        color: "#17a2b8",
+        icon: Wrench,
+        route: "/dashboard-admin/AssetManagement"
       }
-    } catch (error) {
-      console.error('Error fetching admin data:', error);
-    }
-  };
-
-  fetchAdminData();
-}, []);
-
-useEffect(() => {
-  const fetchDailyMetrics = async () => {
-    try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-
-      const orgId = AuthUtils.getCurrentOrganizationId();
-      
-      // 1. Pending Approvals
-      const { count: pendingCount } = await supabase
-        .from('work_orders')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .in('status_id', [1, 6]);
-
-      // 2. Overdue Tasks - ONLY active maintenance tasks past due
-      const { data: overdueTasks } = await supabase
-        .from('maintenance_tasks')
-        .select('task_id, status_id, due_date')
-        .eq('organization_id', orgId)
-        .lt('due_date', new Date().toISOString())
-        .in('status_id', [1, 2, 6]); // ONLY Pending, In Progress, To Review
-
-      const overdueCount = overdueTasks?.length || 0;
-
-      // 3. Extended Tasks - Get task_ids from extensions, then check if active
-      const { data: extensionRecords } = await supabase
-        .from('maintenance_task_extensions')
-        .select('task_id')
-        .eq('organization_id', orgId);
-
-      let extendedCount = 0;
-      if (extensionRecords && extensionRecords.length > 0) {
-        const uniqueTaskIds = [...new Set(extensionRecords.map(r => r.task_id))];
-        
-        // Check which of these tasks are still active (NOT completed)
-        const { data: activeTasks } = await supabase
-          .from('maintenance_tasks')
-          .select('task_id')
-          .in('task_id', uniqueTaskIds)
-          .in('status_id', [1, 2, 6]); // ONLY Pending, In Progress, To Review
-        
-        extendedCount = activeTasks?.length || 0;
-      }
-
-      // 4. Asset Maintenance - assets needing maintenance
-      const { count: assetCount } = await supabase
-        .from('assets')
-        .select('*', { count: 'exact', head: true })
-        .eq('organization_id', orgId)
-        .lte('next_maintenance', new Date().toISOString())
-        .eq('asset_status', 'active');
-
-      setStatsData([
-        {
-          title: "Pending Approvals",
-          value: pendingCount || 0,
-          subtitle: "Work orders awaiting review",
-          color: "#dc3545",
-          icon: AlertTriangle,
-          route: "/dashboard-admin/WorkOrder"
-        },
-        {
-          title: "Overdue Tasks",
-          value: overdueCount || 0,
-          subtitle: "Maintenance past due",
-          color: "#fd7e14",
-          icon: Clock,
-          route: "/dashboard-admin/MaintenanceTasks"
-        },
-        {
-          title: "Extended Tasks",
-          value: extendedCount || 0,
-          subtitle: "Extended due dates",
-          color: "#ffc107",
-          icon: CalendarDays,
-          route: "/dashboard-admin/MaintenanceTasks"
-        },
-        {
-          title: "Asset Maintenance",
-          value: assetCount || 0,
-          subtitle: "Assets needing service",
-          color: "#17a2b8",
-          icon: Wrench,
-          route: "/dashboard-admin/AssetManagement"
-        }
-      ]);
-
-    } catch (error) {
-      console.error('Error fetching metrics:', error);
-    }
-  };
-
-  fetchDailyMetrics();
-}, []);
-
-
-
-useEffect(() => {
-  const fetchRecentActivity = async () => {
-    try {
-      const orgId = AuthUtils.getCurrentOrganizationId();
-      const { data: activities, error } = await supabase
-        .from('activity_tracking')
-        .select(`
-          activity_id,
-          activity_type,
-          description,
-          timestamp,
-          user_id,
-          users!activity_tracking_user_id_fkey (full_name)
-        `)
-        .eq('organization_id', orgId) 
-        .order('timestamp', { ascending: false })
-        .limit(5);
-
-      if (error) throw error;
-
-      const formattedActivities = activities.map(activity => ({
-        action: activity.description,
-        user: activity.users?.full_name || 'Unknown',
-        time: formatTimeAgo(activity.timestamp),
-        type: activity.activity_type
-      }));
-
-      setRecentActivities(formattedActivities);
-
-    } catch (error) {
-      console.error('Error fetching recent activity:', error);
-    }
-  };
-
-  fetchRecentActivity();
-}, []);
-
-useEffect(() => {
-  const fetchAvailablePersonnel = async () => {
-    try {
-      // Fetch users with role_id 3 (personnel) who are active
-    const orgId = AuthUtils.getCurrentOrganizationId();
-const { data: personnel, error } = await supabase
-  .from('users')
-  .select('user_id, full_name, job_position, user_status')
-  .eq('organization_id', orgId)  // ← ADD THIS
-  .eq('role_id', 3)
-  .eq('user_status', 'active')
-  .order('full_name', { ascending: true });
-
-      if (error) throw error;
-
-      // Check if personnel are currently assigned to active tasks
-      const personnelWithStatus = await Promise.all(
-        personnel.map(async (person) => {
-          // Check maintenance_tasks
-          const { count: activeTasks } = await supabase
-            .from('maintenance_tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', person.user_id)
-            .in('status_id', [1, 2]); // Pending or In Progress
-
-          let status = 'Available';
-          let statusColor = '#198754';
-
-          if (activeTasks > 0) {
-            status = 'On Task';
-            statusColor = '#0d6efd';
-          }
-
-          return {
-            name: person.full_name,
-            role: person.job_position || 'Personnel',
-            status: status,
-            statusColor: statusColor,
-            activeTaskCount: activeTasks || 0
-          };
-        })
-      );
-
-      setAvailablePersonnel(personnelWithStatus);
-
-    } catch (error) {
-      console.error('Error fetching personnel:', error);
-    }
-  };
-
-  fetchAvailablePersonnel();
-}, []);
-useEffect(() => {
-  fetchAllOrgTasks();
-}, []);
+    ]);
+    
+    setRecentActivities(dashboardData.recentActivities);
+    setAvailablePersonnel(dashboardData.availablePersonnel);
+    setCalendarEvents(dashboardData.calendarEvents);
+  }
+}, [dashboardData, contextLoading]);
 
 
 const formatTimeAgo = (timestamp) => {
@@ -319,105 +145,17 @@ const formatTimeAgo = (timestamp) => {
   const diffInDays = Math.floor(diffInHours / 24);
   return `${diffInDays} day${diffInDays > 1 ? 's' : ''} ago`;
 };
-
 const fetchAllOrgTasks = async () => {
   try {
     setLoadingCalendar(true);
     setCalendarError(null);
     
-    const orgId = AuthUtils.getCurrentOrganizationId();
-    
-    // Fetch Work Orders with personnel info
-    const { data: workOrders, error: woError } = await supabase
-      .from('work_orders')
-      .select(`
-        work_order_id,
-        title,
-        description,
-        due_date,
-        location,
-        category,
-        asset_text,
-        assigned_to,
-        status_id,
-        priority_id,
-        admin_priority_id,
-        users!work_orders_assigned_to_fkey(full_name),
-        priority_levels!work_orders_priority_id_fkey(priority_name),
-        admin_priority_levels:priority_levels!work_orders_admin_priority_id_fkey(priority_name),
-        statuses(status_name)
-      `)
-      .eq('organization_id', orgId)
-      .not('assigned_to', 'is', null)
-      .in('status_id', [1, 2]); // Pending and In Progress only
-
-    if (woError) throw woError;
-
-    // Fetch Maintenance Tasks with personnel info
-    const { data: maintenanceTasks, error: mtError } = await supabase
-      .from('maintenance_tasks')
-      .select(`
-        task_id,
-        task_name,
-        description,
-        due_date,
-        assigned_to,
-        status_id,
-        priority_id,
-        asset_id,
-        incident_id,
-        users!maintenance_tasks_assigned_to_fkey(full_name),
-        priority_levels!maintenance_tasks_priority_id_fkey(priority_name),
-        statuses(status_name),
-        assets(asset_name, location)
-      `)
-      .eq('organization_id', orgId)
-      .not('assigned_to', 'is', null)
-      .in('status_id', [1, 2]); // Pending and In Progress only
-
-    if (mtError) throw mtError;
-
-    // Transform Work Orders
-    const transformedWO = (workOrders || []).map(wo => ({
-      id: wo.work_order_id,
-      title: wo.title,
-      description: wo.description || 'No description',
-      date: wo.due_date ? wo.due_date.split('T')[0] : null,
-      type: 'work_order',
-      location: wo.location || 'Not specified',
-      category: wo.category || 'General',
-      asset: wo.asset_text || 'Not specified',
-      priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
-      status: wo.statuses?.status_name || 'Pending',
-      personnelName: wo.users?.full_name || 'Unassigned',
-      personnelId: wo.assigned_to
-    }));
-
-    // Transform Maintenance Tasks
-    const transformedMT = (maintenanceTasks || []).map(mt => ({
-      id: mt.task_id,
-      title: mt.task_name,
-      description: mt.description || 'No description',
-      date: mt.due_date ? mt.due_date.split('T')[0] : null,
-      type: mt.incident_id ? 'incident_task' : 'maintenance_task',
-      location: mt.assets?.location || 'Not specified',
-      category: 'Maintenance',
-      asset: mt.assets?.asset_name || 'Not specified',
-      priority: (mt.priority_levels?.priority_name || 'medium').toLowerCase(),
-      status: mt.statuses?.status_name || 'Pending',
-      personnelName: mt.users?.full_name || 'Unassigned',
-      personnelId: mt.assigned_to,
-      isIncidentRelated: !!mt.incident_id
-    }));
-
-    // Combine and filter out tasks without dates
-    const allTasks = [...transformedWO, ...transformedMT].filter(task => task.date);
-    
-    setCalendarEvents(allTasks);
+    // Use refreshData from context to reload all data including calendar
+    await refreshData();
     
   } catch (error) {
-    console.error('Error fetching calendar tasks:', error);
-    setCalendarError('Failed to load calendar tasks');
+    console.error('Error refreshing calendar:', error);
+    setCalendarError('Failed to refresh calendar');
   } finally {
     setLoadingCalendar(false);
   }

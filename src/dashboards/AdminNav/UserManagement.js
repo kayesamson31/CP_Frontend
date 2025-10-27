@@ -24,7 +24,11 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [showDropdown, setShowDropdown] = useState(false);
-
+  // Pagination state
+const [currentPage, setCurrentPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
+const [totalRecords, setTotalRecords] = useState(0);
+const [recordsPerPage] = useState(19);
  const [roles, setRoles] = useState([]);
 
 const JOB_POSITIONS = [
@@ -580,18 +584,27 @@ useEffect(() => {
   fetchRoles();
 }, []);
 
-  // Filter users based on search and filters
-  useEffect(() => {
-    let filtered = users.filter(user => {
-      const matchesSearch = user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.email?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesRole = !roleFilter || user.role === roleFilter;
-      const matchesStatus = !statusFilter || user.status === statusFilter;
-      
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-    setFilteredUsers(filtered);
-  }, [users, searchTerm, roleFilter, statusFilter]);
+useEffect(() => {
+  // Filter all users
+  let allFiltered = users.filter(user => {
+    const matchesSearch = user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = !roleFilter || user.role === roleFilter;
+    const matchesStatus = !statusFilter || user.status === statusFilter;
+    
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+  
+  // Update pagination totals
+  setTotalRecords(allFiltered.length);
+  setTotalPages(Math.ceil(allFiltered.length / recordsPerPage));
+  
+  // Apply pagination
+  const startIndex = (currentPage - 1) * recordsPerPage;
+  const paginated = allFiltered.slice(startIndex, startIndex + recordsPerPage);
+  
+  setFilteredUsers(paginated);
+}, [users, searchTerm, roleFilter, statusFilter, currentPage, recordsPerPage]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1111,6 +1124,31 @@ const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com",
             </table>
           </div>
           
+  {filteredUsers.length > 0 && (
+    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+      <div className="text-muted">
+        Showing {((currentPage - 1) * recordsPerPage) + 1} to {Math.min(currentPage * recordsPerPage, totalRecords)} of {totalRecords} entries
+      </div>
+      <div className="d-flex gap-2">
+        <button
+          className="btn btn-outline-primary btn-sm"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+        >
+          Previous
+        </button>
+        
+        <button
+          className="btn btn-outline-primary btn-sm"
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  )}
+
           {filteredUsers.length === 0 && !loading && (
             <div className="text-center py-5 text-muted">
               <h5>No users found</h5>
