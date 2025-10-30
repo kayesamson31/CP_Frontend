@@ -29,6 +29,11 @@ const [priorities, setPriorities] = useState([]);
 const [loading, setLoading] = useState(true);
 const [submitting, setSubmitting] = useState(false);
 const [error, setError] = useState('');
+// Pagination state - ADD AFTER line 33 (after const [error, setError] = useState('');)
+const [currentPage, setCurrentPage] = useState(1);
+const [totalPages, setTotalPages] = useState(1);
+const [totalRecords, setTotalRecords] = useState(0);
+const [recordsPerPage] = useState(12);
 
  // Para sa background refresh indicator (nagche-check kung may bagong work orders)
 const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
@@ -63,6 +68,19 @@ const getStatusIcon = (status) => {
     case 'Cancelled': return 'bi bi-dash-circle';
     default: return 'bi bi-question-circle';
   }
+};
+
+// Function to format date to "Oct 23, 2025" format
+const formatDate = (dateString) => {
+  if (!dateString) return '–';
+  
+  const date = new Date(dateString);
+  
+  // Check if date is valid
+  if (isNaN(date.getTime())) return '–';
+  
+  const options = { year: 'numeric', month: 'short', day: 'numeric' };
+  return date.toLocaleDateString('en-US', options);
 };
 
 // Fetch user info
@@ -139,6 +157,13 @@ useEffect(() => {
     supabase.removeChannel(channel);
   };
 }, [selectedStatus]);
+
+// Update pagination when filters change - ADD THIS NEW USEEFFECT
+useEffect(() => {
+  setTotalRecords(allFilteredHistory.length);
+  setTotalPages(Math.ceil(allFilteredHistory.length / recordsPerPage));
+  setCurrentPage(1); // Reset to page 1 when filters change
+}, [selectedStatus, selectedPriority, searchTerm, historyData]);
 
  //  Ito ang medyo complex: Polling mechanism
   // Gusto kong mag-refresh ng data automatically kada ilang seconds
@@ -238,15 +263,20 @@ return {
   }
 };
 
-const filteredHistory = historyData.filter(item => {
-const statusMatch = item.status === selectedStatus;
-const priorityMatch = selectedPriority === 'All' || item.priority === selectedPriority;
-const searchMatch = searchTerm === '' || 
-  item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
-  item.location.toLowerCase().includes(searchTerm.toLowerCase());
+// NEW CODE - First filter all data
+const allFilteredHistory = historyData.filter(item => {
+  const statusMatch = item.status === selectedStatus;
+  const priorityMatch = selectedPriority === 'All' || item.priority === selectedPriority;
+  const searchMatch = searchTerm === '' || 
+    item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.location.toLowerCase().includes(searchTerm.toLowerCase());
   return statusMatch && priorityMatch && searchMatch;
 });
+
+// Apply pagination
+const startIndex = (currentPage - 1) * recordsPerPage;
+const filteredHistory = allFilteredHistory.slice(startIndex, startIndex + recordsPerPage);
 
 const handleAddWorkOrder = async () => {
   const errors = {};
@@ -338,6 +368,79 @@ if (loading) {
     </Container>
   );
 }
+
+// Pagination Component - ADD BEFORE THE MAIN RETURN
+const Pagination = () => {
+  const maxPageButtons = 5;
+  
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  
+  if (endPage - startPage < maxPageButtons - 1) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+  
+  const pageNumbers = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
+
+  return (
+    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+      <div className="text-muted">
+        Showing {startIndex + 1} to {Math.min(startIndex + recordsPerPage, totalRecords)} of {totalRecords} entries
+      </div>
+      <div className="d-flex gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        
+        <div className="d-flex gap-1">
+          {startPage > 1 && (
+            <>
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(1)}>1</Button>
+              {startPage > 2 && <span className="px-2">...</span>}
+            </>
+          )}
+          
+          {pageNumbers.map((pageNum) => (
+            <Button
+              key={pageNum}
+              variant={currentPage === pageNum ? "primary" : "outline-primary"}
+              size="sm"
+              onClick={() => setCurrentPage(pageNum)}
+            >
+              {pageNum}
+            </Button>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-2">...</span>}
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(totalPages)}>
+                {totalPages}
+              </Button>
+            </>
+          )}
+        </div>
+        
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+};
 
 return ( 
   <Container fluid style={{ backgroundColor: '#FFFFFFFF', minHeight: '100vh', padding: 0 }}>  
@@ -518,7 +621,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     }}
     onClick={() => setShowPriorityModal(true)}
   >
-  Priority Level
+  Task Information Guide
   </span>
 </div>
 
@@ -586,16 +689,21 @@ color: selectedStatus === status.label ? 'white' : '#495057'
   </div>
 </div>
                     
-                <table className="table table-hover align-middle mb-0 ">
-                  <thead style={{ backgroundColor: '#284C9A', color: 'white' }}>
-                  <tr>
-                    <th>Title</th>
-                    <th>Status</th>
-                    <th>Priority</th>
-                    <th>Timestamp</th>
-                    <th>{selectedStatus === 'To Review' ? 'Action' : 'Reason'}</th>
-                  </tr>
-                  </thead>
+              <table 
+  className="table table-hover align-middle mb-0" 
+  style={{ tableLayout: 'fixed', width: '100%' }}
+>
+<thead style={{ backgroundColor: '#284C9A', color: 'white' }}>
+  <tr>
+    <th style={{ width: '120px', minWidth: '120px' }}>Timestamp</th>
+    <th style={{ width: '350px', minWidth: '350px' }}>Title</th>
+    <th style={{ width: '180px', minWidth: '180px' }}>Priority</th>
+    <th style={{ width: '120px', minWidth: '120px' }}>
+      {selectedStatus === 'To Review' ? 'Action' : null}
+    </th>
+  </tr>
+</thead>
+
 
                 <tbody>
                 {filteredHistory.map((item, index) => (
@@ -611,18 +719,20 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     border: item.isOverdue ? '2px solid rgba(220, 53, 69, 0.2)' : 'inherit'
   }}
 >
-
-<td>{item.title}</td>
-<td>
-  <Badge style={{ backgroundColor: item.color }}>
-    {item.status}
-  </Badge>
+<td>{formatDate(item.timestamp)}</td>
+<td style={{ 
+  maxWidth: '350px',
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap' 
+}}>
+  {item.title}
 </td>
 
 
 <td>
-  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
-    {/* Priority Badge - Main element */}
+  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    {/* Priority Badge */}
     <Badge
       bg=""
       style={{
@@ -630,62 +740,49 @@ color: selectedStatus === status.label ? 'white' : '#495057'
         color: 'white',
         padding: '4px 10px',
         fontSize: '0.85rem',
-        borderRadius: '8px'
+        borderRadius: '8px',
+        minWidth: '75px',        
+        textAlign: 'center'  
       }}
     >
       {item.priority}
     </Badge>
     
-    {/* Compact Indicators Row - All in one line */}
-    {(item.adminUpdatedPriority || item.extensionCount > 0 || item.isOverdue) && (
-      <div style={{ 
-        display: 'flex', 
-        gap: '6px', 
-        fontSize: '10px',
-        flexWrap: 'wrap',
-        alignItems: 'center'
+    {/* Admin Icon */}
+    {item.adminUpdatedPriority && (
+      <i 
+        className="bi bi-shield-check" 
+        style={{ color: '#0066cc', fontSize: '14px' }}
+        title="Priority modified by admin"
+      ></i>
+    )}
+    
+    {/* Overdue Icon */}
+    {item.isOverdue && (
+      <i 
+        className="bi bi-exclamation-triangle-fill" 
+        style={{ color: '#dc3545', fontSize: '14px' }}
+        title="Overdue"
+      ></i>
+    )}
+    
+    {/* Extension Icon - NOW IN SAME ROW */}
+    {item.extensionCount > 0 && (
+      <span style={{ 
+        color: '#fd7e14', 
+        fontWeight: '600',
+        fontSize: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '3px'
       }}>
-        {item.adminUpdatedPriority && (
-          <span style={{ 
-            color: '#0066cc', 
-            fontWeight: '600',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px'
-          }}>
-            <i className="bi bi-shield-check"></i> Admin
-          </span>
-        )}
-        
-        {item.extensionCount > 0 && (
-          <span style={{ 
-            color: '#fd7e14', 
-            fontWeight: '600',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px'
-          }}>
-            <i className="bi bi-calendar-plus"></i> {item.extensionCount}x
-          </span>
-        )}
-        
-        {item.isOverdue && (
-          <span style={{ 
-            color: '#dc3545', 
-            fontWeight: '700',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '2px'
-          }}>
-            <i className="bi bi-exclamation-triangle-fill"></i> OVERDUE
-          </span>
-        )}
-      </div>
+        <i className="bi bi-calendar-plus" style={{ fontSize: '14px' }}></i>
+        {item.extensionCount}x
+      </span>
     )}
   </div>
 </td>
 
-<td>{item.timestamp}</td>
 <td>
   {item.status === 'To Review' ? (
     <Button
@@ -698,23 +795,20 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     >
       Cancel
     </Button>
-  ) : (
-    item.status === 'Failed' && item.failureReason 
-      ? item.failureReason 
-      : item.reason
-  )}
+  ) : null}
 </td>
       </tr>
       ))}
 
                   {filteredHistory.length === 0 && (
                     <tr>
-                      <td colSpan="5" className="text-center text-muted">No records found.</td>
+                      <td colSpan="4" className="text-center text-muted">No records found.</td>
                     </tr>
                     )}
                     </tbody>
                       </table>
                         </Card.Body>
+                          {filteredHistory.length > 0 && <Pagination />}
                           </Card>
                             </Row>
 
@@ -1013,6 +1107,8 @@ color: selectedStatus === status.label ? 'white' : '#495057'
             />
           </Form.Group>
 
+              
+                
           <Row>
             <Col md={12}>
               <Form.Group className="mb-3">
@@ -1101,31 +1197,160 @@ Cancel
               >
 
               <Modal.Header closeButton>
-                <Modal.Title>Priority Levels</Modal.Title>
+                <Modal.Title>Task Information Guide</Modal.Title>
               </Modal.Header>
 
-            <Modal.Body>
-  {priorities.map(priority => (
-    <div key={priority.priority_id} className="mb-3">
-      <Badge 
-        bg="" 
-        style={{ 
-          backgroundColor: priority.color_code, 
-          color: 'white', 
-          padding: '8px 12px',
-          fontSize: '14px',
-          marginRight: '10px'
-        }}
-      >
-        {priority.priority_name}
-      </Badge>
-      <p className="mb-2 d-inline">
-        {priority.priority_name === 'Low' && 'Tasks that can be addressed when time permits.'}
-        {priority.priority_name === 'Medium' && 'Tasks that are important but not immediately critical.'}
-        {priority.priority_name === 'High' && 'Urgent tasks requiring immediate action.'}
-      </p>
+<Modal.Body style={{ padding: '25px' }}>
+  {/* Priority Levels Section */}
+  <div style={{ marginBottom: '30px' }}>
+    <h6 style={{ 
+      fontWeight: '700', 
+      marginBottom: '15px',
+      color: '#2c3e50',
+      fontSize: '16px'
+    }}>
+      Priority Levels
+    </h6>
+    
+    {priorities.map(priority => (
+      <div key={priority.priority_id} style={{ 
+        marginBottom: '12px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}>
+        <span style={{ fontSize: '18px' }}>
+          {priority.priority_name === 'Low'}
+          {priority.priority_name === 'Medium'}
+          {priority.priority_name === 'High'}
+        </span>
+        <Badge 
+          bg="" 
+          style={{ 
+            backgroundColor: priority.color_code, 
+            color: 'white', 
+            padding: '6px 12px',
+            fontSize: '13px',
+            minWidth: '75px',
+            textAlign: 'center'
+          }}
+        >
+          {priority.priority_name}
+        </Badge>
+        <span style={{ fontSize: '14px', color: '#495057' }}>
+          {priority.priority_name === 'Low' && '— Tasks that can be addressed when time permits.'}
+          {priority.priority_name === 'Medium' && '— Tasks that are important but not immediately critical.'}
+          {priority.priority_name === 'High' && '— Urgent tasks requiring immediate action.'}
+        </span>
+      </div>
+    ))}
+    
+    {/* Disclaimer */}
+    <div style={{
+      marginTop: '15px',
+      padding: '12px',
+      backgroundColor: '#fff3cd',
+      border: '1px solid #ffeaa7',
+      borderRadius: '8px',
+      fontSize: '13px',
+      color: '#856404'
+    }}>
+      <strong>Disclaimer:</strong> The suggested priority level may be adjusted by the Facility Manager depending on the request details, to ensure that the task priority is accurate.
     </div>
-  ))}
+  </div>
+
+  {/* Badges Section */}
+  <div>
+    <h6 style={{ 
+      fontWeight: '700', 
+      marginBottom: '15px',
+      color: '#2c3e50',
+      fontSize: '16px'
+    }}>
+      Badges
+    </h6>
+    
+    {/* Change Priority Badge */}
+    <div style={{ 
+      marginBottom: '15px',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '12px'
+    }}>
+      <i 
+        className="bi bi-shield-check" 
+        style={{ 
+          color: '#0066cc', 
+          fontSize: '20px',
+          marginTop: '2px'
+        }}
+      ></i>
+      <div>
+        <strong style={{ color: '#2c3e50', fontSize: '14px' }}>Change Priority Level</strong>
+        <p style={{ 
+          margin: '4px 0 0 0', 
+          fontSize: '13px', 
+          color: '#6c757d' 
+        }}>
+          Indicates that the Facility Manager or Admin has updated your suggested priority level.
+        </p>
+      </div>
+    </div>
+
+    {/* Overdue Badge */}
+    <div style={{ 
+      marginBottom: '15px',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '12px'
+    }}>
+      <i 
+        className="bi bi-exclamation-triangle-fill" 
+        style={{ 
+          color: '#dc3545', 
+          fontSize: '20px',
+          marginTop: '2px'
+        }}
+      ></i>
+      <div>
+        <strong style={{ color: '#2c3e50', fontSize: '14px' }}>Overdue</strong>
+        <p style={{ 
+          margin: '4px 0 0 0', 
+          fontSize: '13px', 
+          color: '#6c757d' 
+        }}>
+          The task is past its due date and requires immediate attention.
+        </p>
+      </div>
+    </div>
+
+    {/* Extended Due Badge */}
+    <div style={{ 
+      marginBottom: '0',
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '12px'
+    }}>
+      <i 
+        className="bi bi-calendar-plus" 
+        style={{ 
+          color: '#fd7e14', 
+          fontSize: '20px',
+          marginTop: '2px'
+        }}
+      ></i>
+      <div>
+        <strong style={{ color: '#2c3e50', fontSize: '14px' }}>Extended Due</strong>
+        <p style={{ 
+          margin: '4px 0 0 0', 
+          fontSize: '13px', 
+          color: '#6c757d' 
+        }}>
+          The task's due date has been extended.
+        </p>
+      </div>
+    </div>
+  </div>
 </Modal.Body>
 
                   <Modal.Footer>
@@ -1165,7 +1390,7 @@ Cancel
         <i className="bi bi-exclamation-triangle-fill" style={{ color: '#dc3545', fontSize: '16px' }}></i>
         <div>
           <strong style={{ color: '#dc3545' }}>This request is overdue!</strong><br />
-          <small style={{ color: '#666' }}>Due date was: {selectedWorkOrder.dateNeeded}</small>
+         <small style={{ color: '#666' }}>Due date was: {formatDate(selectedWorkOrder.dateNeeded)}</small>
         </div>
       </div>
     )}
@@ -1207,7 +1432,7 @@ Cancel
                       <p><strong>Priority:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.priority}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
-                      <p><strong>Date Needed:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.dateNeeded || 'â€”'}</span></p>
+                     <p><strong>Date Needed:</strong> <span style={{ fontWeight: '300' }}>{formatDate(selectedWorkOrder.dateNeeded)}</span></p>
                         </div>
                       <div style={{ marginBottom: '15px' }}>
                       <p><strong>Status:</strong> <span style={{ fontWeight: '300' }}>{selectedWorkOrder.status}</span></p>
@@ -1232,6 +1457,37 @@ Cancel
                        {selectedWorkOrder.description || 'â€”'}
                       </span>
                      </div>
+
+                          {/* ADD THIS - Rejection/Failure Reason */}
+{(selectedWorkOrder.status === 'Rejected' || selectedWorkOrder.status === 'Failed') && (
+  <div style={{ marginBottom: '15px' }}>
+    <p>
+      <strong>
+        {selectedWorkOrder.status === 'Failed' ? 'Failure Reason:' : 'Rejection Reason:'}
+      </strong>
+    </p>
+    <span
+      style={{
+        display: 'block',
+        maxWidth: '100%',
+        wordBreak: 'break-word',
+        whiteSpace: 'pre-wrap',
+        backgroundColor: '#fff5f5',
+        padding: '10px',
+        borderRadius: '5px',
+        fontSize: '14px',
+        color: '#dc3545',
+        border: '1px solid #f8d7da',
+        boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)'
+      }}
+    >
+      {selectedWorkOrder.status === 'Failed' && selectedWorkOrder.failureReason 
+        ? selectedWorkOrder.failureReason 
+        : selectedWorkOrder.reason || '—'}
+    </span>
+  </div>
+)}
+
                       {/* Extension History Display - ADD THIS */}
 {selectedWorkOrder.extensionHistory?.length > 0 && (
   <div style={{ marginBottom: '15px' }}>
@@ -1246,9 +1502,9 @@ Cancel
       <div style={{ marginBottom: '8px' }}>
         <strong>Total Extensions: {selectedWorkOrder.extensionCount}</strong>
         {selectedWorkOrder.originalDueDate && (
-          <span style={{ fontSize: '12px', color: '#666', marginLeft: '8px' }}>
-            (Original due: {selectedWorkOrder.originalDueDate.split('T')[0]})
-          </span>
+        <span style={{ fontSize: '12px', color: '#666', marginLeft: '8px' }}>
+  (Original due: {formatDate(selectedWorkOrder.originalDueDate)})
+</span>
         )}
       </div>
       {selectedWorkOrder.extensionHistory.map((ext, i) => (
@@ -1260,7 +1516,7 @@ Cancel
           marginBottom: '8px',
           fontSize: '13px'
         }}>
-          <div><strong>From:</strong> {ext.old_due_date.split('T')[0]} â†’ <strong>To:</strong> {ext.new_due_date.split('T')[0]}</div>
+         <div><strong>From:</strong> {formatDate(ext.old_due_date)} → <strong>To:</strong> {formatDate(ext.new_due_date)}</div>
           <div><strong>Reason:</strong> {ext.extension_reason}</div>
         </div>
       ))}

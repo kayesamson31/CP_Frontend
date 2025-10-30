@@ -22,7 +22,11 @@ export default function Assets() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [categories, setCategories] = useState([]);
-  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [recordsPerPage] = useState(17);
   // Sample hardcoded data for visualization
   const sampleAssets = [
     {
@@ -262,20 +266,102 @@ const handleCancelIncident = () => {
   setIncidentAsset(null);  // Clear the stored asset data
 };
 
+// Pagination Component
+const Pagination = () => {
+  const maxPageButtons = 5;
+  
+  let startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
+  let endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  
+  if (endPage - startPage < maxPageButtons - 1) {
+    startPage = Math.max(1, endPage - maxPageButtons + 1);
+  }
+  
+  const pageNumbers = [];
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i);
+  }
 
+  return (
+    <div className="d-flex justify-content-between align-items-center p-3 border-top">
+      <div className="text-muted">
+        Showing {startIndex + 1} to {Math.min(startIndex + recordsPerPage, totalRecords)} of {totalRecords} entries
+      </div>
+      <div className="d-flex gap-2">
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === 1}
+          onClick={() => setCurrentPage(currentPage - 1)}
+        >
+          Previous
+        </Button>
+        
+        <div className="d-flex gap-1">
+          {startPage > 1 && (
+            <>
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(1)}>1</Button>
+              {startPage > 2 && <span className="px-2">...</span>}
+            </>
+          )}
+          
+          {pageNumbers.map((pageNum) => (
+            <Button
+              key={pageNum}
+              variant={currentPage === pageNum ? "primary" : "outline-primary"}
+              size="sm"
+              onClick={() => setCurrentPage(pageNum)}
+            >
+              {pageNum}
+            </Button>
+          ))}
+          
+          {endPage < totalPages && (
+            <>
+              {endPage < totalPages - 1 && <span className="px-2">...</span>}
+              <Button variant="outline-primary" size="sm" onClick={() => setCurrentPage(totalPages)}>
+                {totalPages}
+              </Button>
+            </>
+          )}
+        </div>
+        
+        <Button
+          variant="outline-primary"
+          size="sm"
+          disabled={currentPage === totalPages}
+          onClick={() => setCurrentPage(currentPage + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+};
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState(""); // Changed from categoryFilter
   const [categoryFilter, setCategoryFilter] = useState("");
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [incidentAsset, setIncidentAsset] = useState(null);
   // Filtered assets - updated to include status filter
-  const filteredAssets = assets.filter(
-    (asset) =>
-      (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
-        asset.id?.toLowerCase().includes(search.toLowerCase())) &&
-      (statusFilter === "" || asset.status === statusFilter) &&
-      (categoryFilter === "" || asset.category === categoryFilter)
-  );
+// First filter all assets
+const allFilteredAssets = assets.filter(
+  (asset) =>
+    (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
+      asset.id?.toLowerCase().includes(search.toLowerCase())) &&
+    (statusFilter === "" || asset.status === statusFilter) &&
+    (categoryFilter === "" || asset.category === categoryFilter)
+);
+
+// Update total records and pages
+useEffect(() => {
+  setTotalRecords(allFilteredAssets.length);
+  setTotalPages(Math.ceil(allFilteredAssets.length / recordsPerPage));
+}, [allFilteredAssets.length, recordsPerPage]);
+
+// Apply pagination
+const startIndex = (currentPage - 1) * recordsPerPage;
+const filteredAssets = allFilteredAssets.slice(startIndex, startIndex + recordsPerPage);
 
   // Show loading state
   if (loading) {
@@ -432,6 +518,7 @@ const formatDate = (dateString) => {
           </tbody>
      </table>
   </div>
+  {!loading && !error && filteredAssets.length > 0 && <Pagination />}
 </div>
 
         {/* Show info message when no assets exist */}
@@ -840,7 +927,9 @@ const formatDate = (dateString) => {
     </Button>
   </Modal.Footer>
 </Modal>
+
       </Container>
+      
     </SidebarLayout>
   );
 }

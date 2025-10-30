@@ -40,7 +40,7 @@ import Reports from './dashboards/AdminNav/Reports';
 import ActivityTracking from './dashboards/AdminNav/ActivityTracking';
 import UserManagement from './dashboards/AdminNav/UserManagement';
 import AssetManagement from './dashboards/AdminNav/AssetManagement';
-
+import { checkAndNotifyOverdue } from './utils/OverdueNotifier';
 function App() {
    // Ginamit ko ang useEffect para i-initialize ang EmailJS service
   // sa tuwing maglo-load ang app. Para dito ko mache-check kung tama
@@ -107,9 +107,22 @@ useEffect(() => {
     });
   }
 
+  // ✨ ADD THIS SECTION - Overdue Task Checker
+  console.log('🔔 Initializing overdue task checker...');
+  
+  // Check immediately on app load
+  checkAndNotifyOverdue();
+  
+  // Then check every 6 hours (21600000 ms)
+  const overdueCheckInterval = setInterval(() => {
+    console.log('⏰ Running scheduled overdue check...');
+    checkAndNotifyOverdue();
+  }, 6 * 60 * 60 * 1000); // 6 hours
+
   // ✅ Cleanup auth listener on unmount
   return () => {
     authListener?.subscription.unsubscribe();
+     clearInterval(overdueCheckInterval); // ✨ ADD THIS
   };
 }, []);
   return (

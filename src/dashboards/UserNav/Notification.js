@@ -492,7 +492,10 @@ useEffect(() => {
                                 color: notification.isRead ? '#6C757D' : '#495057',
                                 fontSize: '0.85rem',
                                 lineHeight: '1.4',
-                                marginBottom: '8px'
+                                marginBottom: '8px',
+                                fontWeight: notification.title.includes('Overdue') ? '600' : 'normal',
+                                color: notification.title.includes('Overdue') ? '#dc3545' : (notification.isRead ? '#6C757D' : '#495057')
+                                
                               }}>
                               {notification.message}
                             </p>

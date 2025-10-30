@@ -285,8 +285,7 @@ const { data: workOrderData, error: workOrderError } = await supabase
 
 if (workOrderError) throw workOrderError;
 
-// ✅ Notify admin and requester about extension
-// âœ… Notify admin and requester about extension
+// Notify admin and requester about extension
 try {
   const { data: userOrgData } = await supabase
     .from('users')
@@ -332,7 +331,7 @@ try {
     is_active: true
   });
   
-  console.log('âœ… Admin and requester notified about work order extension');
+  console.log('Admin and requester notified about work order extension');
 } catch (notifError) {
   console.error('âŒ Failed to notify about extension:', notifError);
 }
@@ -373,8 +372,7 @@ try {
   console.warn('Work order details update failed, but continuing...');
 }
 
-// ✅ Notify admin and requester about status update
-// âœ… Notify admin and requester about status update
+// Notify admin and requester about status update
 try {
   const statusMessage = status === 'completed' 
     ? `Personnel completed work order #${taskId}` 
@@ -390,7 +388,7 @@ try {
     .eq('user_id', userProfile.user_id)
     .single();
 
-  // âœ… SOLUTION: Create TWO separate notifications
+  //SOLUTION: Create TWO separate notifications
   
   // 1️⃣ Notification for ADMIN (role-based)
   await supabase.from('notifications').insert({
@@ -403,8 +401,8 @@ try {
       'Updated'
     }`,
     message: statusMessage,
-    target_roles: '2', // âœ… ONLY admin role
-    target_user_id: null, // âœ… NULL = all admins get it
+    target_roles: '2', // ONLY admin role
+    target_user_id: null, //NULL = all admins get it
     priority_id: status === 'failed' ? 3 : 2,
     related_table: 'work_orders',
     related_id: taskId,
@@ -423,8 +421,8 @@ try {
       'Updated'
     }`,
     message: statusMessage,
-    target_roles: null, // âœ… NULL because we're targeting specific user
-    target_user_id: workOrderData[0]?.requested_by, // âœ… Specific requester
+    target_roles: null, //NULL because we're targeting specific user
+    target_user_id: workOrderData[0]?.requested_by, //Specific requester
     priority_id: status === 'failed' ? 3 : 2,
     related_table: 'work_orders',
     related_id: taskId,
@@ -432,7 +430,7 @@ try {
     is_active: true
   });
   
-  console.log('âœ… Admin and requester notified about work order status update');
+  console.log('Admin and requester notified about work order status update');
 } catch (notifError) {
   console.error('âŒ Failed to create notification:', notifError);
 }
@@ -472,7 +470,12 @@ export default function DashboardPersonnel() {
   const [newDueDate, setNewDueDate] = useState('');
 
   // Tabs
-  const [showHistory, setShowHistory] = useState(false);
+// Tabs
+const [showHistory, setShowHistory] = useState(false);
+const [filterKey, setFilterKey] = useState(0);
+// Filters for History Tab
+const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'completed', 'failed'
+const [dateRangeFilter, setDateRangeFilter] = useState('all'); // 'all', 'week', 'month', '3months'
 
   // Helper functions to capitalize text
 const capitalizeStatus = (status) => {
@@ -609,6 +612,7 @@ const orgId = userProfile.organization_id;
           extensionCount: wo.extension_count || 0,
           lastExtensionReason: wo.last_extension_reason,
           extensionHistory: wo.work_order_extensions || [],
+          dateCompleted: wo.date_resolved,
           logs: []
         };
       });
@@ -646,6 +650,7 @@ const orgId = userProfile.organization_id;
           extensionCount: 0,
           lastExtensionReason: null,
           extensionHistory: [],
+          dateCompleted: task.dateCompleted,
           logs: [],
           // Keep maintenance task specific data
           workOrderId: task.workOrderId,
@@ -703,9 +708,57 @@ const orgId = userProfile.organization_id;
   ));
 
 
-  const getCompletedTasks = () => sortTasks(tasks.filter(t => 
+const getCompletedTasks = () => {
+  console.log('🔍 Getting completed tasks with filters:', { statusFilter, dateRangeFilter });
+  
+  let completedTasks = tasks.filter(t => 
     t.status === 'completed' || t.status === 'failed'
-  ));
+  );
+  
+  console.log('📊 Total completed/failed tasks:', completedTasks.length);
+  
+  // Apply status filter
+  if (statusFilter !== 'all') {
+    const beforeFilter = completedTasks.length;
+    completedTasks = completedTasks.filter(t => t.status === statusFilter);
+    console.log(`✅ After status filter (${statusFilter}):`, completedTasks.length, '(was', beforeFilter + ')');
+  }
+  
+  // Apply date range filter
+  if (dateRangeFilter !== 'all') {
+    const now = new Date();
+    const filterDate = new Date();
+    
+    switch(dateRangeFilter) {
+      case 'week':
+        filterDate.setDate(now.getDate() - 7);
+        break;
+      case 'month':
+        filterDate.setMonth(now.getMonth() - 1);
+        break;
+      case '3months':
+        filterDate.setMonth(now.getMonth() - 3);
+        break;
+    }
+    
+    const beforeDateFilter = completedTasks.length;
+    completedTasks = completedTasks.filter(t => {
+      const taskDate = new Date(t.dateCompleted || t.dueDate);
+      return taskDate >= filterDate;
+    });
+    console.log(`📅 After date filter (${dateRangeFilter}):`, completedTasks.length, '(was', beforeDateFilter + ')');
+  }
+  
+  // Sort by most recent first
+  const sorted = completedTasks.sort((a, b) => {
+    const dateA = new Date(a.dateCompleted || a.dueDate);
+    const dateB = new Date(b.dateCompleted || b.dueDate);
+    return dateB - dateA;
+  });
+  
+  console.log('✅ Final filtered tasks:', sorted.length);
+  return sorted;
+};
 
   const closeAllModals = () => {
     setShowTaskModal(false);
@@ -1137,9 +1190,10 @@ const cardStyle = {
   marginBottom: '20px',
   border: '1px solid rgba(0,0,0,0.06)',
   transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-  minHeight: '500px', // Increase minimum height to match calendar
+  //minHeight: '500px', // Increase minimum height to match calendar
   display: 'flex',      // Add flex display
-  flexDirection: 'column' // Add flex direction
+  flexDirection: 'column', // Add flex direction
+  height: '100%'
 };
 
 const calendarCardStyle = {
@@ -1293,150 +1347,267 @@ const twoColumnGrid = {
   <div style={{
     flex: 1, // Take remaining space
     overflowY: 'auto',
-    maxHeight: '630px', // Set maximum height
+    maxHeight: '580px', // Set maximum height
     paddingRight: '8px' // Add padding for scrollbar
   }}>
     {getTodayTasks().length === 0 ? (
       <EmptyState message="No tasks for today" />
     ) : (
-      getTodayTasks().map((task, index) => (
-        <div 
-          key={index} 
-          style={{
-            padding: '16px',
-            marginBottom: '12px',
-            backgroundColor: task.isOverdue ? '#fff5f5' : '#f8f9fa',
-            borderRadius: '8px',
-            border: task.isOverdue ? '2px solid #dc3545' : '1px solid #e9ecef',
-            transition: 'background-color 0.2s ease, transform 0.1s ease',
-            height: 'auto', 
-            minHeight: '80px', 
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'flex-start'
-          }}
-          onClick={() => handleTaskClick(task)}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = task.isOverdue ? '#fed7d7' : '#e9ecef';
-            e.currentTarget.style.transform = 'translateY(-1px)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = task.isOverdue ? '#fff5f5' : '#f8f9fa';
-            e.currentTarget.style.transform = 'translateY(0)';
-          }}
-        >
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'flex-start', 
-            marginBottom: '8px' 
-          }}>
-            <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'flex-end', 
-              gap: '4px' 
-            }}>
-              <Badge bg={
-                task.priority === 'high' ? 'danger' : 
-                task.priority === 'medium' ? 'warning' : 
-                'success'
-              } style={{ fontSize: '10px' }}>
-                {capitalizePriority(task.priority)}
-              </Badge>
-              {task.isOverdue && (
-                <Badge bg="danger" style={{ fontSize: '9px' }}>
-                  OVERDUE
-                </Badge>
-              )}
-            </div>
-          </div>
-          <div style={{ 
-            color: '#6c757d', 
-            fontSize: '13px', 
-            marginBottom: '4px' 
-          }}>
-            {task.description}
-          </div>
-          <div style={{ 
-            color: '#6c757d', 
-            fontSize: '13px', 
-            display: 'flex', 
-            alignItems: 'center' 
-          }}>
-            <MapPin size={12} style={{ marginRight: '4px' }} />
-            {task.location}
-          </div>
+getTodayTasks().map((task, index) => (
+  <div 
+    key={index} 
+    style={{
+      padding: '12px 16px',
+      marginBottom: '10px',
+      backgroundColor: task.isOverdue ? '#fff5f5' : '#fff',
+      borderRadius: '8px',
+      border: task.isOverdue ? '2px solid #dc3545' : '1px solid #e9ecef',
+      borderLeft: task.isOverdue ? '4px solid #dc3545' : '4px solid transparent',
+      transition: 'all 0.2s ease',
+      cursor: 'pointer'
+    }}
+    onClick={() => handleTaskClick(task)}
+    onMouseEnter={(e) => {
+      e.currentTarget.style.backgroundColor = task.isOverdue ? '#ffe5e5' : '#f8f9fa';
+      e.currentTarget.style.transform = 'translateX(2px)';
+      e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.08)';
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.backgroundColor = task.isOverdue ? '#fff5f5' : '#fff';
+      e.currentTarget.style.transform = 'translateX(0)';
+      e.currentTarget.style.boxShadow = 'none';
+    }}
+  >
+    <div style={{ 
+      display: 'flex', 
+      justifyContent: 'space-between', 
+      alignItems: 'center',
+      gap: '12px'
+    }}>
+      {/* Left: Title and location */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ 
+          fontWeight: '500', 
+          fontSize: '14px',
+          marginBottom: '4px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}>
+          {task.title}
         </div>
-      ))
+        <div style={{ 
+          color: '#6c757d', 
+          fontSize: '11px',
+          display: 'flex',
+          alignItems: 'center',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap'
+        }}>
+          <MapPin size={11} style={{ marginRight: '4px', flexShrink: 0 }} />
+          {task.location}
+        </div>
+      </div>
+      
+      {/* Right: Badges */}
+      <div style={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'flex-end', 
+        gap: '4px',
+        flexShrink: 0
+      }}>
+        <Badge bg={
+          task.priority === 'high' ? 'danger' : 
+          task.priority === 'medium' ? 'warning' : 
+          'success'
+        } style={{ fontSize: '10px' }}>
+          {capitalizePriority(task.priority)}
+        </Badge>
+        {task.isOverdue && (
+          <Badge bg="danger" style={{ fontSize: '9px' }}>
+            OVERDUE
+          </Badge>
+        )}
+      </div>
+    </div>
+  </div>
+))
     )}
   </div>
 </div>
                   </>
-                ) : (
-                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                    <h6 style={{ margin: 0, fontWeight: 'bold', marginBottom: '15px', display: 'flex', alignItems: 'center', flexShrink: 0  }}>
-                      <AlertTriangle size={16} style={{ marginRight: '8px', color: '#fd7e14' }} />
-                      Task History
-                    </h6>
-                   <div style={{
-  flex: 1, 
-  overflowY: 'auto',
-  maxHeight: '630px', 
-  paddingRight: '8px'
-}}>
-  {getCompletedTasks().length === 0 ? (
-    <EmptyState message="No completed tasks yet" />
-  ) : (
-    getCompletedTasks().map(task => (
-                        <div key={task.id}
-                          style={{
-                            padding: '16px',
-                            marginBottom: '12px',
-                            backgroundColor: '#f8f9fa',
-                            borderRadius: '8px',
-                            border: '1px solid #e9ecef',
-                            transition: 'background-color 0.2s ease, transform 0.1s ease',
-                            height: '110px',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'flex-start',
-                            cursor: 'pointer'
-                          }}
-                          onClick={() => handleTaskClick(task)}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.backgroundColor = '#e9ecef';
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.backgroundColor = '#f8f9fa';
-                            e.currentTarget.style.transform = 'translateY(0)';
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                            <div style={{ fontWeight: '500', fontSize: '14px' }}>{task.title}</div>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-                              <Badge bg={
-                                task.priority === 'high' ? 'danger' : 
-                                task.priority === 'medium' ? 'warning' : 
-                                'success'
-                              } style={{ fontSize: '10px' }}>
-                                {capitalizePriority(task.priority)}
-                              </Badge>
-                              <Badge bg={task.status === 'completed' ? 'success' : 'danger'} style={{ fontSize: '9px' }}>
-                                {task.status === 'completed' ? 'âœ“ Completed' : 'âœ— Failed'}
-                              </Badge>
-                            </div>
-                          </div>
-                          <div style={{ color: '#6c757d', fontSize: '13px' }}>{task.description}</div>
-                        </div>
-                      ))
-  )}
+) : (
+  <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+    <h6 style={{ 
+      margin: 0, 
+      fontWeight: 'bold', 
+      marginBottom: '15px', 
+      display: 'flex', 
+      alignItems: 'center', 
+      flexShrink: 0 
+    }}>
+      <AlertTriangle size={16} style={{ marginRight: '8px', color: '#fd7e14' }} />
+      Task History
+    </h6>
+    
+    {/* Search Bar */}
+{/* Filter Controls */}
+<div style={{ marginBottom: '15px', flexShrink: 0 }}>
+  <div className="row g-2">
+    {/* Status Filter */}
+    <div className="col-6">
+     <select
+  className="form-select form-select-sm"
+  value={statusFilter}
+  onChange={(e) => {
+    setStatusFilter(e.target.value);
+    setFilterKey(prev => prev + 1); 
+    console.log('🔄 Status filter changed to:', e.target.value);
+  }}
+        style={{
+          borderRadius: '8px',
+          border: '1px solid #dee2e6',
+          padding: '8px 12px',
+          fontSize: '13px'
+        }}
+      >
+        <option value="all">All Status</option>
+        <option value="completed">✓ Completed</option>
+        <option value="failed">✗ Failed</option>
+      </select>
+    </div>
+    
+    {/* Date Range Filter */}
+    <div className="col-6">
+      <select
+  className="form-select form-select-sm"
+  value={dateRangeFilter}
+  onChange={(e) => {
+    setDateRangeFilter(e.target.value);
+    setFilterKey(prev => prev + 1); 
+    console.log('📅 Date filter changed to:', e.target.value);
+  }}
+        style={{
+          borderRadius: '8px',
+          border: '1px solid #dee2e6',
+          padding: '8px 12px',
+          fontSize: '13px'
+        }}
+      >
+        <option value="all">All Time</option>
+        <option value="week">This Week</option>
+        <option value="month">This Month</option>
+        <option value="3months">Last 3 Months</option>
+      </select>
+    </div>
+  </div>
 </div>
-                  </div>
-                )}
+    
+    <div 
+      key={filterKey}
+    style={{
+      flex: 1, 
+      overflowY: 'auto',
+      maxHeight: '580px', 
+      paddingRight: '8px'
+    }}>
+{getCompletedTasks().length === 0 ? (
+  <EmptyState message={
+    statusFilter !== 'all' || dateRangeFilter !== 'all'
+      ? "No tasks found with selected filters" 
+      : "No completed tasks yet"
+  } />
+) : (
+        getCompletedTasks().map(task => (
+<div key={task.id}
+  style={{
+    padding: '12px 16px',
+    marginBottom: '10px',
+    backgroundColor: '#fff',
+    borderRadius: '8px',
+    border: '1px solid #e9ecef',
+    transition: 'all 0.2s ease',
+    cursor: 'pointer'
+  }}
+  onClick={() => handleTaskClick(task)}
+  onMouseEnter={(e) => {
+    e.currentTarget.style.backgroundColor = '#f8f9fa';
+    e.currentTarget.style.transform = 'translateX(2px)';
+    e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.08)';
+  }}
+  onMouseLeave={(e) => {
+    e.currentTarget.style.backgroundColor = '#fff';
+    e.currentTarget.style.transform = 'translateX(0)';
+    e.currentTarget.style.boxShadow = 'none';
+  }}
+>
+  {/* Single row layout */}
+  <div style={{ 
+    display: 'flex', 
+    justifyContent: 'space-between', 
+    alignItems: 'center',
+    gap: '12px'
+  }}>
+    {/* Left: Title and timestamp */}
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ 
+        fontWeight: '500', 
+        fontSize: '14px',
+        marginBottom: '4px',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }}>
+        {task.title}
+      </div>
+      <div style={{ 
+        color: '#6c757d', 
+        fontSize: '11px',
+        display: 'flex',
+        alignItems: 'center'
+      }}>
+        <Clock size={11} style={{ marginRight: '4px' }} />
+        {task.dateCompleted 
+          ? new Date(task.dateCompleted).toLocaleString('en-US', {
+              month: 'short',
+              day: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit'
+            })
+          : new Date(task.dueDate).toLocaleDateString()
+        }
+      </div>
+    </div>
+    
+    {/* Right: Badges */}
+    <div style={{ 
+      display: 'flex', 
+      gap: '6px',
+      flexShrink: 0
+    }}>
+      <Badge bg={
+        task.priority === 'high' ? 'danger' : 
+        task.priority === 'medium' ? 'warning' : 
+        'success'
+      } style={{ fontSize: '10px' }}>
+        {capitalizePriority(task.priority)}
+      </Badge>
+      <Badge 
+        bg={task.status === 'completed' ? 'success' : 'danger'} 
+        style={{ fontSize: '10px' }}
+      >
+        {task.status === 'completed' ? '✓' : '✗'}
+      </Badge>
+    </div>
+  </div>
+</div>
+        ))
+      )}
+    </div>
+  </div>
+)}
               </div>
             </div>
           </>
@@ -1642,7 +1813,7 @@ const twoColumnGrid = {
                   
                   {selectedTask.status === 'in-progress' && (
                     <button className="btn btn-dark" disabled>
-                      âœ“ In Progress
+                      In Progress
                     </button>
                   )}
                 </div>

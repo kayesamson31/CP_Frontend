@@ -131,22 +131,31 @@ const fetchPersonnel = async () => {
 
     if (error) throw error;
 
-    // ← ADD THIS: Transform personnel and add active task count
     const transformedPersonnel = await Promise.all(
       data.map(async (user) => {
-        // Check active tasks for this personnel
+        // Count active work orders assigned to this personnel
+        const { count: activeWorkOrders } = await supabase
+          .from('work_orders')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', user.user_id)
+          .in('status_id', [1, 2]); // Pending (2) or In Progress (3) - adjust IDs if needed
+
+        // Count active maintenance tasks assigned to this personnel
         const { count: activeTasks } = await supabase
           .from('maintenance_tasks')
           .select('*', { count: 'exact', head: true })
           .eq('assigned_to', user.user_id)
           .in('status_id', [1, 2]); // Pending or In Progress
 
+        // Total active assignments = work orders + maintenance tasks
+        const totalActive = (activeWorkOrders || 0) + (activeTasks || 0);
+
         return {
           id: user.user_id,
           name: user.full_name,
           email: user.email,
-           department: user.job_position || 'Personnel',
-          activeTaskCount: activeTasks || 0
+          department: user.job_position || 'Personnel',
+          activeTaskCount: totalActive // ✅ Combined count
         };
       })
     );
@@ -400,7 +409,7 @@ const getPriorityBadge = (priority) => {
     'Medium': 'text-warning', 
     'Low': 'text-success'
   };
-  return <span className={priorityColors[priority] || 'text-muted'} style={{ fontSize: '0.85rem' }}>â— {priority}</span>;
+  return <span className={priorityColors[priority] || 'text-muted'} style={{ fontSize: '0.85rem' }}>{priority}</span>;
 };
 
   const formatDate = (dateString) => {

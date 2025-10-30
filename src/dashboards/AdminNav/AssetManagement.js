@@ -137,22 +137,31 @@ const fetchPersonnel = async () => {
   try {
     const data = await assetService.fetchUsers();
     
-    // Transform personnel and add active task count
+    // Transform personnel and add active task count + work orders
     const transformedPersonnel = await Promise.all(
       data.map(async (user) => {
-        // Check active tasks for this personnel
+        // Check active maintenance tasks
         const { count: activeTasks } = await supabase
           .from('maintenance_tasks')
           .select('*', { count: 'exact', head: true })
           .eq('assigned_to', user.id)
           .in('status_id', [1, 2]); // Pending or In Progress
 
+        // ✅ ADD THIS: Check active work orders
+        const { count: activeWorkOrders } = await supabase
+          .from('work_orders')
+          .select('*', { count: 'exact', head: true })
+          .eq('assigned_to', user.id)
+          .in('status_id', [1, 2]); // 1=Pending, 2=In Progress
+
+        const totalActive = (activeTasks || 0) + (activeWorkOrders || 0);
+
         return {
           id: user.id,
           name: user.name,
           email: user.email,
           department: user.department || 'Personnel',
-          activeTaskCount: activeTasks || 0
+          activeTaskCount: totalActive // ✅ Combined count
         };
       })
     );

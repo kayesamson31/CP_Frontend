@@ -15,7 +15,7 @@ export const AdminDashboardProvider = ({ children }) => {
   const [dashboardData, setDashboardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [lastFetched, setLastFetched] = useState(null);
-
+  const [organizationId, setOrganizationId] = useState(null);
   const fetchAllData = async () => {
     try {
       setLoading(true);
@@ -33,6 +33,7 @@ export const AdminDashboardProvider = ({ children }) => {
       if (!userData) return;
 
       const organizationId = userData.organization_id;
+      setOrganizationId(organizationId); 
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -40,8 +41,9 @@ export const AdminDashboardProvider = ({ children }) => {
       const [
         orgData,
         pendingApprovalsResult,
-        overdueTasksResult,
-        extensionRecordsResult,
+       [overdueMaintenanceResult, overdueWorkOrdersResult],
+        maintenanceExtensionsResult,  // ← CHANGED
+  workOrderExtensionsResult,     // ← ADDED (line 5)
         assetMaintenanceResult,
         recentActivityResult,
         personnelResult,
@@ -60,28 +62,43 @@ export const AdminDashboardProvider = ({ children }) => {
           .from('work_orders')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
-          .in('status_id', [1, 6]),
+          .eq('status_id', 6), 
         
-        // Overdue Tasks
-        supabase
-          .from('maintenance_tasks')
-          .select('task_id, status_id, due_date')
-          .eq('organization_id', organizationId)
-          .lt('due_date', new Date().toISOString())
-          .in('status_id', [1, 2, 6]),
-        
-        // Extension Records
-        supabase
-          .from('maintenance_task_extensions')
-          .select('task_id')
-          .eq('organization_id', organizationId),
-        
+      // Overdue Tasks - Both Maintenance Tasks and Work Orders
+Promise.all([
+  // Overdue Maintenance Tasks (active statuses only)
+  supabase
+    .from('maintenance_tasks')
+    .select('task_id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .lt('due_date', new Date().toISOString().split('T')[0])
+    .in('status_id', [1, 2]), // Pending, In Progress ONLY
+  
+  // Overdue Work Orders (active statuses only)
+  supabase
+    .from('work_orders')
+    .select('work_order_id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .lt('due_date', new Date().toISOString().split('T')[0])
+    .in('status_id', [1, 2]) // Pending, In Progress ONLY
+]),
+       // Extension Records - Maintenance Tasks
+supabase
+  .from('maintenance_task_extensions')
+  .select('task_id')
+  .eq('organization_id', organizationId),
+
+// Extension Records - Work Orders (no org filter since it's null, filter later via work_orders)
+supabase
+  .from('work_order_extensions')
+  .select('work_order_id'),
+
         // Asset Maintenance
         supabase
           .from('assets')
           .select('*', { count: 'exact', head: true })
           .eq('organization_id', organizationId)
-          .lte('next_maintenance', new Date().toISOString())
+          .eq('next_maintenance', new Date().toISOString().split('T')[0])  // ✅ Today only
           .eq('asset_status', 'active'),
         
         // Recent Activity
@@ -155,36 +172,80 @@ export const AdminDashboardProvider = ({ children }) => {
           .in('status_id', [1, 2])
       ]);
 
-      // Process Extended Tasks
-      let extendedCount = 0;
-      if (extensionRecordsResult.data && extensionRecordsResult.data.length > 0) {
-        const uniqueTaskIds = [...new Set(extensionRecordsResult.data.map(r => r.task_id))];
-        const { data: activeTasks } = await supabase
-          .from('maintenance_tasks')
-          .select('task_id')
-          .in('task_id', uniqueTaskIds)
-          .in('status_id', [1, 2, 6]);
-        extendedCount = activeTasks?.length || 0;
-      }
+      // Calculate Total Overdue Tasks
+const overdueMaintenanceCount = overdueMaintenanceResult.count || 0;
+const overdueWorkOrdersCount = overdueWorkOrdersResult.count || 0;
+const totalOverdueTasks = overdueMaintenanceCount + overdueWorkOrdersCount;
 
-      // Process Personnel with status
-      const personnelWithStatus = await Promise.all(
-        (personnelResult.data || []).map(async (person) => {
-          const { count: activeTasks } = await supabase
-            .from('maintenance_tasks')
-            .select('*', { count: 'exact', head: true })
-            .eq('assigned_to', person.user_id)
-            .in('status_id', [1, 2]);
+console.log('🔴 Overdue Maintenance Tasks:', overdueMaintenanceCount);
+console.log('🔴 Overdue Work Orders:', overdueWorkOrdersCount);
+console.log('🔴 TOTAL Overdue Tasks:', totalOverdueTasks);
 
-          return {
-            name: person.full_name,
-            role: person.job_position || 'Personnel',
-            status: activeTasks > 0 ? 'On Task' : 'Available',
-            statusColor: activeTasks > 0 ? '#0d6efd' : '#198754',
-            activeTaskCount: activeTasks || 0
-          };
-        })
-      );
+// Process Extended Tasks - Count both Maintenance Tasks and Work Orders
+let extendedCount = 0;
+
+// Count extended maintenance tasks
+let extendedMaintenanceTasks = 0;
+if (maintenanceExtensionsResult.data && maintenanceExtensionsResult.data.length > 0) {
+  const uniqueTaskIds = [...new Set(maintenanceExtensionsResult.data.map(r => r.task_id))];
+  const { data: activeTasks } = await supabase
+    .from('maintenance_tasks')
+    .select('task_id')
+    .in('task_id', uniqueTaskIds)
+    .in('status_id', [1, 2]); // Pending, In Progress
+  extendedMaintenanceTasks = activeTasks?.length || 0;
+}
+
+// Count extended work orders
+let extendedWorkOrders = 0;
+if (workOrderExtensionsResult.data && workOrderExtensionsResult.data.length > 0) {
+  const uniqueWOIds = [...new Set(workOrderExtensionsResult.data.map(r => r.work_order_id))];
+ 
+  const { data: activeWOs } = await supabase
+    .from('work_orders')
+    .select('work_order_id')
+    .in('work_order_id', uniqueWOIds)
+    .eq('organization_id', organizationId)
+    .in('status_id', [1, 2]); // Pending, In Progress
+  extendedWorkOrders = activeWOs?.length || 0;
+}
+
+// Total extended tasks
+extendedCount = extendedMaintenanceTasks + extendedWorkOrders;
+
+console.log('🔍 Extended Maintenance Tasks:', extendedMaintenanceTasks);
+console.log('🔍 Extended Work Orders:', extendedWorkOrders);
+console.log('🔍 TOTAL Extended Count:', extendedCount);
+
+// Process Personnel with status
+const personnelWithStatus = await Promise.all(
+  (personnelResult.data || []).map(async (person) => {
+    // ✅ Count active maintenance tasks
+    const { count: activeTasks } = await supabase
+      .from('maintenance_tasks')
+      .select('*', { count: 'exact', head: true })
+      .eq('assigned_to', person.user_id)
+      .in('status_id', [1, 2]);
+
+    // ✅ Count active work orders
+    const { count: activeWorkOrders } = await supabase
+      .from('work_orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('assigned_to', person.user_id)
+      .in('status_id', [1, 2]); // 1=Pending, 2=In Progress
+
+    // ✅ Total active assignments
+    const totalActive = (activeTasks || 0) + (activeWorkOrders || 0);
+
+    return {
+      name: person.full_name,
+      role: person.job_position || 'Personnel',
+      status: totalActive > 0 ? 'On Task' : 'Available',
+      statusColor: totalActive > 0 ? '#0d6efd' : '#198754',
+      activeTaskCount: totalActive // ✅ Combined count
+    };
+  })
+);
 
       // Transform Work Orders for calendar
       const transformedWO = (workOrdersResult.data || []).map(wo => ({
@@ -257,7 +318,7 @@ export const AdminDashboardProvider = ({ children }) => {
           },
           {
             title: "Overdue Tasks",
-            value: overdueTasksResult.data?.length || 0,
+          value: totalOverdueTasks, // ← NEW
             subtitle: "Maintenance past due",
             color: "#fd7e14",
             route: "/dashboard-admin/MaintenanceTasks"
@@ -295,6 +356,47 @@ export const AdminDashboardProvider = ({ children }) => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Add this NEW useEffect for realtime subscription
+useEffect(() => {
+  if (!organizationId) return; // Wait for organizationId to be set
+
+  console.log('🔌 Setting up realtime subscription for org:', organizationId);
+
+  const subscription = supabase
+    .channel('admin-dashboard-changes')
+    .on('postgres_changes', 
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'maintenance_tasks',
+        filter: `organization_id=eq.${organizationId}`
+      },
+      (payload) => {
+        console.log('🔔 Maintenance task changed:', payload);
+        refreshData();
+      }
+    )
+    .on('postgres_changes',
+      { 
+        event: '*', 
+        schema: 'public', 
+        table: 'work_orders',
+        filter: `organization_id=eq.${organizationId}`
+      },
+      (payload) => {
+        console.log('🔔 Work order changed:', payload);
+        refreshData();
+      }
+    )
+    .subscribe();
+
+  // Cleanup subscription when component unmounts or organizationId changes
+  return () => {
+    console.log('🔌 Cleaning up realtime subscription');
+    supabase.removeChannel(subscription);
+  };
+}, [organizationId]); // Run when organizationId changes
 
   const refreshData = () => {
     return fetchAllData();
