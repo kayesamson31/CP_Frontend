@@ -156,6 +156,7 @@ const { data: existingTasks } = await supabase
   .from('maintenance_tasks')
   .select('incident_id')
   .not('incident_id', 'is', null);
+  
 
 const assignedIncidentIds = new Set(existingTasks?.map(t => t.incident_id) || []);
 

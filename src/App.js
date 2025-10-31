@@ -113,12 +113,11 @@ useEffect(() => {
   // Check immediately on app load
   checkAndNotifyOverdue();
   
-  // Then check every 6 hours (21600000 ms)
-  const overdueCheckInterval = setInterval(() => {
-    console.log('⏰ Running scheduled overdue check...');
-    checkAndNotifyOverdue();
-  }, 6 * 60 * 60 * 1000); // 6 hours
-
+ // ✅ Make sure it's 24 hours (86400000 ms)
+const overdueCheckInterval = setInterval(() => {
+  console.log('⏰ Running scheduled overdue check...');
+  checkAndNotifyOverdue();
+}, 24 * 60 * 60 * 1000); // 24 hours
   // ✅ Cleanup auth listener on unmount
   return () => {
     authListener?.subscription.unsubscribe();

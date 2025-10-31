@@ -1,7 +1,16 @@
 // src/utils/OverdueNotifier.js
 import { supabase } from '../supabaseClient';
-
+let isChecking = false;
 export const checkAndNotifyOverdue = async () => {
+  // ✅ ADD THIS BLOCK - Check if already running
+  if (isChecking) {
+    console.log('⏭️ Overdue check already in progress, skipping...');
+    return;
+  }
+
+  isChecking = true;
+  console.log('🔒 Overdue check LOCKED - started at', new Date().toISOString());
+
   try {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
@@ -72,9 +81,13 @@ export const checkAndNotifyOverdue = async () => {
       });
     }
 
-    console.log('✅ Overdue check completed');
+  console.log('✅ Overdue check completed');
   } catch (error) {
     console.error('❌ Error checking overdue tasks:', error);
+  } finally {
+    // ✅ ADD THIS BLOCK - Always release lock
+    isChecking = false;
+    console.log('🔓 Overdue check UNLOCKED at', new Date().toISOString());
   }
 };
 
@@ -86,43 +99,51 @@ const createOverdueNotification = async (data) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Check if admin notification already sent today
+  // ✅ IMPROVED: Check if admin notification sent in LAST 6 HOURS (not just today)
+   const twentyFourHoursAgo = new Date(Date.now() - (24 * 60 * 60 * 1000));
+    
     const { data: existingAdmin } = await supabase
       .from('notifications')
-      .select('notification_id')
+      .select('notification_id, created_at')
       .eq('related_table', type === 'work_order' ? 'work_orders' : 'maintenance_tasks')
       .eq('related_id', id)
-      .eq('target_roles', '2') // Admin role
-      .gte('created_at', today.toISOString())
+      .eq('target_roles', '2')
+      .eq('organization_id', orgId)  // ✅ ADD THIS LINE
       .eq('notification_type_id', 24)
+      .eq('is_active', true)  // ✅ ADD THIS LINE
+      .gte('created_at', twentyFourHoursAgo.toISOString())
       .maybeSingle();
 
-    // Check if personnel notification already sent today
-    let existingPersonnel = null;
+  // ✅ IMPROVED: Check if personnel notification sent in LAST 6 HOURS
+let existingPersonnel = null;
     if (assignedTo) {
       const { data } = await supabase
         .from('notifications')
-        .select('notification_id')
+        .select('notification_id, created_at')
         .eq('related_table', type === 'work_order' ? 'work_orders' : 'maintenance_tasks')
         .eq('related_id', id)
         .eq('target_user_id', assignedTo)
-        .gte('created_at', today.toISOString())
+        .eq('organization_id', orgId)  // ✅ ADD THIS LINE
         .eq('notification_type_id', 24)
+        .eq('is_active', true)  // ✅ ADD THIS LINE
+        .gte('created_at', twentyFourHoursAgo.toISOString())
         .maybeSingle();
       existingPersonnel = data;
     }
 
-    // Check if requester notification already sent (for work orders)
-    let existingRequester = null;
+  // ✅ IMPROVED: Check if requester notification sent in LAST 6 HOURS
+  let existingRequester = null;
     if (type === 'work_order' && requestedBy) {
       const { data } = await supabase
         .from('notifications')
-        .select('notification_id')
+        .select('notification_id, created_at')
         .eq('related_table', 'work_orders')
         .eq('related_id', id)
         .eq('target_user_id', requestedBy)
-        .gte('created_at', today.toISOString())
+        .eq('organization_id', orgId)  // ✅ ADD THIS LINE
         .eq('notification_type_id', 24)
+        .eq('is_active', true)  // ✅ ADD THIS LINE
+        .gte('created_at', twentyFourHoursAgo.toISOString())
         .maybeSingle();
       existingRequester = data;
     }
@@ -145,83 +166,94 @@ const createOverdueNotification = async (data) => {
 
 console.log(`📤 Creating notifications for ${type} ${id}...`);
 
-    // ✅ Only create admin notification if not already sent today
-    if (!existingAdmin) {
-      const { error: adminError } = await supabase
-        .from('notifications')
-        .insert({
-          notification_type_id: 24,
-          created_by: adminUser?.user_id || 1,
-          title: `${type === 'work_order' ? 'Work Order' : 'Maintenance Task'} Overdue`,
-          message,
-          target_roles: '2',
-          priority_id: 3,
-          related_table: type === 'work_order' ? 'work_orders' : 'maintenance_tasks',
-          related_id: id,
-          organization_id: orgId,
-          is_active: true
-        });
+// ✅ Check if admin notification exists
+if (existingAdmin) {
+  console.log(`⏭️ Admin already notified in last 24h for ${type} ${id}`);
+  // ✅ ADD THIS RETURN - STOP HERE!
+} else {
+  // Insert admin notification
+  const { error: adminError } = await supabase
+    .from('notifications')
+    .insert({
+      notification_type_id: 24,
+      created_by: adminUser?.user_id || 1,
+      title: `${type === 'work_order' ? 'Work Order' : 'Maintenance Task'} Overdue`,
+      message,
+      target_roles: '2',
+      priority_id: 3,
+      related_table: type === 'work_order' ? 'work_orders' : 'maintenance_tasks',
+      related_id: id,
+      organization_id: orgId,
+      is_active: true
+    });
 
-      if (adminError) {
-        console.error(`❌ Error notifying admin for ${type} ${id}:`, adminError);
-      } else {
-        console.log(`✅ Admin notified - ${type} ${id}`);
-      }
+  if (adminError) {
+    console.error(`❌ Error notifying admin for ${type} ${id}:`, adminError);
+  } else {
+    console.log(`✅ Admin notified - ${type} ${id}`);
+  }
+}
+
+// ✅ Check personnel notification
+if (assignedTo) {
+  if (existingPersonnel) {
+    console.log(`⏭️ Personnel already notified in last 24h for ${type} ${id}`);
+    // ✅ ADD THIS - SKIP PERSONNEL
+  } else {
+    // Insert personnel notification (existing code)
+    const { error: personnelError } = await supabase
+      .from('notifications')
+      .insert({
+        notification_type_id: 24,
+        created_by: adminUser?.user_id || 1,
+        title: `Your ${type === 'work_order' ? 'Work Order' : 'Maintenance Task'} is Overdue`,
+        message: `${message} Please complete this as soon as possible.`,
+        target_user_id: assignedTo,
+        priority_id: 3,
+        related_table: type === 'work_order' ? 'work_orders' : 'maintenance_tasks',
+        related_id: id,
+        organization_id: orgId,
+        is_active: true
+      });
+
+    if (personnelError) {
+      console.error(`❌ Error notifying personnel for ${type} ${id}:`, personnelError);
     } else {
-      console.log(`⏭️ Admin already notified today for ${type} ${id}`);
+      console.log(`✅ Personnel notified - ${type} ${id}`);
     }
+  }
+}
 
-    // ✅ Only create personnel notification if not already sent today
-    if (assignedTo && !existingPersonnel) {
-      const { error: personnelError } = await supabase
-        .from('notifications')
-        .insert({
-          notification_type_id: 24,
-          created_by: adminUser?.user_id || 1,
-          title: `Your ${type === 'work_order' ? 'Work Order' : 'Maintenance Task'} is Overdue`,
-          message: `${message} Please complete this as soon as possible.`,
-          target_user_id: assignedTo,
-          priority_id: 3,
-          related_table: type === 'work_order' ? 'work_orders' : 'maintenance_tasks',
-          related_id: id,
-          organization_id: orgId,
-          is_active: true
-        });
+// ✅ Check requester notification
+if (type === 'work_order' && requestedBy) {
+  if (existingRequester) {
+    console.log(`⏭️ Requester already notified in last 24h for ${type} ${id}`);
+    // ✅ SKIP REQUESTER
+  } else {
+    // Insert requester notification (existing code)
+    const { error: requesterError } = await supabase
+      .from('notifications')
+      .insert({
+        notification_type_id: 24,
+        created_by: adminUser?.user_id || 1,
+        title: 'Your Work Order is Overdue',
+        message: `Your work order "${title}" is ${daysOverdue} day(s) overdue. Please follow up with the admin.`,
+        target_user_id: requestedBy,
+        priority_id: 3,
+        related_table: 'work_orders',
+        related_id: id,
+        organization_id: orgId,
+        is_active: true
+      });
 
-      if (personnelError) {
-        console.error(`❌ Error notifying personnel for ${type} ${id}:`, personnelError);
-      } else {
-        console.log(`✅ Personnel notified - ${type} ${id}`);
-      }
-    } else if (assignedTo) {
-      console.log(`⏭️ Personnel already notified today for ${type} ${id}`);
+    if (requesterError) {
+      console.error(`❌ Error notifying requester for ${type} ${id}:`, requesterError);
+    } else {
+      console.log(`✅ Requester notified - ${type} ${id}`);
     }
-
-    // ✅ Only create requester notification if not already sent today
-    if (type === 'work_order' && requestedBy && !existingRequester) {
-      const { error: requesterError } = await supabase
-        .from('notifications')
-        .insert({
-          notification_type_id: 24,
-          created_by: adminUser?.user_id || 1,
-          title: 'Your Work Order is Overdue',
-          message: `Your work order "${title}" is ${daysOverdue} day(s) overdue. Please follow up with the admin.`,
-          target_user_id: requestedBy,
-          priority_id: 3,
-          related_table: 'work_orders',
-          related_id: id,
-          organization_id: orgId,
-          is_active: true
-        });
-
-      if (requesterError) {
-        console.error(`❌ Error notifying requester for ${type} ${id}:`, requesterError);
-      } else {
-        console.log(`✅ Requester notified - ${type} ${id}`);
-      }
-    } else if (type === 'work_order' && requestedBy) {
-      console.log(`⏭️ Requester already notified today for ${type} ${id}`);
-    }
+  }
+}
+    
 
   } catch (error) {
     console.error(`❌ Fatal error in createOverdueNotification:`, error);

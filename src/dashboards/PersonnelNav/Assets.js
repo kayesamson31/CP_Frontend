@@ -470,13 +470,16 @@ const formatDate = (dateString) => {
 <td>
   <div className="d-flex align-items-center gap-2">
     {/* Main Status Badge */}
-    <span className={`badge ${
-      asset.status === 'Operational' ? 'bg-success' :
-      asset.status === 'Under Maintenance' ? 'bg-warning' :
-      'bg-secondary'
-    }`}>
-      {asset.status}
-    </span>
+   <span 
+  className={`badge ${
+    asset.status === 'Operational' ? 'bg-success' :
+    asset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}
+  style={{ minWidth: '150px', display: 'inline-block', textAlign: 'center' }}
+>
+  {asset.status}
+</span>
     
     {/* Incident Alert Badge */}
     {asset.incidentReports && asset.incidentReports.length > 0 && (
@@ -491,7 +494,7 @@ const formatDate = (dateString) => {
     )}
   </div>
 </td>
-        <td>{asset.lastMaintenance}</td>
+        <td>{asset.lastMaintenance || 'No maintenance yet'}</td>
                   <td>
                   <div className="btn-group btn-group-sm">
                     <Button
@@ -548,13 +551,16 @@ const formatDate = (dateString) => {
 <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
   <div className="d-flex gap-2 align-items-center">
     {/* Main Status */}
-    <span className={`badge ${
-      selectedAsset.status === 'Operational' ? 'bg-success' :
-      selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
-      'bg-secondary'
-    }`}>
-      {selectedAsset.status}
-    </span>
+    <span 
+  className={`badge ${
+    selectedAsset.status === 'Operational' ? 'bg-success' :
+    selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}
+  style={{ minWidth: '150px', display: 'inline-block', textAlign: 'center' }}
+>
+  {selectedAsset.status}
+</span>
     
     {/* Incident Badge */}
     {selectedAsset.incidentReports && selectedAsset.incidentReports.length > 0 && (

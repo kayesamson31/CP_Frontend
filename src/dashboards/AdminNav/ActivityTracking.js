@@ -12,6 +12,7 @@ export default function Activity() {
   const [search, setSearch] = useState("");
   const [dateRange, setDateRange] = useState("all");
   const [filterRole, setFilterRole] = useState("all");
+  const uniqueRoles = ['all', ...new Set(activities.map(act => act.role).filter(Boolean))];
   const [filterActivityType, setFilterActivityType] = useState("all");
  const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(15); // Show 20 items per page
@@ -81,13 +82,14 @@ useEffect(() => {
 }, [dateRange]);
 
  const filteredActivities = activities.filter((act) => {
+  console.log('Activity role:', act.role, 'Filter:', filterRole); 
   const matchesSearch = 
     act.user.toLowerCase().includes(search.toLowerCase()) ||
     act.actionTaken.toLowerCase().includes(search.toLowerCase()) ||
     act.role.toLowerCase().includes(search.toLowerCase()) ||
     act.email.toLowerCase().includes(search.toLowerCase());
 
-  const matchesRole = filterRole === 'all' || act.role === filterRole;
+  const matchesRole = filterRole === 'all' || act.role.toLowerCase().includes(filterRole.toLowerCase());
   
   const matchesActivityType = filterActivityType === 'all' || 
     act.actionTaken.toLowerCase().includes(filterActivityType.toLowerCase());
@@ -147,19 +149,19 @@ const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
     <option value="90">Last 90 Days</option>
   </Form.Select>
   
-  <Form.Select
-    value={filterRole}
-    onChange={(e) => {
-  setFilterRole(e.target.value);
-  setCurrentPage(1); // Add this
-}}
-    style={{ minWidth: "150px" }}
-  >
-    <option value="all">All Roles</option>
-    <option value="Admin">Admin</option>
-    <option value="Personnel">Personnel</option>
-    <option value="Standard User">Standard User</option>
-  </Form.Select>
+<Form.Select
+  value={filterRole}
+  onChange={(e) => {
+    setFilterRole(e.target.value);
+    setCurrentPage(1);
+  }}
+  style={{ minWidth: "150px" }}
+>
+  <option value="all">All Roles</option>
+  {uniqueRoles.filter(role => role !== 'all').map(role => (
+    <option key={role} value={role}>{role}</option>
+  ))}
+</Form.Select>
 
   <Form.Select
     value={filterActivityType}

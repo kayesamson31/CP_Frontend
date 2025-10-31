@@ -190,7 +190,8 @@ useEffect(() => {
 const allFilteredAssets = assets.filter(
   (asset) =>
     (asset.name?.toLowerCase().includes(search.toLowerCase()) ||
-      asset.id?.toLowerCase().includes(search.toLowerCase())) &&
+      asset.location?.toLowerCase().includes(search.toLowerCase()) ||
+      String(asset.id).toLowerCase().includes(search.toLowerCase())) &&
     (statusFilter === "" || asset.status === statusFilter) &&
     (categoryFilter === "" || asset.category === categoryFilter)
 );
@@ -1069,13 +1070,16 @@ const Pagination = () => {
 <td>
   <div className="d-flex align-items-center gap-2">
     {/* Main Status Badge */}
-    <span className={`badge ${
-      asset.status === 'Operational' ? 'bg-success' :
-      asset.status === 'Under Maintenance' ? 'bg-warning' :
-      'bg-secondary'
-    }`}>
-      {asset.status}
-    </span>
+   <span 
+  className={`badge ${
+    asset.status === 'Operational' ? 'bg-success' :
+    asset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}
+  style={{ minWidth: '150px', display: 'inline-block', textAlign: 'center' }}
+>
+  {asset.status}
+</span>
     
     {/* Ã¢Å“â€¦ IMPROVED: Show failed badge regardless of status */}
     {asset.hasFailedMaintenance && (
@@ -1102,7 +1106,7 @@ const Pagination = () => {
     )}
   </div>
 </td>
-                    <td>{asset.lastMaintenance}</td>
+                    <td>{asset.lastMaintenance || 'No maintenance yet'}</td>
                     
                     <td>
                       <div className="btn-group btn-group-sm">
@@ -1168,13 +1172,16 @@ const Pagination = () => {
 <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
   <div className="d-flex gap-2 align-items-center">
     {/* Main Status */}
-    <span className={`badge ${
-      selectedAsset.status === 'Operational' ? 'bg-success' :
-      selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
-      'bg-secondary'
-    }`}>
-      {selectedAsset.status}
-    </span>
+  <span 
+  className={`badge ${
+    selectedAsset.status === 'Operational' ? 'bg-success' :
+    selectedAsset.status === 'Under Maintenance' ? 'bg-warning' :
+    'bg-secondary'
+  }`}
+  style={{ minWidth: '150px', display: 'inline-block', textAlign: 'center' }}
+>
+  {selectedAsset.status}
+</span>
     
     {/* Ã¢Å“â€¦ IMPROVED: Show failed badge with better label */}
     {selectedAsset.hasFailedMaintenance && (
