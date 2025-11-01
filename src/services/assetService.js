@@ -121,11 +121,10 @@ activeFailedTasks.forEach(task => {
       .in('asset_id', assets.map(a => a.asset_id))
       .order('date_reported', { ascending: false });
 
-   // Separate active incidents (for badge) vs history (for modal)
+// ✅ SIMPLIFIED: Separate active incidents (for badge) vs history (for modal)
 const activeIncidentsByAsset = {};
 const incidentHistoryByAsset = {};
 
-// Replace yung checking logic (around line 200+)
 allIncidents?.forEach(incident => {
   const incidentObj = {
     id: `INC-${incident.incident_id}`,
@@ -144,25 +143,12 @@ allIncidents?.forEach(incident => {
   }
   incidentHistoryByAsset[incident.asset_id].push(incidentObj);
   
-  // ✅ IMPROVED: Show badge ONLY for unresolved incidents
-  if (incident.status_id === 4) { // Reported status only
-    // Check if there's a maintenance task addressing this incident
-    const hasAddressingTask = maintenanceTasks?.some(task => 
-      // Either: task is directly linked to this incident
-      (task.incident_id === incident.incident_id) ||
-      // Or: task was created for this asset AFTER the incident
-      (task.asset_id === incident.asset_id && 
-       new Date(task.date_created) > new Date(incident.date_reported) &&
-       (task.status_id === 2 || task.status_id === 3)) // In Progress or Completed
-    );
-    
-    // Only show badge if NO task is addressing it
-    if (!hasAddressingTask) {
-      if (!activeIncidentsByAsset[incident.asset_id]) {
-        activeIncidentsByAsset[incident.asset_id] = [];
-      }
-      activeIncidentsByAsset[incident.asset_id].push(incidentObj);
+  // ✅ SIMPLE RULE: Show badge ONLY if status = "Reported" (status_id = 4)
+  if (incident.status_id === 4) {
+    if (!activeIncidentsByAsset[incident.asset_id]) {
+      activeIncidentsByAsset[incident.asset_id] = [];
     }
+    activeIncidentsByAsset[incident.asset_id].push(incidentObj);
   }
 });
 
@@ -885,13 +871,16 @@ try {
   // Add this to assetService.js, before the closing };
 async updateIncidentStatus(incidentId, newStatus) {
   try {
-    const numericId = parseInt(incidentId.replace('INC-', ''));
+    // ✅ HANDLE BOTH FORMATS: "INC-123" or just "123"
+    const numericId = typeof incidentId === 'string' && incidentId.startsWith('INC-')
+      ? parseInt(incidentId.replace('INC-', ''))
+      : parseInt(incidentId);
     
     const statusMap = {
-      'Reported': 4,      // Keep this
-      'Completed': 3,     // NEW - same as maintenance tasks
-      'Failed': 11,       // NEW - same as maintenance tasks
-      'Dismissed': 5      // Keep for admin override
+      'Reported': 4,      
+      'Completed': 3,     
+      'Failed': 11,       
+      'Dismissed': 5      
     };
     
     const { data, error } = await supabase

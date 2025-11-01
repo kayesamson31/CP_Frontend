@@ -133,7 +133,7 @@ const fetchNotifications = async () => {
     console.log('Ã°Å¸â€Â Fetching notifications for Org:', organizationId); // Ã¢Å“â€¦ Debug
 
     // Fetch notifications for this role AND organization
-    const { data: notificationsData, error } = await supabase
+const { data: notificationsData, error } = await supabase
   .from('notifications')
   .select(`
     notification_id,
@@ -143,16 +143,32 @@ const fetchNotifications = async () => {
     related_table,
     related_id,
     target_user_id,
+    target_roles,
     organization_id,
     notification_types(type_name),
     priority_levels(priority_name, color_code),
     created_by
   `)
-  .eq('organization_id', organizationId) // Ã¢Å“â€¦ ADD THIS FILTER
-  .or(`target_roles.eq.${roleId},target_user_id.eq.${userId}`)
+  .eq('organization_id', organizationId)
   .eq('is_active', true)
   .order('created_at', { ascending: false});
       if (error) throw error;
+
+if (error) throw error;
+
+// ✅ Filter notifications client-side for target_roles
+const filteredNotifications = notificationsData.filter(notif => {
+  // Check if notification is for specific user
+  if (notif.target_user_id === userId) return true;
+  
+  // Check if notification is for this role
+  if (notif.target_roles) {
+    const targetRoles = notif.target_roles.split(',').map(r => r.trim());
+    if (targetRoles.includes(roleId.toString())) return true;
+  }
+  
+  return false;
+});
 
 console.log('=== FETCH NOTIFICATIONS DEBUG ===');
 console.log('Current Role:', role);
@@ -172,7 +188,7 @@ console.log('Total notifications fetched:', notificationsData?.length || 0);
       const readNotificationIds = readData.map(r => r.notification_id);
 
       // Transform data to match your component structure
-      const transformedNotifications = notificationsData.map(notif => ({
+    const transformedNotifications = filteredNotifications.map(notif => ({
         id: notif.notification_id,
         title: notif.title,
         message: notif.message,

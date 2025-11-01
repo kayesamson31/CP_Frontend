@@ -18,6 +18,8 @@ const [searchTerm, setSearchTerm] = useState('');
 const [selectedWorkOrder, setSelectedWorkOrder] = useState(null);
 const [showDetailsModal, setShowDetailsModal] = useState(false);
 const [showPriorityModal, setShowPriorityModal] = useState(false);
+const [showReportIssueModal, setShowReportIssueModal] = useState(false);
+const [issueDescription, setIssueDescription] = useState('');
 // States for user info
 const [userName, setUserName] = useState('User');
 const [userRole, setUserRole] = useState('Standard User');
@@ -252,7 +254,11 @@ return {
     isOverdue: isOverdue,
     extensionCount: wo.extension_count || 0,
     lastExtensionReason: wo.last_extension_reason,
-    extensionHistory: wo.work_order_extensions || []
+    extensionHistory: wo.work_order_extensions || [],
+    requester_confirmation: wo.requester_confirmation || 'pending',
+    requester_feedback: wo.requester_feedback,
+    confirmation_date: wo.confirmation_date,
+    disputed_reason: wo.disputed_reason
     
 };
 });
@@ -339,6 +345,51 @@ const handleCancelRequest = async (item) => {
     } catch (error) {
       alert('An error occurred while canceling the work order');
     }
+  }
+};
+const handleConfirmCompletion = async (workOrderId) => {
+  if (window.confirm('Confirm that this work order was completed satisfactorily?')) {
+    try {
+      const result = await WorkOrderService.confirmWorkOrder(workOrderId);
+      
+      if (result.success) {
+        alert('Work order confirmed successfully!');
+        await loadStatusCounts();
+        await loadWorkOrders();
+        setShowDetailsModal(false);
+      } else {
+        alert('Failed to confirm: ' + result.error);
+      }
+    } catch (error) {
+      alert('An error occurred while confirming');
+    }
+  }
+};
+
+const handleReportIssue = async () => {
+  if (!issueDescription.trim()) {
+    alert('Please describe the issue');
+    return;
+  }
+
+  try {
+    const result = await WorkOrderService.disputeWorkOrder(
+      selectedWorkOrder.work_order_id,
+      issueDescription
+    );
+    
+    if (result.success) {
+      alert('Issue reported to admin successfully!');
+      await loadStatusCounts();
+      await loadWorkOrders();
+      setShowDetailsModal(false);
+      setShowReportIssueModal(false);
+      setIssueDescription('');
+    } else {
+      alert('Failed to report issue: ' + result.error);
+    }
+  } catch (error) {
+    alert('An error occurred while reporting issue');
   }
 };
 
@@ -698,9 +749,9 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     <th style={{ width: '120px', minWidth: '120px' }}>Timestamp</th>
     <th style={{ width: '350px', minWidth: '350px' }}>Title</th>
     <th style={{ width: '180px', minWidth: '180px' }}>Priority</th>
-    <th style={{ width: '120px', minWidth: '120px' }}>
-      {selectedStatus === 'To Review' ? 'Action' : null}
-    </th>
+    <th style={{ width: '180px', minWidth: '180px' }}>
+  {(selectedStatus === 'To Review' || selectedStatus === 'Completed') ? 'Action' : null}
+</th>
   </tr>
 </thead>
 
@@ -726,7 +777,14 @@ color: selectedStatus === status.label ? 'white' : '#495057'
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap' 
 }}>
-  {item.title}
+  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <span>{item.title}</span>
+    {item.status === 'Completed' && item.requester_confirmation === 'pending' && (
+      <Badge bg="info" style={{ fontSize: '10px' }}>
+        Pending Your Confirmation
+      </Badge>
+    )}
+  </div>
 </td>
 
 
@@ -795,6 +853,34 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     >
       Cancel
     </Button>
+  ) : item.status === 'Completed' && item.requester_confirmation === 'pending' ? (
+    <div style={{ display: 'flex', gap: '6px' }}>
+      <Button
+        variant="success"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleConfirmCompletion(item.work_order_id);
+        }}
+      >
+        ✓ Confirm
+      </Button>
+      <Button
+        variant="warning"
+        size="sm"
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedWorkOrder(item);
+          setShowReportIssueModal(true);
+        }}
+      >
+        ⚠ Report
+      </Button>
+    </div>
+  ) : item.status === 'Completed' && item.requester_confirmation === 'confirmed' ? (
+    <Badge bg="success">Verified</Badge>
+  ) : item.status === 'Completed' && item.requester_confirmation === 'disputed' ? (
+    <Badge bg="warning">Disputed</Badge>
   ) : null}
 </td>
       </tr>
@@ -1546,6 +1632,50 @@ Cancel
                </Button>
                </Modal.Footer>
             </Modal>
+                  {/* Report Issue Modal */}
+<Modal
+  show={showReportIssueModal}
+  onHide={() => {
+    setShowReportIssueModal(false);
+    setIssueDescription('');
+  }}
+  centered
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Report Issue with Work Order</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <p className="text-muted mb-3">
+      Please describe what's wrong or incomplete with this work order.
+      The admin will review your report.
+    </p>
+    <textarea
+      className="form-control"
+      rows="4"
+      placeholder="Describe the issue..."
+      value={issueDescription}
+      onChange={(e) => setIssueDescription(e.target.value)}
+    />
+  </Modal.Body>
+  <Modal.Footer>
+    <Button 
+      variant="secondary" 
+      onClick={() => {
+        setShowReportIssueModal(false);
+        setIssueDescription('');
+      }}
+    >
+      Cancel
+    </Button>
+    <Button 
+      variant="warning" 
+      onClick={handleReportIssue}
+      disabled={!issueDescription.trim()}
+    >
+      Submit Report
+    </Button>
+  </Modal.Footer>
+</Modal>
           </Container>
 );
 }

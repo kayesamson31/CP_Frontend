@@ -279,6 +279,183 @@ static async cancelWorkOrder(workOrderId) {
   }
 }
 
+static async confirmWorkOrder(workOrderId, feedback = '') {
+  try {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    const { data, error } = await supabase
+      .from('work_orders')
+      .update({ 
+        requester_confirmation: 'confirmed',
+        requester_feedback: feedback,
+        confirmation_date: new Date().toISOString()
+      })
+      .eq('work_order_id', workOrderId)
+      .eq('requested_by', currentUser.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    await this.logActivity({
+      user_id: currentUser.id,
+      activity_type: 'work_order_confirmed',
+      description: `Confirmed completion of work order #${workOrderId}`,
+      ip_address: await this.getClientIP()
+    });
+
+    // âœ… NOTIFY ADMIN & PERSONNEL about confirmation
+// ✅ NOTIFY ADMIN & ASSIGNED PERSONNEL about confirmation
+const { data: userData, error: userError } = await supabase
+  .from('users')
+  .select('full_name, organization_id')
+  .eq('user_id', currentUser.id)
+  .single();
+
+if (userError) {
+  console.error('❌ Error fetching user data for notification:', userError);
+} else {
+  // Get the work order to find assigned personnel
+  const { data: workOrderData, error: woError } = await supabase
+    .from('work_orders')
+    .select('assigned_to, title')
+    .eq('work_order_id', workOrderId)
+    .single();
+
+  if (woError) {
+    console.error('❌ Error fetching work order data:', woError);
+  } else {
+    console.log('📤 Sending confirmation notification...');
+    console.log('🎯 Work order assigned to:', workOrderData.assigned_to);
+    
+    // Notification for ADMIN (role-based)
+    const { error: adminNotifError } = await supabase
+      .from('notifications')
+      .insert({
+        notification_type_id: 25,
+        created_by: currentUser.id,
+        title: 'Work Order Confirmed',
+        message: `${userData?.full_name} confirmed completion of work order #${workOrderId}: "${workOrderData.title}"`,
+        target_roles: '2', // Admin only
+        priority_id: 1,
+        related_table: 'work_orders',
+        related_id: workOrderId,
+        organization_id: userData.organization_id,
+        is_active: true
+      });
+
+    if (adminNotifError) {
+      console.error('❌ Admin notification error:', adminNotifError);
+    } else {
+      console.log('✅ Admin notified successfully!');
+    }
+
+    // Notification for ASSIGNED PERSONNEL (user-specific)
+    if (workOrderData.assigned_to) {
+      const { error: personnelNotifError } = await supabase
+        .from('notifications')
+        .insert({
+          notification_type_id: 25,
+          created_by: currentUser.id,
+          title: 'Work Order Confirmed by Requester',
+          message: `${userData?.full_name} confirmed that work order #${workOrderId}: "${workOrderData.title}" was completed satisfactorily`,
+          target_user_id: workOrderData.assigned_to, // Specific personnel
+          priority_id: 1,
+          related_table: 'work_orders',
+          related_id: workOrderId,
+          organization_id: userData.organization_id,
+          is_active: true
+        });
+
+      if (personnelNotifError) {
+        console.error('❌ Personnel notification error:', personnelNotifError);
+      } else {
+        console.log('✅ Assigned personnel notified successfully!');
+      }
+    } else {
+      console.log('⚠️ No personnel assigned to this work order');
+    }
+  }
+}
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('WorkOrderService.confirmWorkOrder error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
+static async disputeWorkOrder(workOrderId, issue) {
+  try {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser) {
+      throw new Error('User not authenticated');
+    }
+
+    // Get "Needs Review" status
+    const { data: statusData, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'Needs Review')
+      .eq('status_category', 'work_order')
+      .single();
+
+    if (statusError || !statusData) {
+      throw new Error('Could not find "Needs Review" status');
+    }
+
+    const { data, error } = await supabase
+      .from('work_orders')
+      .update({ 
+        status_id: statusData.status_id,
+        requester_confirmation: 'disputed',
+        disputed_reason: issue,
+        confirmation_date: new Date().toISOString()
+      })
+      .eq('work_order_id', workOrderId)
+      .eq('requested_by', currentUser.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    // ✅ CORRECT - Notify about DISPUTE
+    const { data: userData } = await supabase
+      .from('users')
+      .select('full_name, organization_id')
+      .eq('user_id', currentUser.id)
+      .single();
+
+    await supabase.from('notifications').insert({
+      notification_type_id: 3, // Work Order notification
+      created_by: currentUser.id,
+      title: 'Work Order Disputed',
+      message: `${userData?.full_name} reported an issue with work order #${workOrderId}: ${issue}`,
+      target_roles: '2', // Admin only
+      priority_id: 3, // High priority
+      related_table: 'work_orders',
+      related_id: workOrderId,
+      organization_id: userData.organization_id,
+      is_active: true
+    });
+
+    await this.logActivity({
+      user_id: currentUser.id,
+      activity_type: 'work_order_disputed',
+      description: `Disputed work order #${workOrderId}: ${issue}`,
+      ip_address: await this.getClientIP()
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('WorkOrderService.disputeWorkOrder error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
   // Ito yung method para makuha ang buong detalye ng isang work order.
   // Kinuha ko rin ang related priority, status, asset, at user info.
   static async getWorkOrderDetails(workOrderId) {
@@ -317,7 +494,7 @@ static async getStatusCounts() {
       return { success: false, error: 'User not authenticated' };
     }
 
-    const desiredOrder = ['To Review', 'Pending', 'In Progress', 'Completed', 'Failed', 'Rejected', 'Cancelled'];
+    const desiredOrder = ['To Review', 'Pending', 'In Progress', 'Completed', 'Needs Review', 'Failed', 'Rejected', 'Cancelled'];
 
     const { data: allStatuses, error: statusError } = await supabase
       .from('statuses')

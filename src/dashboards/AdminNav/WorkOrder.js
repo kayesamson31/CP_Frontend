@@ -24,6 +24,9 @@ export default function WorkOrder() {
   const [extendedDueDate, setExtendedDueDate] = useState('');
 const [showExtendModal, setShowExtendModal] = useState(false);
 const [extensionReason, setExtensionReason] = useState('');
+const [showReassignModal, setShowReassignModal] = useState(false);
+const [showCloseResolvedModal, setShowCloseResolvedModal] = useState(false);
+const [adminResolution, setAdminResolution] = useState('');
 const [currentPage, setCurrentPage] = useState(1);
 const [itemsPerPage] = useState(15); // 15 work orders per page
 
@@ -96,7 +99,9 @@ const transformedOrders = data.map(wo => {
     originalDueDate: wo.original_due_date,
     extensionCount: wo.extension_count || 0,
     lastExtensionReason: wo.last_extension_reason,
-    extensionHistory: wo.work_order_extensions || []  
+    extensionHistory: wo.work_order_extensions || [],
+     requesterConfirmation: wo.requester_confirmation || 'pending',
+  disputedReason: wo.disputed_reason || null 
     
   };
 });
@@ -195,14 +200,15 @@ const fetchCategories = async () => {
   }, []);
 
   const tabs = [
-    { name: 'To Review', count: workOrders.filter(wo => wo.status === 'To Review').length },
-    { name: 'Pending', count: workOrders.filter(wo => wo.status === 'Pending').length },
-    { name: 'In Progress', count: workOrders.filter(wo => wo.status === 'In Progress').length },
-    { name: 'Completed', count: workOrders.filter(wo => wo.status === 'Completed').length },
-    { name: 'Failed', count: workOrders.filter(wo => wo.status === 'Failed').length },
-    { name: 'Rejected', count: workOrders.filter(wo => wo.status === 'Rejected').length },
-    { name: 'Cancelled', count: workOrders.filter(wo => wo.status === 'Cancelled').length }
-  ];
+  { name: 'To Review', count: workOrders.filter(wo => wo.status === 'To Review').length },
+  { name: 'Pending', count: workOrders.filter(wo => wo.status === 'Pending').length },
+  { name: 'In Progress', count: workOrders.filter(wo => wo.status === 'In Progress').length },
+  { name: 'Completed', count: workOrders.filter(wo => wo.status === 'Completed').length },
+  { name: 'Needs Review', count: workOrders.filter(wo => wo.status === 'Needs Review').length }, // ← ADD THIS
+  { name: 'Failed', count: workOrders.filter(wo => wo.status === 'Failed').length },
+  { name: 'Rejected', count: workOrders.filter(wo => wo.status === 'Rejected').length },
+  { name: 'Cancelled', count: workOrders.filter(wo => wo.status === 'Cancelled').length }
+];
 
   const filteredOrders = workOrders.filter(order => {
      const matchesTab = order.status === activeTab;
@@ -384,6 +390,158 @@ setShowRejectModal(false);
   }
 };
 
+const handleReassignForRevision = async () => {
+  if (!assignedPersonnel || !extendedDueDate) return;
+
+  try {
+    setLoading(true);
+    
+    // Get "In Progress" status
+    const { data: statusData, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'In Progress')
+      .eq('status_category', 'work_order')
+      .single();
+
+    if (statusError) throw statusError;
+
+    // Update work order with NEW DUE DATE ✅
+    const { error: updateError } = await supabase
+      .from('work_orders')
+      .update({ 
+        status_id: statusData.status_id,
+        assigned_to: parseInt(assignedPersonnel),
+        requester_confirmation: 'pending', // Reset confirmation
+        disputed_reason: null, // Clear dispute
+        due_date: new Date(extendedDueDate).toISOString() // ✅ NEW DUE DATE
+      })
+      .eq('work_order_id', selectedOrder.work_order_id);
+
+    if (updateError) throw updateError;
+
+    // Reload data
+    await fetchWorkOrders();
+
+    // Log activity
+    await logActivity('reassign_disputed_work_order', `Reassigned disputed work order ${selectedOrder.id} for revision`);
+
+    // Notify personnel
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: adminData } = await supabase
+        .from('users')
+        .select('user_id, full_name, organization_id')
+        .eq('auth_uid', user.id)
+        .single();
+
+      await supabase.from('notifications').insert({
+        notification_type_id: 3,
+        created_by: adminData.user_id,
+        title: 'Work Order Reassigned for Revision',
+       message: `Admin ${adminData.full_name} reassigned work order "${selectedOrder.description}" to you for revision. New due date: ${new Date(extendedDueDate).toLocaleDateString()}. Previous complaint: "${selectedOrder.disputedReason}"`,
+        target_user_id: parseInt(assignedPersonnel),
+        priority_id: 3,
+        related_table: 'work_orders',
+        related_id: selectedOrder.work_order_id,
+        organization_id: adminData.organization_id,
+        is_active: true
+      });
+    } catch (notifError) {
+      console.error('Failed to notify personnel:', notifError);
+    }
+
+    // Reset states
+    setShowReassignModal(false);
+    setAssignedPersonnel('');
+    setExtendedDueDate('');
+    setSelectedOrder(null);
+
+  } catch (err) {
+    console.error('Error reassigning work order:', err);
+    setError('Failed to reassign work order: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
+
+const handleCloseAsResolved = async () => {
+  try {
+    setLoading(true);
+    
+    // Get "Completed" status
+    const { data: statusData, error: statusError } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'Completed')
+      .eq('status_category', 'work_order')
+      .single();
+
+    if (statusError) throw statusError;
+
+    // Update work order
+    const { error: updateError } = await supabase
+      .from('work_orders')
+      .update({ 
+        status_id: statusData.status_id,
+        requester_confirmation: 'confirmed', // Override to confirmed
+        admin_resolution_notes: adminResolution || 'Admin closed as resolved',
+        date_resolved: new Date().toISOString()
+      })
+      .eq('work_order_id', selectedOrder.work_order_id);
+
+    if (updateError) throw updateError;
+
+    // Reload data
+    await fetchWorkOrders();
+
+    // Log activity
+    await logActivity('close_disputed_as_resolved', `Closed disputed work order ${selectedOrder.id} as resolved`);
+
+    // Notify requester
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: adminData } = await supabase
+        .from('users')
+        .select('user_id, full_name, organization_id')
+        .eq('auth_uid', user.id)
+        .single();
+
+      // Get requester's user_id
+      const { data: workOrderData } = await supabase
+        .from('work_orders')
+        .select('requested_by')
+        .eq('work_order_id', selectedOrder.work_order_id)
+        .single();
+
+      await supabase.from('notifications').insert({
+        notification_type_id: 3,
+        created_by: adminData.user_id,
+        title: 'Work Order Closed as Resolved',
+        message: `Admin ${adminData.full_name} has reviewed your complaint and closed work order "${selectedOrder.description}" as resolved. ${adminResolution ? `Resolution: ${adminResolution}` : ''}`,
+        target_user_id: workOrderData.requested_by,
+        priority_id: 2,
+        related_table: 'work_orders',
+        related_id: selectedOrder.work_order_id,
+        organization_id: adminData.organization_id,
+        is_active: true
+      });
+    } catch (notifError) {
+      console.error('Failed to notify requester:', notifError);
+    }
+
+    // Reset states
+    setShowCloseResolvedModal(false);
+    setAdminResolution('');
+    setSelectedOrder(null);
+
+  } catch (err) {
+    console.error('Error closing work order:', err);
+    setError('Failed to close work order: ' + err.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const getStatusBadge = (status) => {
     const statusColors = {
@@ -846,6 +1004,59 @@ const getPriorityBadge = (priority) => {
     </div>
   </div>
 )}
+
+{/* Disputed Reason - Show for Needs Review status */}
+{selectedOrder.status === 'Needs Review' && selectedOrder.disputedReason && (
+  <div className="mb-4">
+    <div className="p-3 rounded-3 shadow-sm" style={{backgroundColor: '#fff3cd', border: '2px solid #ffc107'}}>
+      <div className="d-flex align-items-center mb-2">
+        <i className="bi bi-exclamation-triangle-fill me-2 text-warning"></i>
+        <h6 className="fw-bold mb-0 text-warning">Issue Reported by Requester</h6>
+      </div>
+      <div>
+        <small className="text-muted fw-bold">Complaint:</small>
+        <p className="mb-0 mt-1" style={{fontSize: '14px', color: '#856404'}}>
+          {selectedOrder.disputedReason}
+        </p>
+      </div>
+    </div>
+
+    
+{/* ✅ ADD THESE ACTION BUTTONS */}
+    <div className="mt-3">
+      <h6 className="fw-bold mb-3 text-dark">Admin Actions:</h6>
+      <div className="row g-2">
+        <div className="col-6">
+          <button 
+            className="btn btn-warning w-100 fw-bold"
+            onClick={() => {
+              setShowModal(false);
+              setShowReassignModal(true);
+            }}
+            disabled={loading}
+          >
+            <i className="bi bi-arrow-repeat me-2"></i>
+            Reassign for Revision
+          </button>
+        </div>
+        <div className="col-6">
+          <button 
+            className="btn btn-success w-100 fw-bold"
+            onClick={() => {
+              setShowModal(false);
+              setShowCloseResolvedModal(true);
+            }}
+            disabled={loading}
+          >
+            <i className="bi bi-check-circle me-2"></i>
+            Close as Resolved
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
 {/* Extension History - IMPROVED COLLAPSIBLE */}
 {selectedOrder.extensionHistory?.length > 0 && (
   <div className="mb-4">
@@ -1199,6 +1410,152 @@ const getPriorityBadge = (priority) => {
     </div>
   </div>
 )}
+{/* Reassign for Revision Modal */}
+{showReassignModal && selectedOrder && (
+  <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="modal-dialog">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h5 className="modal-title">Reassign Work Order - {selectedOrder.id}</h5>
+          <button 
+            type="button" 
+            className="btn-close"
+
+            onClick={() => {
+  setShowReassignModal(false);
+  setAssignedPersonnel('');
+  setExtendedDueDate(''); // ✅ Clear due date
+}}
+
+          ></button>
+        </div>
+        <div className="modal-body">
+          <div className="alert alert-warning">
+            <strong>Dispute Reported:</strong> {selectedOrder.disputedReason}
+          </div>
+          
+        <div className="mb-3">
+  <label className="form-label">Reassign to Personnel</label>
+  <select 
+    className="form-select"
+    value={assignedPersonnel}
+    onChange={(e) => setAssignedPersonnel(e.target.value)}
+  >
+    <option value="">Choose personnel...</option>
+    {personnel.map(person => (
+      <option key={person.id} value={person.id}>
+        {person.name}
+        {person.department && ` - ${person.department}`}
+        {person.activeTaskCount > 0 ? ` (${person.activeTaskCount} active)` : ''}
+      </option>
+    ))}
+  </select>
+</div>
+
+{/* ✅ ADD NEW DUE DATE FIELD */}
+<div className="mb-3">
+  <label className="form-label">New Due Date <span className="text-danger">*</span></label>
+  <input 
+    type="date"
+    className="form-control"
+    value={extendedDueDate}
+    onChange={(e) => setExtendedDueDate(e.target.value)}
+    min={new Date().toISOString().split('T')[0]} // Can't select past dates
+  />
+  <small className="text-muted">Give personnel enough time to fix the reported issue</small>
+</div>
+
+<div className="alert alert-info">
+  <small>The work order will be moved back to "In Progress" status with a new due date for revision.</small>
+</div>
+
+        </div>
+        <div className="modal-footer">
+          <button 
+            type="button" 
+            className="btn btn-secondary"
+            onClick={() => {
+              setShowReassignModal(false);
+              setAssignedPersonnel('');
+            }}
+          >
+            Cancel
+          </button>
+      <button 
+  type="button" 
+  className="btn btn-warning"
+  onClick={handleReassignForRevision}
+  disabled={!assignedPersonnel || !extendedDueDate || loading}
+>
+  {loading ? 'Reassigning...' : 'Reassign for Revision'}
+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Close as Resolved Modal */}
+{showCloseResolvedModal && selectedOrder && (
+  <div className="modal show d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="modal-dialog">
+      <div className="modal-content">
+        <div className="modal-header">
+          <h5 className="modal-title">Close Work Order as Resolved - {selectedOrder.id}</h5>
+          <button 
+            type="button" 
+            className="btn-close"
+            onClick={() => {
+              setShowCloseResolvedModal(false);
+              setAdminResolution('');
+            }}
+          ></button>
+        </div>
+        <div className="modal-body">
+          <div className="alert alert-warning">
+            <strong>Requester's Complaint:</strong> {selectedOrder.disputedReason}
+          </div>
+          
+          <div className="mb-3">
+            <label className="form-label">Admin Resolution Notes (Optional)</label>
+            <textarea 
+              className="form-control"
+              rows="4"
+              placeholder="Explain why this work order is being closed as resolved despite the complaint..."
+              value={adminResolution}
+              onChange={(e) => setAdminResolution(e.target.value)}
+            ></textarea>
+          </div>
+          
+          <div className="alert alert-success">
+            <small><strong>Note:</strong> This will mark the work order as "Completed" and close it. The requester will be notified of your decision.</small>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button 
+            type="button" 
+            className="btn btn-secondary"
+            onClick={() => {
+              setShowCloseResolvedModal(false);
+              setAdminResolution('');
+            }}
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            className="btn btn-success"
+            onClick={handleCloseAsResolved}
+            disabled={loading}
+          >
+            {loading ? 'Closing...' : 'Close as Resolved'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
       </div>
     </SidebarLayout>
   );

@@ -132,8 +132,15 @@ if (status === 'completed' && data?.[0]?.asset_id) {
   
   // ✅ AUTO-RESOLVE RELATED INCIDENT
 // ✅ AUTO-UPDATE RELATED INCIDENT STATUS
+// ✅ AUTO-UPDATE RELATED INCIDENT STATUS (WITH DEBUG LOGGING)
 if (data[0].incident_id) {
   try {
+    console.log('🔍 Task completed/failed - checking incident:', {
+      taskId: taskId,
+      incidentId: data[0].incident_id,
+      taskStatus: status
+    });
+    
     // Map maintenance task status to incident status
     const incidentStatusMap = {
       'completed': 'Completed',  // ✅ Success
@@ -143,14 +150,19 @@ if (data[0].incident_id) {
     const incidentStatus = incidentStatusMap[status];
     
     if (incidentStatus) {
-      await assetService.updateIncidentStatus(
-        data[0].incident_id, 
+      console.log(`📝 Attempting to update incident ${data[0].incident_id} to status: ${incidentStatus}`);
+      
+      const result = await assetService.updateIncidentStatus(
+        `INC-${data[0].incident_id}`,  // ✅ FIX: Add "INC-" prefix
         incidentStatus
       );
-      console.log(`✅ Incident ${data[0].incident_id} marked as ${incidentStatus}`);
+      
+      console.log(`✅ Incident ${data[0].incident_id} marked as ${incidentStatus}`, result);
+    } else {
+      console.log('⚠️ No incident status mapping for task status:', status);
     }
   } catch (incidentError) {
-    console.error('Failed to update incident status:', incidentError);
+    console.error('❌ Failed to update incident status:', incidentError);
   }
 }
 }
