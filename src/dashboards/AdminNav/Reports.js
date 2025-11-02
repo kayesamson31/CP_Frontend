@@ -1125,7 +1125,12 @@ const chartData = useMemo(() => {
               <Col lg={6}>
                 <Card className="border-0 shadow-sm h-100" style={{ borderRadius: '12px' }}>
                   <Card.Body className="p-4">
-                    <h5 className="mb-3 fw-semibold">Assets Requiring Attention</h5>
+                   <div className="d-flex justify-content-between align-items-center mb-3">
+  <div>
+    <h5 className="mb-0 fw-semibold">Assets with Most Incidents</h5>
+    <small className="text-muted">Based on incident report frequency</small>
+  </div>
+</div>
                     {chartData.problematicAssets.length > 0 ? (
                       <ResponsiveContainer width="100%" height={300}>
                         <BarChart data={chartData.problematicAssets} layout="vertical">

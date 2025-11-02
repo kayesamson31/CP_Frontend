@@ -747,11 +747,14 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 <thead style={{ backgroundColor: '#284C9A', color: 'white' }}>
   <tr>
     <th style={{ width: '120px', minWidth: '120px' }}>Timestamp</th>
-    <th style={{ width: '350px', minWidth: '350px' }}>Title</th>
+    <th style={{ width: selectedStatus === 'Completed' ? '280px' : '350px', minWidth: selectedStatus === 'Completed' ? '280px' : '350px' }}>Title</th>
     <th style={{ width: '180px', minWidth: '180px' }}>Priority</th>
+    {selectedStatus === 'Completed' && (
+      <th style={{ width: '150px', minWidth: '150px' }}>Status</th>
+    )}
     <th style={{ width: '180px', minWidth: '180px' }}>
-  {(selectedStatus === 'To Review' || selectedStatus === 'Completed') ? 'Action' : null}
-</th>
+      {(selectedStatus === 'To Review' || selectedStatus === 'Completed') ? 'Action' : null}
+    </th>
   </tr>
 </thead>
 
@@ -772,19 +775,12 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 >
 <td>{formatDate(item.timestamp)}</td>
 <td style={{ 
-  maxWidth: '350px',
+  maxWidth: selectedStatus === 'Completed' ? '280px' : '350px',
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap' 
 }}>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-    <span>{item.title}</span>
-    {item.status === 'Completed' && item.requester_confirmation === 'pending' && (
-      <Badge bg="info" style={{ fontSize: '10px' }}>
-        Pending Your Confirmation
-      </Badge>
-    )}
-  </div>
+  {item.title}
 </td>
 
 
@@ -840,7 +836,25 @@ color: selectedStatus === status.label ? 'white' : '#495057'
     )}
   </div>
 </td>
-
+{selectedStatus === 'Completed' && (
+  <td>
+    {item.requester_confirmation === 'pending' && (
+      <Badge 
+        bg="info" 
+        style={{ 
+          fontSize: '11px',
+          padding: '4px 8px',
+          whiteSpace: 'nowrap'
+        }}
+      >
+        Awaiting Confirmation
+      </Badge>
+    )}
+    {item.requester_confirmation === 'confirmed' && (
+      <Badge bg="success">Verified</Badge>
+    )}
+  </td>
+)}
 <td>
   {item.status === 'To Review' ? (
     <Button
@@ -863,7 +877,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
           handleConfirmCompletion(item.work_order_id);
         }}
       >
-        ✓ Confirm
+        Confirm
       </Button>
       <Button
         variant="warning"
@@ -874,13 +888,13 @@ color: selectedStatus === status.label ? 'white' : '#495057'
           setShowReportIssueModal(true);
         }}
       >
-        ⚠ Report
+        Report
       </Button>
     </div>
   ) : item.status === 'Completed' && item.requester_confirmation === 'confirmed' ? (
-    <Badge bg="success">Verified</Badge>
-  ) : item.status === 'Completed' && item.requester_confirmation === 'disputed' ? (
-    <Badge bg="warning">Disputed</Badge>
+    <small style={{ color: '#28a745', fontSize: '12px' }}>
+      ✓ {item.confirmation_date ? formatDate(item.confirmation_date) : 'Confirmed'}
+    </small>
   ) : null}
 </td>
       </tr>
@@ -888,7 +902,7 @@ color: selectedStatus === status.label ? 'white' : '#495057'
 
                   {filteredHistory.length === 0 && (
                     <tr>
-                      <td colSpan="4" className="text-center text-muted">No records found.</td>
+                    <td colSpan={selectedStatus === 'Completed' ? "5" : "4"} className="text-center text-muted">No records found.</td>
                     </tr>
                     )}
                     </tbody>

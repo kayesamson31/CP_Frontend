@@ -316,6 +316,7 @@ async fetchMyTasks() {
     task_name,
     description,
     due_date,
+    scheduled_time,
     original_due_date,
     extension_count,
     last_extension_date,
@@ -365,6 +366,7 @@ async fetchMyTasks() {
   title: task.task_name,
   description: task.description || 'No description',
   dueDate: task.due_date,
+  scheduledTime: task.scheduled_time,  
   originalDueDate: task.original_due_date,
   extensionCount: task.extension_count || 0,
   lastExtensionDate: task.last_extension_date,
@@ -553,6 +555,7 @@ const taskInsert = {
   work_order_id: null,
   asset_id: assetData.asset_id, 
   due_date: taskData.dueDate,
+  scheduled_time: taskData.dueTime || null, 
   assigned_to: parseInt(taskData.assigneeId),
   incident_id: taskData.incidentId || null,
   organization_id: organizationId  // â† ADD THIS

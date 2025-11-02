@@ -88,8 +88,7 @@ const [newTask, setNewTask] = useState({
   dueDate: '',
   dueTime: '',
   taskType: 'predefined',
-  status: 'pending',
-  repeat: 'none'
+  status: 'pending'
 });
 
 
@@ -650,8 +649,7 @@ const handleCreateTask = async () => {
   dueDate: '',
   dueTime: '',
   taskType: 'predefined',
-  status: 'pending',
-  repeat: 'none'  
+  status: 'pending'
 });
       
       setShowTaskModal(false);
@@ -1523,7 +1521,7 @@ const Pagination = () => {
       .filter(asset => asset.status === 'Operational')
       .map(asset => (
         <option key={asset.id} value={asset.id}>
-          {asset.name} ({asset.id})
+          {asset.name}
         </option>
       ))
   )}
@@ -1665,42 +1663,7 @@ const Pagination = () => {
           </Form.Group>
         </Col>
       </Row>
-      <Col xs={12}>
-  <hr className="my-3" />
-  <h6 className="mb-3">
-    <i className="fas fa-repeat me-2"></i>
-    Recurring Maintenance (Optional)
-  </h6>
-</Col>
 
-<Col xs={12}>
-  <Form.Group>
-    <Form.Label>Repeat Schedule</Form.Label>
-    <Form.Select
-      value={newTask.repeat || 'none'}
-      onChange={(e) => setNewTask({...newTask, repeat: e.target.value})}
-    >
-      <option value="none">No Repeat</option>
-      <option value="weekly">Weekly</option>
-      <option value="monthly">Monthly</option>
-      <option value="yearly">Yearly</option>
-    </Form.Select>
-    <Form.Text className="text-muted">
-      Set up recurring maintenance for this asset
-    </Form.Text>
-  </Form.Group>
-</Col>
-
-{newTask.repeat !== 'none' && (
-  <Col xs={12}>
-    <Alert variant="info">
-      <small>
-        <i className="fas fa-info-circle me-1"></i> 
-        This task will repeat automatically. Personnel can view it in their task dashboard.
-      </small>
-    </Alert>
-  </Col>
-)}
     </Modal.Body>
     <Modal.Footer>
       <Button variant="secondary" onClick={() => setShowTaskModal(false)}>

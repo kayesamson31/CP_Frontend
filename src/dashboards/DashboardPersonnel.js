@@ -489,6 +489,17 @@ const [filterKey, setFilterKey] = useState(0);
 const [statusFilter, setStatusFilter] = useState('all'); // 'all', 'completed', 'failed'
 const [dateRangeFilter, setDateRangeFilter] = useState('all'); // 'all', 'week', 'month', '3months'
 
+ const formatTimeTo12Hour = (time24) => {
+    if (!time24) return '';
+    
+    const [hours, minutes] = time24.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const hour12 = hour % 12 || 12;
+    
+    return `${hour12}:${minutes} ${ampm}`;
+  };
+
   // Helper functions to capitalize text
 const capitalizeStatus = (status) => {
   if (status === 'in-progress') return 'In Progress';
@@ -616,6 +627,7 @@ const orgId = userProfile.organization_id;
           asset: wo.asset_text || 'Not specified',
           location: wo.location || 'Not specified',
           dueDate: wo.due_date,
+          scheduledTime: wo.scheduled_time || null,
           originalDueDate: wo.original_due_date,
           priority: (wo.admin_priority_levels?.priority_name || wo.priority_levels?.priority_name || 'medium').toLowerCase(),
           status: statusName,
@@ -654,6 +666,7 @@ const orgId = userProfile.organization_id;
         location: task.asset?.location || task.workOrder?.location || task.workOrder?.asset?.location || 'Not specified',
         category: task.asset?.category || task.workOrder?.category || 'Maintenance',
           dueDate: task.dueDate,
+          scheduledTime: task.scheduledTime || null,
           originalDueDate: null,
           priority: task.priority.toLowerCase(),
           status: statusName,
@@ -1737,17 +1750,34 @@ getTodayTasks().map((task, index) => (
                     </div>
                   </div>
 
-                  {/* Location and Date Row */}
-                  <div className="row mb-3">
-                    <div className="col-6">
-                      <label className="form-label">Location:</label>
-                      <input className="form-control" value={selectedTask.location} readOnly />
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label">Date Needed By:</label>
-                      <input className="form-control" value={new Date(selectedTask.dueDate).toLocaleDateString()} readOnly />
-                    </div>
-                  </div>
+{/* Location Row */}
+<div className="row mb-3">
+  <div className="col-12">
+    <label className="form-label">Location:</label>
+    <input className="form-control" value={selectedTask.location} readOnly />
+  </div>
+</div>
+
+{/* Date & Time Row - Combined */}
+<div className="row mb-3">
+  <div className="col-12">
+    <label className="form-label">
+      {selectedTask.scheduledTime ? 'Scheduled Date & Time:' : 'Date Needed By:'}
+    </label>
+    <input 
+      className="form-control" 
+      value={
+        selectedTask.scheduledTime 
+          ? `${new Date(selectedTask.dueDate).toLocaleDateString()} at ${formatTimeTo12Hour(selectedTask.scheduledTime)}`
+          : new Date(selectedTask.dueDate).toLocaleDateString()
+      }
+      readOnly 
+    />
+    {selectedTask.scheduledTime && (
+      <small className="text-muted">This is the time assigned by admin for you to start this task</small>
+    )}
+  </div>
+</div>
 
                   {/* Description Field */}
                   <div className="mb-3">

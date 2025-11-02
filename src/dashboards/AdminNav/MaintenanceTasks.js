@@ -114,6 +114,7 @@ const fetchMaintenanceTasks = async () => {
   status: statusName,
   priority: task.priority_levels?.priority_name || 'Low',
   dueDate: task.due_date,
+  scheduledTime: task.scheduled_time,
   dateCreated: task.date_created,
   description: task.description,
   task_id: task.task_id,
@@ -408,6 +409,19 @@ const getStatusBadge = (status) => {
       return dateString;
     }
   };
+
+// Add this helper function (around line 450-500, before return statement)
+const formatTimeTo12Hour = (time24) => {
+  if (!time24) return '';
+  
+  const [hours, minutes] = time24.split(':');
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 || 12;
+  
+  return `${hour12}:${minutes} ${ampm}`;
+};
+
   return (
     <SidebarLayout role="admin">
       <div className="container-fluid p-4">
@@ -704,12 +718,23 @@ const getStatusBadge = (status) => {
         </span>
       </p>
     </div>
-    <div className="col-6">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Due Date
-      </label>
-      <p className="mb-0" style={{fontSize: '0.95rem', color: '#212529'}}>{formatDate(selectedTask.dueDate)}</p>
-    </div>
+{/* Date & Scheduled Time - Combined like in Personnel Dashboard */}
+<div className="col-6">
+  <label className="form-label fw-bold text-muted small text-uppercase mb-2">
+    {selectedTask.scheduledTime ? 'Scheduled Date & Time' : 'Due Date'}
+  </label>
+  <p className="mb-0">
+    {selectedTask.scheduledTime 
+      ? `${formatDate(selectedTask.dueDate)} at ${formatTimeTo12Hour(selectedTask.scheduledTime)}`
+      : formatDate(selectedTask.dueDate)
+    }
+  </p>
+  {selectedTask.scheduledTime && (
+    <small className="text-muted d-block mt-1">
+      Scheduled time for personnel to start
+    </small>
+  )}
+</div>
   </div>
 
   {/* Date Created and Assigned To Row */}

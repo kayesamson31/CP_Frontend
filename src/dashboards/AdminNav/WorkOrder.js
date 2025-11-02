@@ -13,6 +13,7 @@ export default function WorkOrder() {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [assignedPersonnel, setAssignedPersonnel] = useState('');
+  const [assignedTime, setAssignedTime] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showRejectModal, setShowRejectModal] = useState(false);
@@ -85,6 +86,7 @@ const transformedOrders = data.map(wo => {
     suggestedPriority: wo.priority_levels?.priority_name || 'Low',
     adminUpdatedPriority: wo.admin_priority_levels?.priority_name || null,
     requestDate: wo.date_requested,
+     scheduledTime: wo.scheduled_time,
     dueDate: wo.due_date,
     description: wo.title,
     detailedDescription: wo.description,
@@ -258,12 +260,24 @@ const confirmAssignment = async () => {
 
     if (statusError) throw statusError;
 
-    // Prepare update object
-    const updateData = { 
-      status_id: statusData.status_id,
-      assigned_to: parseInt(assignedPersonnel),
-      date_assigned: new Date().toISOString()
-    };
+// Prepare update object with scheduled time
+let scheduledDateTime = new Date();
+if (assignedTime) {
+  // If time is provided, combine selected date with time
+  const [hours, minutes] = assignedTime.split(':');
+  scheduledDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+}
+
+const updateData = { 
+  status_id: statusData.status_id,
+  assigned_to: parseInt(assignedPersonnel),
+  date_assigned: new Date().toISOString()
+};
+
+// Only add scheduled_time if provided
+if (assignedTime) {
+  updateData.scheduled_time = assignedTime;
+}
 
     // If admin selected a priority, get the priority_id and add to update
     if (adminPriority) {
@@ -331,6 +345,7 @@ setShowAssignModal(false);
 
     setAssignedPersonnel('');
     setAdminPriority('');
+    setAssignedTime('');
     setSelectedOrder(null);
 
   } catch (err) {
@@ -582,6 +597,14 @@ const getPriorityBadge = (priority) => {
       return dateString; // Return original if parsing fails
     }
   };
+const formatTimeTo12Hour = (time24) => {
+  if (!time24) return '';
+  const [hours, minutes] = time24.split(':');
+  const hour = parseInt(hours);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour % 12 || 12;
+  return `${hour12}:${minutes} ${ampm}`;
+};
 
   return (
     <SidebarLayout role="admin">
@@ -858,17 +881,22 @@ const getPriorityBadge = (priority) => {
                     </div>
                   </div>
 
-                  {/* Location and Date Needed By Row */}
-                  <div className="row mb-3">
-                    <div className="col-6">
-                      <label className="form-label fw-bold text-muted small">Location:</label>
-                      <p className="mb-0">{selectedOrder.location || '-'}</p>
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label fw-bold text-muted small">Date Needed By:</label>
-                      <p className="mb-0">{formatDate(selectedOrder.dueDate)}</p>
-                    </div>
-                  </div>
+               <div className="col-6">
+  <label className="form-label fw-bold text-muted small">
+    {selectedOrder.scheduledTime ? 'Scheduled Date & Time:' : 'Date Needed By:'}
+  </label>
+  <p className="mb-0">
+    {selectedOrder.scheduledTime 
+      ? `${formatDate(selectedOrder.dueDate)} at ${formatTimeTo12Hour(selectedOrder.scheduledTime)}`
+      : formatDate(selectedOrder.dueDate)
+    }
+  </p>
+  {selectedOrder.scheduledTime && (
+    <small className="text-muted d-block mt-1">
+      Assigned time for personnel to start
+    </small>
+  )}
+</div>
 
                   {/* Request Date and Suggested Priority Row */}
                   <div className="row mb-3">
@@ -1220,10 +1248,13 @@ const getPriorityBadge = (priority) => {
                 <div className="modal-header">
                   <h5 className="modal-title">Assign Personnel - {selectedOrder.id}</h5>
                   <button 
-                    type="button" 
-                    className="btn-close"
-                    onClick={() => setShowAssignModal(false)}
-                  ></button>
+  type="button" 
+  className="btn-close"
+  onClick={() => {
+    setShowAssignModal(false);
+    setAssignedTime(''); // ← ADD THIS
+  }}
+></button>
                 </div>
                 <div className="modal-body">
 <div className="mb-3">
@@ -1252,6 +1283,17 @@ const getPriorityBadge = (priority) => {
       </small>
     </div>
   )}
+</div>
+{/* ADD THIS: Scheduled Time Field */}
+<div className="mb-3">
+  <label className="form-label">Scheduled Time (Optional)</label>
+  <input 
+    type="time"
+    className="form-select"
+    value={assignedTime}
+    onChange={(e) => setAssignedTime(e.target.value)}
+  />
+  <small className="text-muted">Set a specific time for the personnel to start this work order</small>
 </div>
                   <div className="alert alert-info">
                     <small>Once assigned, this work order will move to the Pending tab.</small>

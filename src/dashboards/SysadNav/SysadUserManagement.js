@@ -111,7 +111,7 @@ const handleEmailProgressClose = () => {
   
   const { successCount, failedCount } = emailProgress;
   if (failedCount > 0) {
-    alert(`Email Summary:\n✓ ${successCount} emails sent successfully\n✗ ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
+    alert(`Email Summary:\nâœ“ ${successCount} emails sent successfully\nâœ— ${failedCount} emails failed\n\nYou may need to manually send credentials to failed recipients.`);
   }
 };
 
@@ -120,7 +120,7 @@ const fetchUsers = async () => {
     setLoading(true);
     setError(null);
     
-// ✅ Get current user's organization
+// âœ… Get current user's organization
 const currentUser = JSON.parse(localStorage.getItem('currentUser'));
 if (!currentUser || !currentUser.organizationId) {
   throw new Error('Session expired. Please log in again.');
@@ -223,7 +223,7 @@ const updateUser = async (userId, userData) => {
       throw new Error(`Failed to update user: ${error.message}`);
     }
 
-    console.log('✓ User updated successfully:', data);
+    console.log('âœ“ User updated successfully:', data);
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     await AuditLogger.logWithIP({
       userId: currentUser.id,
@@ -262,7 +262,7 @@ const updateUser = async (userId, userData) => {
       throw new Error(`Failed to delete user: ${error.message}`);
     }
 
-    console.log('✓ User permanently deleted');
+    console.log('âœ“ User permanently deleted');
     const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     await AuditLogger.logWithIP({
       userId: currentUser.id,
@@ -406,7 +406,7 @@ const handleAddUser = async (e) => {
 // Generate password
 const tempPassword = PasswordUtils.generateSecurePassword(10);
 
-// 🎯 CREATE SUPABASE AUTH USER FIRST (BEFORE database insert)
+// ðŸŽ¯ CREATE SUPABASE AUTH USER FIRST (BEFORE database insert)
 console.log(`Creating Supabase Auth account for: ${newUser.email.trim().toLowerCase()}`);
 
 const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -425,7 +425,7 @@ if (authError) {
   throw new Error(`Failed to create authentication account: ${authError.message}`);
 }
 
-console.log('✅ Supabase Auth user created successfully');
+console.log('âœ… Supabase Auth user created successfully');
 
 // Prepare user data (NOW WITH auth_uid)
 const newUserData = {
@@ -435,7 +435,7 @@ const newUserData = {
   role_id: getRoleIdFromRole(newUser.role),
   organization_id: orgId,
   username: PasswordUtils.generateUsername(newUser.email),
-  password_hash: null, // ✅ Set to null, Supabase Auth handles password now
+  password_hash: null, // âœ… Set to null, Supabase Auth handles password now
   auth_uid: authData.user.id,
   job_position: newUser.role === 'Personnel' ? (newUser.jobPosition || null) : null
 };
@@ -454,9 +454,9 @@ const newUserData = {
       throw new Error(`Failed to save user to database: ${insertError.message}`);
     }
 
-    console.log('✓ User created successfully in database');
+    console.log('âœ“ User created successfully in database');
 
-    // ✅ ADD AUDIT LOG HERE
+    // âœ… ADD AUDIT LOG HERE
 const currentUser = JSON.parse(localStorage.getItem('currentUser'));
 await AuditLogger.logWithIP({
   userId: currentUser.id,
@@ -523,9 +523,9 @@ await AuditLogger.logWithIP({
       }));
 
       if (emailResult.success) {
-        console.log('✓ Welcome email sent successfully');
+        console.log('âœ“ Welcome email sent successfully');
       } else {
-        console.error('✗ Email failed:', emailResult.error);
+        console.error('âœ— Email failed:', emailResult.error);
         // Show manual credentials in alert
         alert(
           `User created successfully but email failed to send.\n\n` +
@@ -818,7 +818,7 @@ const usersWithPasswords = csvRows.map((row) => {
 
        console.log(`Final result: ${insertedCount} users created, ${successfulEmails} emails sent, ${failedEmails} emails failed`);
 
-// ✅ ADD AUDIT LOG
+// âœ… ADD AUDIT LOG
 const currentUser = JSON.parse(localStorage.getItem('currentUser'));
 await AuditLogger.logWithIP({
   userId: currentUser.id,
@@ -1193,8 +1193,8 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
                     </div>
                     <div className="alert alert-info">
                       <small>
-                        📧 Welcome email with login credentials will be sent to the user.<br />
-                        🔒 User will be required to change password on first login.
+                        ðŸ“§ Welcome email with login credentials will be sent to the user.<br />
+                        ðŸ”’ User will be required to change password on first login.
                       </small>
                     </div>
                   </div>
@@ -1356,17 +1356,17 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
             {activeTab === 'delete' && (
               <div className="tab-pane fade show active">
                 <div className="alert alert-danger">
-                  <h6 className="alert-heading">⚠️ This action cannot be undone!</h6>
+                  <h6 className="alert-heading">âš ï¸ This action cannot be undone!</h6>
                   <p className="mb-0">You are about to permanently delete this user from the system.</p>
                 </div>
                 
                 <div className="mb-3">
                   <p className="text-muted mb-0">
                     <strong>What will happen:</strong><br />
-                    • User account will be permanently removed<br />
-                    • All user data and activity logs will be deleted<br />
-                    • User will lose access immediately<br />
-                    • This action cannot be reversed
+                    â€¢ User account will be permanently removed<br />
+                    â€¢ All user data and activity logs will be deleted<br />
+                    â€¢ User will lose access immediately<br />
+                    â€¢ This action cannot be reversed
                   </p>
                 </div>
                 
