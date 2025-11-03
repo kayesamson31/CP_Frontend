@@ -414,7 +414,7 @@ useEffect(() => {
   const getRoleDisplayName = (role) => {
     const roleNames = {
       'standard': 'Standard User',
-      'admin': 'Admin',
+      'admin': 'Facility Manager',
       'personnel': 'Personnel',
       'sysadmin': 'System Administrator'
     };

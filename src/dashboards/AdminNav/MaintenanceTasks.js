@@ -561,7 +561,6 @@ const formatTimeTo12Hour = (time24) => {
     <th>Task Name</th>
     <th>Asset</th>
     <th>Location</th>
-    <th>Status</th>
     <th>Priority</th>
     <th>Due Date</th>
     {activeTab !== 'To Review' && <th>Assigned To</th>}
@@ -584,7 +583,6 @@ const formatTimeTo12Hour = (time24) => {
                       <td>{task.taskName || '-'}</td>
                       <td><span className="text-muted fw-medium">{task.assetName || '-'}</span></td>
                       <td>{task.location || '-'}</td>
-                      <td>{getStatusBadge(task.status)}</td>
                       <td>
   <div className="d-flex align-items-center gap-2">
     {getPriorityBadge(task.priority)}
@@ -672,191 +670,82 @@ const formatTimeTo12Hour = (time24) => {
                        </div>
 
 <div className="modal-body px-5 py-4" style={{backgroundColor: '#FFFFFF', minHeight: '500px'}}>  
-  {/* Header Section - ID, Task Name, Status */}
+  {/* ID and Task Name */}
   <div className="text-center mb-4">
-    <h4 className="fw-bold text-dark mb-2" style={{fontSize: '1.5rem'}}>ID: {selectedTask.id}</h4>
-    <h5 className="fw-semibold mb-2" style={{fontSize: '1.1rem', color: '#495057'}}>
-      {selectedTask.taskName || 'No task name'}
-    </h5>
-    <div className="mt-2">
-      {getStatusBadge(selectedTask.status)}
-    </div>
+    <h4 className="fw-bold text-dark mb-1">ID: {selectedTask.id}</h4>
+    <p className="mb-0 text-muted">{selectedTask.taskName || 'No task name'}</p>
   </div>
 
-  {/* Divider */}
-  <hr className="my-4" />
+  {/* Status */}
+  <div className="mb-4">
+    <label className="form-label fw-bold text-muted small">Status:</label>
+    <div>{getStatusBadge(selectedTask.status)}</div>
+  </div>
 
   {/* Asset and Location Row */}
-  <div className="row mb-4">
+  <div className="row mb-3">
     <div className="col-6">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Asset
-      </label>
-      <p className="mb-0" style={{fontSize: '0.95rem', color: '#212529'}}>{selectedTask.assetName || '-'}</p>
+      <label className="form-label fw-bold text-muted small">Asset:</label>
+      <p className="mb-0">{selectedTask.assetName || '-'}</p>
     </div>
     <div className="col-6">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Location
-      </label>
-      <p className="mb-0" style={{fontSize: '0.95rem', color: '#212529'}}>{selectedTask.location || '-'}</p>
+      <label className="form-label fw-bold text-muted small">Location:</label>
+      <p className="mb-0">{selectedTask.location || '-'}</p>
     </div>
   </div>
 
-  {/* Priority and Due Date Row */}
-  <div className="row mb-4">
+  {/* Priority and Due Date/Scheduled Time Row */}
+  <div className="row mb-3">
     <div className="col-6">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Priority
-      </label>
+      <label className="form-label fw-bold text-muted small">Priority:</label>
       <p className="mb-0">
         <span className={`fw-bold ${
           selectedTask.priority === 'High' ? 'text-danger' :
           selectedTask.priority === 'Medium' ? 'text-warning' :
           'text-success'
-        }`} style={{fontSize: '0.95rem'}}>
+        }`}>
           {selectedTask.priority || 'Not specified'}
         </span>
       </p>
     </div>
-{/* Date & Scheduled Time - Combined like in Personnel Dashboard */}
-<div className="col-6">
-  <label className="form-label fw-bold text-muted small text-uppercase mb-2">
-    {selectedTask.scheduledTime ? 'Scheduled Date & Time' : 'Due Date'}
-  </label>
-  <p className="mb-0">
-    {selectedTask.scheduledTime 
-      ? `${formatDate(selectedTask.dueDate)} at ${formatTimeTo12Hour(selectedTask.scheduledTime)}`
-      : formatDate(selectedTask.dueDate)
-    }
-  </p>
-  {selectedTask.scheduledTime && (
-    <small className="text-muted d-block mt-1">
-      Scheduled time for personnel to start
-    </small>
-  )}
-</div>
+    <div className="col-6">
+      <label className="form-label fw-bold text-muted small">
+        {selectedTask.scheduledTime ? 'Scheduled Date & Time:' : 'Due Date:'}
+      </label>
+      <p className="mb-0">
+        {selectedTask.scheduledTime 
+          ? `${formatDate(selectedTask.dueDate)} at ${formatTimeTo12Hour(selectedTask.scheduledTime)}`
+          : formatDate(selectedTask.dueDate)
+        }
+      </p>
+      {selectedTask.scheduledTime && (
+        <small className="text-muted d-block mt-1">
+        </small>
+      )}
+    </div>
   </div>
 
   {/* Date Created and Assigned To Row */}
-  <div className="row mb-4">
+  <div className="row mb-3">
     <div className="col-6">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Date Created
-      </label>
-      <p className="mb-0" style={{fontSize: '0.95rem', color: '#212529'}}>{formatDate(selectedTask.dateCreated)}</p>
+      <label className="form-label fw-bold text-muted small">Date Created:</label>
+      <p className="mb-0">{formatDate(selectedTask.dateCreated)}</p>
     </div>
     <div className="col-6">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Assigned To
-      </label>
-      <p className="mb-0" style={{fontSize: '0.95rem', color: '#212529'}}>{selectedTask.assignedTo || 'Unassigned'}</p>
+      <label className="form-label fw-bold text-muted small">Assigned To:</label>
+      <p className="mb-0">{selectedTask.assignedTo || 'Unassigned'}</p>
     </div>
   </div>
 
-  {/* Divider */}
-  <hr className="my-4" />
-
   {/* Description */}
   <div className="mb-4">
-    <label className="form-label fw-bold text-muted small text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-      Description
-    </label>
-    <div className="p-3 bg-light rounded border" style={{minHeight: '80px'}}>
-      <p className="mb-0" style={{lineHeight: '1.6', fontSize: '0.95rem', color: '#495057'}}>
+    <label className="form-label fw-bold text-muted small">Description:</label>
+    <div className="p-3 bg-white rounded border">
+      <p className="mb-0 text-muted">
         {selectedTask.description || 'No description provided'}
       </p>
     </div>
   </div>
-
-{/* Extension History - IMPROVED COLLAPSIBLE */}
-{selectedTask.extensionCount > 0 && selectedTask.extensionHistory && selectedTask.extensionHistory.length > 0 && (
-  <div className="mb-4">
-    {/* Header with View All button */}
-    <div className="d-flex justify-content-between align-items-center mb-2">
-      <label className="form-label fw-bold text-muted small text-uppercase mb-0" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-        Extension History ({selectedTask.extensionCount})
-      </label>
-      
-      {selectedTask.extensionHistory.length > 1 && (
-        <button 
-          className="btn btn-link btn-sm text-muted p-0 text-decoration-none" 
-          style={{fontSize: '0.75rem'}}
-          onClick={(e) => {
-            const content = e.target.closest('.mb-4').querySelector('#extensionHistoryContent');
-            const icon = e.target.querySelector('.bi') || e.target;
-            if (content.style.display === 'none') {
-              content.style.display = 'block';
-              icon.classList.remove('bi-chevron-down');
-              icon.classList.add('bi-chevron-up');
-            } else {
-              content.style.display = 'none';
-              icon.classList.remove('bi-chevron-up');
-              icon.classList.add('bi-chevron-down');
-            }
-          }}
-        >
-          View all <i className="bi bi-chevron-down"></i>
-        </button>
-      )}
-    </div>
-    
-    {/* Latest Extension - Always Visible */}
-    <div className="border rounded p-3" style={{backgroundColor: '#fffbf0', borderLeft: '3px solid #ffc107'}}>
-      <div className="d-flex align-items-start gap-2">
-        <div className="text-warning" style={{fontSize: '1.1rem', lineHeight: '1'}}>
-          <i className="bi bi-clock"></i>
-        </div>
-        <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
-          <div className="d-flex justify-content-between align-items-start mb-1">
-            <span className="fw-semibold text-dark">
-              {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].old_due_date)} → {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].new_due_date)}
-            </span>
-            <small className="text-muted">{formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_date)}</small>
-          </div>
-          <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
-            {selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_reason || 'No reason provided'}
-          </p>
-        </div>
-      </div>
-    </div>
-
-    {/* Previous Extensions - Collapsible Content */}
-    {selectedTask.extensionHistory.length > 1 && (
-      <div className="mt-2 border rounded p-2" style={{backgroundColor: '#f8f9fa', display: 'none'}} id="extensionHistoryContent">
-        {selectedTask.extensionHistory.slice(0, -1).reverse().map((ext, index) => (
-          <div key={index} className={`d-flex align-items-start gap-2 p-2 ${index !== selectedTask.extensionHistory.length - 2 ? 'mb-2 border-bottom' : ''}`}>
-            <div className="text-muted" style={{fontSize: '1rem', lineHeight: '1'}}>
-              <i className="bi bi-clock"></i>
-            </div>
-            <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
-              <div className="d-flex justify-content-between align-items-start mb-1">
-                <span className="fw-semibold">
-                  {formatDate(ext.old_due_date)} → {formatDate(ext.new_due_date)}
-                </span>
-                <small className="text-muted">{formatDate(ext.extension_date)}</small>
-              </div>
-              <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
-                {ext.extension_reason || 'No reason provided'}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
-
-{/* Failed Reason - ADD THIS if not present */}
-{selectedTask.status === 'Failed' && selectedTask.remarks && (
-  <div className="mb-4">
-    <label className="form-label fw-bold text-danger text-uppercase mb-2" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
-      Failure Reason
-    </label>
-    <div className="alert alert-danger" role="alert">
-      <p className="mb-0" style={{fontSize: '0.95rem'}}>{selectedTask.remarks}</p>
-    </div>
-  </div>
-)}
 
   {/* Overdue Warning */}
   {selectedTask.isOverdue && (
@@ -864,14 +753,102 @@ const formatTimeTo12Hour = (time24) => {
       <div className="alert alert-danger d-flex align-items-center" role="alert">
         <i className="bi bi-exclamation-triangle-fill me-2"></i>
         <div>
-          <strong style={{fontSize: '0.95rem'}}>This maintenance task is overdue!</strong><br />
-          <small style={{fontSize: '0.85rem'}}>
+          <strong>This maintenance task is overdue!</strong><br />
+          <small>
             {selectedTask.extensionCount > 0 
               ? `Extended due date was: ${formatDate(selectedTask.dueDate)} (Originally: ${formatDate(selectedTask.originalDueDate)})`
               : `Due date was: ${formatDate(selectedTask.dueDate)}`
             }
           </small>
         </div>
+      </div>
+    </div>
+  )}
+
+  {/* Extension History - IMPROVED COLLAPSIBLE */}
+  {selectedTask.extensionCount > 0 && selectedTask.extensionHistory && selectedTask.extensionHistory.length > 0 && (
+    <div className="mb-4">
+      {/* Header with View All button */}
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <label className="form-label fw-bold text-muted small text-uppercase mb-0" style={{fontSize: '0.75rem', letterSpacing: '0.5px'}}>
+          Extension History ({selectedTask.extensionCount})
+        </label>
+        
+        {selectedTask.extensionHistory.length > 1 && (
+          <button 
+            className="btn btn-link btn-sm text-muted p-0 text-decoration-none" 
+            style={{fontSize: '0.75rem'}}
+            onClick={(e) => {
+              const content = e.target.closest('.mb-4').querySelector('#extensionHistoryContent');
+              const icon = e.target.querySelector('.bi') || e.target;
+              if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.classList.remove('bi-chevron-down');
+                icon.classList.add('bi-chevron-up');
+              } else {
+                content.style.display = 'none';
+                icon.classList.remove('bi-chevron-up');
+                icon.classList.add('bi-chevron-down');
+              }
+            }}
+          >
+            View all <i className="bi bi-chevron-down"></i>
+          </button>
+        )}
+      </div>
+      
+      {/* Latest Extension - Always Visible */}
+      <div className="border rounded p-3" style={{backgroundColor: '#fffbf0', borderLeft: '3px solid #ffc107'}}>
+        <div className="d-flex align-items-start gap-2">
+          <div className="text-warning" style={{fontSize: '1.1rem', lineHeight: '1'}}>
+            <i className="bi bi-clock"></i>
+          </div>
+          <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
+            <div className="d-flex justify-content-between align-items-start mb-1">
+              <span className="fw-semibold text-dark">
+                {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].old_due_date)} → {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].new_due_date)}
+              </span>
+              <small className="text-muted">{formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_date)}</small>
+            </div>
+            <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
+              {selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_reason || 'No reason provided'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Previous Extensions - Collapsible Content */}
+      {selectedTask.extensionHistory.length > 1 && (
+        <div className="mt-2 border rounded p-2" style={{backgroundColor: '#f8f9fa', display: 'none'}} id="extensionHistoryContent">
+          {selectedTask.extensionHistory.slice(0, -1).reverse().map((ext, index) => (
+            <div key={index} className={`d-flex align-items-start gap-2 p-2 ${index !== selectedTask.extensionHistory.length - 2 ? 'mb-2 border-bottom' : ''}`}>
+              <div className="text-muted" style={{fontSize: '1rem', lineHeight: '1'}}>
+                <i className="bi bi-clock"></i>
+              </div>
+              <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
+                <div className="d-flex justify-content-between align-items-start mb-1">
+                  <span className="fw-semibold">
+                    {formatDate(ext.old_due_date)} → {formatDate(ext.new_due_date)}
+                  </span>
+                  <small className="text-muted">{formatDate(ext.extension_date)}</small>
+                </div>
+                <p className="mb-0 text-muted" style={{fontSize: '0.8rem'}}>
+                  {ext.extension_reason || 'No reason provided'}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )}
+
+  {/* Failed Reason */}
+  {selectedTask.status === 'Failed' && selectedTask.remarks && (
+    <div className="mb-4">
+      <label className="form-label fw-bold text-muted small">Failure Reason:</label>
+      <div className="p-3 bg-danger-subtle rounded border border-danger-subtle">
+        <p className="mb-0 text-danger">{selectedTask.remarks}</p>
       </div>
     </div>
   )}

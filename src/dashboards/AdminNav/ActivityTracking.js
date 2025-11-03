@@ -332,7 +332,7 @@ const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
                       </div>
                       <div className="col-sm-8">
                         <span className={`badge ${
-                          selectedActivity.role === "Admin"
+                          selectedActivity.role === "Facility Manager"
                             ? "bg-primary"
                             : selectedActivity.role === "Personnel"
                             ? "bg-success"

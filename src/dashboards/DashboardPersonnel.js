@@ -1711,10 +1711,10 @@ getTodayTasks().map((task, index) => (
                         'text-muted'
                      }`}>{capitalizeStatus(selectedTask.status)}</span>
                     </div>
-                    <div className="col-6">
-                      <label className="form-label fw-bold">Priority Level:</label>
-                     <span className="ms-2 text-danger">{capitalizePriority(selectedTask.priority)}</span>
-                    </div>
+                  <div className="col-6">
+  <label className="form-label fw-bold">Priority Level:</label>
+  <span className="ms-2">{capitalizePriority(selectedTask.priority)}</span>
+</div>
                   </div>
 
                       {/* OVERDUE WARNING HERE */}

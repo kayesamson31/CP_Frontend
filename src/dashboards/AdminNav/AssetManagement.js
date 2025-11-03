@@ -278,7 +278,7 @@ try {
       notification_type_id: 21,
       created_by: currentUser.id,
       title: 'New Asset Added',
-      message: `${currentUser.fullName || 'Admin Official'} added new asset: ${asset.name} (${newAsset.category}) in ${newAsset.location}`,
+      message: `${currentUser.fullName || 'Facility Manager'} added new asset: ${asset.name} (${newAsset.category}) in ${newAsset.location}`,
       target_roles: '1',
       priority_id: 1,
       related_table: 'assets',
@@ -287,9 +287,9 @@ try {
       is_active: true
     }]);
   
-  console.log('✅ System Admin notified about new asset');
+  console.log('System Admin notified about new asset');
 } catch (notifErr) {
-  console.error('❌ Notification failed:', notifErr);
+  console.error('Notification failed:', notifErr);
 }
     } catch (err) {
       console.error('Error adding asset:', err);
@@ -521,7 +521,7 @@ try {
       notification_type_id: 21,
       created_by: currentUser.id,  // âœ… FIXED - use .id
       title: 'Bulk Asset Upload Completed',
-      message: `${currentUser.fullName || 'Admin Official'} uploaded ${successCount} assets via CSV`,
+      message: `${currentUser.fullName || 'Facility Manager'} uploaded ${successCount} assets via CSV`,
       target_roles: '1',
       priority_id: 2,
       related_table: 'assets',
@@ -530,9 +530,9 @@ try {
       is_active: true
     }]);
   
-  console.log('âœ… System Admin notified about bulk asset upload');
+  console.log(' System Admin notified about bulk asset upload');
 } catch (notifErr) {
-  console.error('âŒ Notification failed:', notifErr);
+  console.error('Notification failed:', notifErr);
 }
 
   } catch (err) {

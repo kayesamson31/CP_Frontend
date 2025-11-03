@@ -25,7 +25,7 @@ const [selectedDate, setSelectedDate] = useState(new Date());
 const [calendarEvents, setCalendarEvents] = useState([]);
 const [showCalendarModal, setShowCalendarModal] = useState(false);
 const [selectedEvents, setSelectedEvents] = useState([]);
-const [userRole, setUserRole] = useState('Admin Official');
+const [userRole, setUserRole] = useState('Facility Manager');
 const [organizationName, setOrganizationName] = useState('Organization');
 const [statsData, setStatsData] = useState([
   {

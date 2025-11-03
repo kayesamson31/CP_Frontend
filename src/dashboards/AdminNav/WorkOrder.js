@@ -326,7 +326,7 @@ try {
     notification_type_id: 9, // or create new type for "work_order_assigned"
     created_by: adminData.user_id,
     title: 'Work Order Assigned to You',
-    message: `Admin assigned you work order: "${selectedOrder.description}"${adminPriority ? ` with ${adminPriority} priority` : ''}`,
+    message: `Facility Manager assigned you work order: "${selectedOrder.description}"${adminPriority ? ` with ${adminPriority} priority` : ''}`,
     target_user_id: parseInt(assignedPersonnel), // ✅ Specific personnel
     priority_id: adminPriority ? (adminPriority === 'High' ? 3 : adminPriority === 'Medium' ? 2 : 1) : 2,
     related_table: 'work_orders',
@@ -454,7 +454,7 @@ const handleReassignForRevision = async () => {
         notification_type_id: 3,
         created_by: adminData.user_id,
         title: 'Work Order Reassigned for Revision',
-       message: `Admin ${adminData.full_name} reassigned work order "${selectedOrder.description}" to you for revision. New due date: ${new Date(extendedDueDate).toLocaleDateString()}. Previous complaint: "${selectedOrder.disputedReason}"`,
+       message: `Facility Manager ${adminData.full_name} reassigned work order "${selectedOrder.description}" to you for revision. New due date: ${new Date(extendedDueDate).toLocaleDateString()}. Previous complaint: "${selectedOrder.disputedReason}"`,
         target_user_id: parseInt(assignedPersonnel),
         priority_id: 3,
         related_table: 'work_orders',
@@ -500,7 +500,7 @@ const handleCloseAsResolved = async () => {
       .update({ 
         status_id: statusData.status_id,
         requester_confirmation: 'confirmed', // Override to confirmed
-        admin_resolution_notes: adminResolution || 'Admin closed as resolved',
+        admin_resolution_notes: adminResolution || 'Facility Manager closed as resolved',
         date_resolved: new Date().toISOString()
       })
       .eq('work_order_id', selectedOrder.work_order_id);
@@ -533,7 +533,7 @@ const handleCloseAsResolved = async () => {
         notification_type_id: 3,
         created_by: adminData.user_id,
         title: 'Work Order Closed as Resolved',
-        message: `Admin ${adminData.full_name} has reviewed your complaint and closed work order "${selectedOrder.description}" as resolved. ${adminResolution ? `Resolution: ${adminResolution}` : ''}`,
+        message: `Facility Manager ${adminData.full_name} has reviewed your complaint and closed work order "${selectedOrder.description}" as resolved. ${adminResolution ? `Resolution: ${adminResolution}` : ''}`,
         target_user_id: workOrderData.requested_by,
         priority_id: 2,
         related_table: 'work_orders',
@@ -745,7 +745,6 @@ const formatTimeTo12Hour = (time24) => {
                     <th>Requester</th>
                     <th>Category</th>
                     <th>Location</th>
-                    <th>Status</th>
                     <th>Priority</th>
                     <th>Request Date</th>
                     {activeTab !== 'To Review' && <th>Assigned To</th>}
@@ -768,7 +767,6 @@ const formatTimeTo12Hour = (time24) => {
                       <td>{order.requester || '-'}</td>
                       <td><span className="text-muted fw-medium">{order.category || '-'}</span></td>
                       <td>{order.location || '-'}</td>
-                      <td>{getStatusBadge(order.status)}</td>
                      <td>
   <div className="d-flex align-items-center gap-2">
     {getPriorityBadge(order.priority)}
@@ -869,54 +867,61 @@ const formatTimeTo12Hour = (time24) => {
                     <p className="mb-0">{selectedOrder.description || 'No description provided'}</p>
                   </div>
 
-                  {/* Category and Specific Asset/Equipment Row */}
-                  <div className="row mb-3">
-                    <div className="col-6">
-                      <label className="form-label fw-bold text-muted small">Category:</label>
-                      <p className="mb-0">{selectedOrder.category || '-'}</p>
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label fw-bold text-muted small">Specific Asset/Equipment:</label>
-                      <p className="mb-0">{selectedOrder.assetEquipment || selectedOrder.asset || '-'}</p>
-                    </div>
-                  </div>
-
-               <div className="col-6">
-  <label className="form-label fw-bold text-muted small">
-    {selectedOrder.scheduledTime ? 'Scheduled Date & Time:' : 'Date Needed By:'}
-  </label>
-  <p className="mb-0">
-    {selectedOrder.scheduledTime 
-      ? `${formatDate(selectedOrder.dueDate)} at ${formatTimeTo12Hour(selectedOrder.scheduledTime)}`
-      : formatDate(selectedOrder.dueDate)
-    }
-  </p>
-  {selectedOrder.scheduledTime && (
-    <small className="text-muted d-block mt-1">
-      Assigned time for personnel to start
-    </small>
-  )}
+{/* Category and Location */}
+<div className="row mb-3">
+  <div className="col-6">
+    <label className="form-label fw-bold text-muted small">Category:</label>
+    <p className="mb-0">{selectedOrder.category || '-'}</p>
+  </div>
+  <div className="col-6">
+    <label className="form-label fw-bold text-muted small">Location:</label>
+    <p className="mb-0">{selectedOrder.location || '-'}</p>
+  </div>
 </div>
 
-                  {/* Request Date and Suggested Priority Row */}
-                  <div className="row mb-3">
-                    <div className="col-6">
-                      <label className="form-label fw-bold text-muted small">Request Date:</label>
-                      <p className="mb-0">{formatDate(selectedOrder.requestDate)}</p>
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label fw-bold text-muted small">Suggested Priority:</label>
-                      <p className="mb-0">
-                        <span className={`fw-bold ${
-                          (selectedOrder.suggestedPriority || selectedOrder.priority) === 'High' ? 'text-danger' :
-                          (selectedOrder.suggestedPriority || selectedOrder.priority) === 'Medium' ? 'text-warning' :
-                          'text-success'
-                        }`}>
-                          {selectedOrder.suggestedPriority || selectedOrder.priority || 'Not specified'}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
+{/* Specific Asset and Request Date */}
+<div className="row mb-3">
+  <div className="col-6">
+    <label className="form-label fw-bold text-muted small">Specific Asset/Equipment:</label>
+    <p className="mb-0">{selectedOrder.assetEquipment || 'Not specified'}</p>
+  </div>
+  <div className="col-6">
+    <label className="form-label fw-bold text-muted small">Request Date:</label>
+    <p className="mb-0">{formatDate(selectedOrder.requestDate)}</p>
+  </div>
+</div>
+
+{/* Due Date/Scheduled Time and Suggested Priority */}
+<div className="row mb-3">
+  <div className="col-6">
+    <label className="form-label fw-bold text-muted small">
+      {selectedOrder.scheduledTime ? 'Scheduled Date & Time:' : 'Due Date:'}
+    </label>
+    <p className="mb-0">
+      {selectedOrder.scheduledTime 
+        ? `${formatDate(selectedOrder.dueDate)} at ${formatTimeTo12Hour(selectedOrder.scheduledTime)}`
+        : formatDate(selectedOrder.dueDate)
+      }
+    </p>
+    {selectedOrder.scheduledTime && (
+      <small className="text-muted d-block mt-1">
+        
+      </small>
+    )}
+  </div>
+  <div className="col-6">
+    <label className="form-label fw-bold text-muted small">Suggested Priority:</label>
+    <p className="mb-0">
+      <span className={`fw-bold ${
+        (selectedOrder.suggestedPriority || selectedOrder.priority) === 'High' ? 'text-danger' :
+        (selectedOrder.suggestedPriority || selectedOrder.priority) === 'Medium' ? 'text-warning' :
+        'text-success'
+      }`}>
+        {selectedOrder.suggestedPriority || selectedOrder.priority || 'Not specified'}
+      </span>
+    </p>
+  </div>
+</div>
 
                   {/* Detailed Description */}
                   <div className="mb-4">
@@ -989,7 +994,7 @@ const formatTimeTo12Hour = (time24) => {
                       <div className="p-3 rounded-3 shadow-sm" style={{backgroundColor: '#e0f2fe', border: '2px solid #0288d1'}}>
                         <div className="d-flex align-items-center mb-2">
                           <i className="bi bi-shield-check-fill me-2 text-info"></i>
-                          <h6 className="fw-bold mb-0 text-info">Priority Updated by Administrator</h6>
+                          <h6 className="fw-bold mb-0 text-info">Priority Updated by Facility Manager</h6>
                         </div>
                         <div className="row">
                           <div className="col-6">
@@ -1052,7 +1057,7 @@ const formatTimeTo12Hour = (time24) => {
     
 {/* ✅ ADD THESE ACTION BUTTONS */}
     <div className="mt-3">
-      <h6 className="fw-bold mb-3 text-dark">Admin Actions:</h6>
+      <h6 className="fw-bold mb-3 text-dark">Facility Manager Actions:</h6>
       <div className="row g-2">
         <div className="col-6">
           <button 
@@ -1168,7 +1173,7 @@ const formatTimeTo12Hour = (time24) => {
                     <div className="mb-4 p-4 rounded-3 shadow-sm" style={{backgroundColor: '#FFFFFFFF', border: '2px solid #337FCA'}}>  
                       <h6 className="fw-bold mb-4 text-dark d-flex align-items-center">
                         <i className="bi bi-gear-fill me-2 text-warning"></i>
-                        Admin Priority Control
+                        Facilit Manager Priority Control
                       </h6>
                       
                       <div className="mb-4">
@@ -1559,7 +1564,7 @@ const formatTimeTo12Hour = (time24) => {
           </div>
           
           <div className="mb-3">
-            <label className="form-label">Admin Resolution Notes (Optional)</label>
+            <label className="form-label">Facility Manager Resolution Notes (Optional)</label>
             <textarea 
               className="form-control"
               rows="4"

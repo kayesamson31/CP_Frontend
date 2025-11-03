@@ -1275,7 +1275,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
         <h5 className="fw-bold mb-1">
           {organizationData.isUsersDataSkipped ? '0' : safeNumber(organizationData.adminOfficials).toLocaleString()}
         </h5>
-        <p className="text-muted mb-0 small">Admin Officials</p>
+        <p className="text-muted mb-0 small">Facility Manager</p>
       </div>
     </div>
   </div>

@@ -348,9 +348,9 @@ if (userError) {
       });
 
     if (adminNotifError) {
-      console.error('❌ Admin notification error:', adminNotifError);
+      console.error('Facility Manager notification error:', adminNotifError);
     } else {
-      console.log('✅ Admin notified successfully!');
+      console.log('Facility Manager notified successfully!');
     }
 
     // Notification for ASSIGNED PERSONNEL (user-specific)

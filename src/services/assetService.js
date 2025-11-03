@@ -652,7 +652,7 @@ return taskResult;
           scheduled_date: scheduleData.scheduledDate,
           scheduled_time: scheduleData.scheduledTime || '09:00',
           repeat_interval: scheduleData.repeat,
-          created_by: 'Admin'
+          created_by: 'Facility Manager'
         }])
         .select()
         .single();
@@ -828,7 +828,7 @@ try {
     created_by: currentUser.user_id,
     title: 'New Incident Report Submitted',
     message: `${data.users?.full_name || 'Personnel'} reported: ${incidentData.type} - ${incidentData.severity} severity for ${assetData.asset_name}`,
-    target_roles: '2', // Admin role
+    target_roles: '2', // Facility Manager
     target_user_id: null,
     priority_id: priorityMap[incidentData.severity] || 2,
     related_table: 'incident_reports',
@@ -845,9 +845,9 @@ try {
     .insert([notificationData]);
 
   if (notifError) {
-    console.error('âŒ Admin notification failed:', notifError);
+    console.error(' Facility Manager notification failed:', notifError);
   } else {
-    console.log('âœ… Admin notified about incident report');
+    console.log(' Facility Manager notified about incident report');
   }
 } catch (notifErr) {
   console.error('âŒ Notification error:', notifErr);

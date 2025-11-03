@@ -58,11 +58,13 @@ let query = supabase
     ip_address,
     timestamp,
     organization_id,
-    users!inner (
+    user_full_name,
+    user_email,
+    user_role,
+    users (
       full_name,
       email,
-      role_id,
-      roles!inner (
+      roles (
         role_name
       )
     )
@@ -83,8 +85,11 @@ if (searchDebounce) {
 
 // Apply role filter 
 // Apply role filter - Case insensitive
+// Apply role filter - Check both stored role and joined role
 if (roleFilter && roleFilter !== 'all') {
-  query = query.ilike('users.roles.role_name', roleFilter);
+  query = query.or(
+    `user_role.ilike.${roleFilter},users.roles.role_name.ilike.${roleFilter}`
+  );
 }
 if (actionFilter && actionFilter !== 'all') {
   query = query.ilike('action_taken', `%${actionFilter}%`);
@@ -106,26 +111,22 @@ if (actionFilter && actionFilter !== 'all') {
 
     if (fetchError) throw fetchError;
 
-    // âœ… Filter out logs with missing user or role data
-    const validData = (data || []).filter(log => 
-      log.users && 
-      log.users.roles && 
-      log.users.roles.role_name
-    );
+// ✅ Accept all logs - we have user data stored directly now
+const validData = (data || []);
 
-    // âœ… Transform data to match existing UI format
-    const transformedLogs = validData.map(log => ({
-      id: log.audit_id,
-      timestamp: log.timestamp,
-      user: log.users.email,
-      userName: log.users.full_name,
-      role: log.users.roles.role_name,  // Safe na to kasi na-filter na
-      actionTaken: log.action_taken,
-      ipAddress: log.ip_address || 'N/A',
-      details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
-      tableAffected: log.table_affected,
-      recordId: log.record_id
-    }));
+const transformedLogs = validData.map(log => ({
+  id: log.audit_id,
+  timestamp: log.timestamp,
+  // Use stored data first (for deleted users), fallback to joined data
+  user: log.user_email || log.users?.email || 'deleted@system',
+  userName: log.user_full_name || log.users?.full_name || 'Deleted User',
+  role: log.user_role || log.users?.roles?.role_name || 'N/A',
+  actionTaken: log.action_taken,
+  ipAddress: log.ip_address || 'N/A',
+  details: `${log.action_taken} on ${log.table_affected} (Record ID: ${log.record_id})`,
+  tableAffected: log.table_affected,
+  recordId: log.record_id
+}));
 
     setLogs(transformedLogs);
     setTotalRecords(count || 0);

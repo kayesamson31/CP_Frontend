@@ -306,7 +306,7 @@ const personnelWithStatus = await Promise.all(
       // Build final data
       const data = {
         adminName: userData.full_name || 'Admin',
-        userRole: userData.job_position || 'Admin Official',
+        userRole: userData.job_position || 'Facility Manager',
         organizationName: orgData.data?.org_name || 'Organization',
         statsData: [
           {

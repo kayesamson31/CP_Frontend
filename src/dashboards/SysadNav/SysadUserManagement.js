@@ -1,7 +1,7 @@
 // src/components/SystemAdminUserManagement.js
 import React, { useState, useEffect } from 'react';
 import SidebarLayout from '../../Layouts/SidebarLayout';
-import { supabase } from '../../supabaseClient';
+import { supabase, supabaseAdmin } from '../../supabaseClient';
 import Papa from 'papaparse';
 import { PasswordUtils } from '../../utils/PasswordUtils';
 import { EmailService } from '../../utils/EmailService';
@@ -93,7 +93,7 @@ const getRoleIdFromRole = (roleString) => {
   const normalizedRole = roleString.trim().toLowerCase();
   
   const roleMap = {
-    'admin official': 2,
+    'facility manager': 2,
     'system admin': 1,
     'sysadmin': 1,
     'sys admin': 1,
@@ -408,8 +408,7 @@ const tempPassword = PasswordUtils.generateSecurePassword(10);
 
 // ðŸŽ¯ CREATE SUPABASE AUTH USER FIRST (BEFORE database insert)
 console.log(`Creating Supabase Auth account for: ${newUser.email.trim().toLowerCase()}`);
-
-const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
   email: newUser.email.trim().toLowerCase(),
   password: tempPassword,
   email_confirm: true, // Auto-confirm email
@@ -1193,8 +1192,8 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
                     </div>
                     <div className="alert alert-info">
                       <small>
-                        ðŸ“§ Welcome email with login credentials will be sent to the user.<br />
-                        ðŸ”’ User will be required to change password on first login.
+                         Welcome email with login credentials will be sent to the user.<br />
+                         User will be required to change password on first login.
                       </small>
                     </div>
                   </div>
@@ -1356,17 +1355,17 @@ const csvContent = 'name,email,role,status,job_position\n"John Doe","john@exampl
             {activeTab === 'delete' && (
               <div className="tab-pane fade show active">
                 <div className="alert alert-danger">
-                  <h6 className="alert-heading">âš ï¸ This action cannot be undone!</h6>
+                  <h6 className="alert-heading">This action cannot be undone!</h6>
                   <p className="mb-0">You are about to permanently delete this user from the system.</p>
                 </div>
                 
                 <div className="mb-3">
                   <p className="text-muted mb-0">
                     <strong>What will happen:</strong><br />
-                    â€¢ User account will be permanently removed<br />
-                    â€¢ All user data and activity logs will be deleted<br />
-                    â€¢ User will lose access immediately<br />
-                    â€¢ This action cannot be reversed
+                    User account will be permanently removed<br />
+                    All user data and activity logs will be deleted<br />
+                    User will lose access immediately<br />
+                    This action cannot be reversed
                   </p>
                 </div>
                 

@@ -55,7 +55,7 @@ const JOB_POSITIONS = [
     const { data, error } = await supabase
       .from('roles')
       .select('role_name')
-      .in('role_id', [3, 4]) // Only Personnel (3) and Standard User (4)
+      .in('role_id', [2,3, 4]) // Only Personnel (3) and Standard User (4)
       .order('role_id', { ascending: true });
     
     if (error) throw error;
@@ -65,7 +65,7 @@ const JOB_POSITIONS = [
   } catch (err) {
     console.error('Error fetching roles:', err);
     // Fallback to default roles
-    setRoles(['Personnel', 'Standard User']);
+    setRoles(['Facility Manager', 'Personnel', 'Standard User']);
   }
 };
 
@@ -109,7 +109,7 @@ const handleEmailProgressClose = () => {
         roles (role_name)
       `)
       .eq('organization_id', orgId)
-      .in('role_id', [3, 4]) // Only fetch Personnel and Standard User
+      .in('role_id', [2,3, 4]) // Only fetch Personnel and Standard User
       .order('date_created', { ascending: false });
     
     if (error) throw error;
@@ -286,7 +286,7 @@ try {
       notification_type_id: 1, // user_created
        created_by: currentUser.id, 
       title: 'New User Added',
-      message: `${currentUser.fullName || 'Admin Official'} added new user: ${userData.name} (${userData.email}) as ${userData.role}`,
+      message: `${currentUser.fullName || 'Facility Manager'} added new user: ${userData.name} (${userData.email}) as ${userData.role}`,
       target_roles: '1', // System Admin role
       priority_id: 1, // Low priority
       related_table: 'users',
@@ -417,10 +417,10 @@ try {
         .single();
       
       if (!adminUserData) {
-        throw new Error('Admin user not found in database');
+        throw new Error('Facility Manager user not found in database');
       }
       
-      console.log('Admin user data:', adminUserData);
+      console.log('Facility Manager user data:', adminUserData);
 
       // Build change message
       let changeDescription = '';
@@ -763,6 +763,10 @@ const usersWithPasswords = csvRows.map((row) => {
   const name = (row.Name || row.name || '').trim();
   const email = (row.Email || row.email || '').trim().toLowerCase();
   const role = (row.Role || row.role || 'Standard User').trim();
+  // ✅ Prevent Facility Manager creation via CSV
+if (role === 'Facility Manager') {
+  throw new Error(`Cannot create Facility Manager via bulk upload. Row: ${name} (${email})`);
+}
   const jobPosition = (row.job_position || row.Job_Position || '').trim(); // ✅ ADD THIS LINE
 
   return {
@@ -885,7 +889,7 @@ try {
       notification_type_id: 1, // user_created
       created_by: currentUser.id,
       title: 'Bulk User Upload Completed',
-      message: `${currentUser.fullName || 'Admin Official'} uploaded ${insertedCount} users via CSV`,
+      message: `${currentUser.fullName || 'Facility Manager'} uploaded ${insertedCount} users via CSV`,
       target_roles: '1', // System Admin
       priority_id: 2, // Medium priority
       related_table: 'users',
@@ -926,7 +930,7 @@ try {
   };
 
   const downloadCSVTemplate = () => {
-const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com","Standard User",""\n"Jane Smith","jane@example.com","Personnel","Plumber"';
+const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com","Standard User",""\n"Jane Smith","jane@example.com","Personnel","Plumber"\nNote: Role options are Personnel or Standard User only';
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1109,15 +1113,19 @@ const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com",
                       </span>
                     </td>
                     <td>{user.dateCreated ? new Date(user.dateCreated).toLocaleDateString() : '-'}</td>
-                    <td>
-                      <button
-                        className="btn btn-sm btn-outline-primary"
-                        onClick={() => handleEditRole(user)}
-                        disabled={loading}
-                      >
-                        Edit
-                      </button>
-                    </td>
+              <td>
+  {user.role === 'Facility Manager' ? (
+    <span className="badge bg-secondary">View Only</span>
+  ) : (
+    <button
+      className="btn btn-sm btn-outline-primary"
+      onClick={() => handleEditRole(user)}
+      disabled={loading}
+    >
+      Edit
+    </button>
+  )}
+</td>
                   </tr>
                 ))}
               </tbody>
@@ -1201,17 +1209,19 @@ const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com",
                     </div>
                     <div className="mb-3">
                       <label className="form-label">Role *</label>
-                      <select
-                        className="form-select"
-                        value={newUser.role}
-                        onChange={(e) => setNewUser({...newUser, role: e.target.value})}
-                        required
-                        disabled={loading}
-                      >
-                        {roles.map(role => (
-                          <option key={role} value={role}>{role}</option>
-                        ))}
-                      </select>
+                  <select
+  className="form-select"
+  value={newUser.role}
+  onChange={(e) => setNewUser({...newUser, role: e.target.value})}
+  required
+  disabled={loading}
+>
+  {roles
+    .filter(role => role !== 'Facility Manager') // ✅ Hide FM from options
+    .map(role => (
+      <option key={role} value={role}>{role}</option>
+    ))}
+</select>
                       {newUser.role === 'Personnel' && (
   <div className="mb-3">
     <label className="form-label">Job Position *</label>
@@ -1488,7 +1498,7 @@ const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com",
                     <small className="text-muted">
                       <strong>Supported format:</strong> CSV files only<br />
                       <strong>Required columns:</strong> name, email, role<br />
-                      <strong>Available roles:</strong> {roles.join(', ')}
+                    <strong>Available roles:</strong> {roles.filter(r => r !== 'Facility Manager').join(', ')} (Facility Manager cannot be created via CSV)
                     </small>
                   </div>
                 </div>
