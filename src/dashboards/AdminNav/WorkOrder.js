@@ -326,7 +326,11 @@ try {
     notification_type_id: 9, // or create new type for "work_order_assigned"
     created_by: adminData.user_id,
     title: 'Work Order Assigned to You',
-    message: `Facility Manager assigned you work order: "${selectedOrder.description}"${adminPriority ? ` with ${adminPriority} priority` : ''}`,
+  message: `Facility Manager assigned you work order: "${selectedOrder.description}"${
+  adminPriority 
+    ? ` and changed priority to ${adminPriority} (Original: ${selectedOrder.suggestedPriority || selectedOrder.priority})` 
+    : ` with ${selectedOrder.suggestedPriority || selectedOrder.priority} priority`
+}`,
     target_user_id: parseInt(assignedPersonnel), // ✅ Specific personnel
     priority_id: adminPriority ? (adminPriority === 'High' ? 3 : adminPriority === 'Medium' ? 2 : 1) : 2,
     related_table: 'work_orders',
@@ -336,6 +340,63 @@ try {
   });
   
   console.log('✅ Personnel notified about work order assignment');
+// ✅ Notify REQUESTER if priority was changed by admin
+if (adminPriority && adminPriority !== selectedOrder.suggestedPriority) {
+  console.log('📢 Priority changed! Notifying requester...');
+  
+  // Get requester's user_id from work order
+  const { data: workOrderData } = await supabase
+    .from('work_orders')
+    .select('requested_by')
+    .eq('work_order_id', selectedOrder.work_order_id)
+    .single();
+
+  if (workOrderData?.requested_by) {
+    await supabase.from('notifications').insert({
+      notification_type_id: 3, // Work order notification
+      created_by: adminData.user_id,
+      title: 'Work Order Priority Updated',
+      message: `Facility Manager changed the priority of your work order "${selectedOrder.description}" from ${selectedOrder.suggestedPriority || 'Medium'} to ${adminPriority}`,
+      target_user_id: workOrderData.requested_by, // ✅ Notify the requester
+      priority_id: adminPriority === 'High' ? 3 : adminPriority === 'Medium' ? 2 : 1,
+      related_table: 'work_orders',
+      related_id: selectedOrder.work_order_id,
+      organization_id: adminData.organization_id,
+      is_active: true
+    });
+    
+    console.log('✅ Requester notified about priority change');
+  }
+}
+
+  // Notify REQUESTER about Pending status
+  console.log('📢 Notifying requester about Pending status...');
+  
+  const { data: workOrderData } = await supabase
+    .from('work_orders')
+    .select('requested_by')
+    .eq('work_order_id', selectedOrder.work_order_id)
+    .single();
+  
+  if (workOrderData?.requested_by) {
+    const personnelData = personnel.find(p => p.id === parseInt(assignedPersonnel));
+    
+    await supabase.from('notifications').insert({
+      notification_type_id: 3,
+      created_by: adminData.user_id,
+      title: 'Work Order Now Pending',
+      message: `Your work order "${selectedOrder.description}" has been accepted and assigned to ${personnelData?.name || 'personnel'}. Status: Pending${assignedTime ? ` | Scheduled: ${formatTimeTo12Hour(assignedTime)}` : ''}`,
+      target_user_id: workOrderData.requested_by,
+      priority_id: adminPriority ? (adminPriority === 'High' ? 3 : adminPriority === 'Medium' ? 2 : 1) : 2,
+      related_table: 'work_orders',
+      related_id: selectedOrder.work_order_id,
+      organization_id: adminData.organization_id,
+      is_active: true
+    });
+    
+    console.log('✅ Requester notified about Pending status');
+  }
+
 } catch (notifError) {
   console.error('❌ Failed to notify personnel:', notifError);
 }

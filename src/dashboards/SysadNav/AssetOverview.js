@@ -244,12 +244,12 @@ console.log('CSV row structure:', csvRows[0]); // Current assets in state
         if (duplicates.length > 0) {
           const duplicateList = duplicates
             .slice(0, 5)
-            .map(d => `â€¢ ${d.name} (${d.location})`)
+            .map(d => `${d.name} (${d.location})`)
             .join('\n');
           const moreText = duplicates.length > 5 ? `\n...and ${duplicates.length - 5} more` : '';
           
           const userChoice = window.confirm(
-            `âš ï¸ DUPLICATE DETECTION\n\n` +
+            `DUPLICATE DETECTION\n\n` +
             `Found ${duplicates.length} asset(s) that already exist in the system:\n\n` +
             `${duplicateList}${moreText}\n\n` +
             `These duplicates will be SKIPPED.\n` +
@@ -269,7 +269,7 @@ console.log('CSV row structure:', csvRows[0]); // Current assets in state
         
         // âœ… CHECK IF NO NEW ASSETS TO UPLOAD
         if (uniqueRows.length === 0) {
-          alert('âŒ No new assets to upload.\n\nAll assets in the CSV already exist in the system.');
+          alert('No new assets to upload.\n\nAll assets in the CSV already exist in the system.');
           setUploadingAssets(false);
           setShowBulkUploadModal(false);
           setCsvFile(null);
@@ -727,11 +727,11 @@ const Pagination = () => {
     <Modal.Title>Bulk Upload Assets (CSV)</Modal.Title>
   </Modal.Header>
   <Modal.Body>
-    <Alert variant="info">
-      <strong>CSV Format:</strong> name, category, location, status, acquisitionDate, nextMaintenance
-      <br />
-      <small>Header row should match these column names (case sensitive)</small>
-    </Alert>
+   <Alert variant="info">
+  <strong>CSV Format:</strong> Asset Name, Category, Location, Status
+  <br />
+  <small>Header row should match these column names exactly (case sensitive)</small>
+</Alert>
     
     <div className="mb-3">
       <Button 
@@ -908,7 +908,7 @@ const Pagination = () => {
                   <div className="d-flex justify-content-between align-items-center mb-2">
                     <div className="d-flex align-items-center gap-2 flex-wrap">
                       <span className="fw-semibold small">{incident.reportedBy}</span>
-                      <span className="text-muted small">â€¢</span>
+                      <span className="text-muted small"></span>
                       <span className="text-muted small">
                         {new Date(incident.reportedAt).toLocaleDateString('en-US', { 
                           month: 'short', 
@@ -916,7 +916,7 @@ const Pagination = () => {
                           year: 'numeric'
                         })}
                       </span>
-                      <span className="text-muted small">â€¢</span>
+                      <span className="text-muted small"></span>
                       <span className="fw-bold text-dark small">{incident.type}</span>
                       <Badge 
                         bg={

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Upload, Download, Users, Building2, Database, CheckCircle, AlertCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../../supabaseClient';
+import { supabase, supabaseAdmin } from '../../supabaseClient';
 import { PasswordUtils } from '../../utils/PasswordUtils';
 import { EmailService } from '../../utils/EmailService';
 import EmailProgressModal from '../../components/EmailProgressModal';
+
 
 const parseCSV = (file) => {
   return new Promise((resolve, reject) => {
@@ -35,7 +36,11 @@ const parseCSV = (file) => {
         }
         
    console.log("Parsed CSV data:", data);
-    resolve(data);
+   console.log("=== CSV PARSE COMPLETE ===");
+console.log("Total rows:", data.length);
+console.log("Sample row:", data[0]);
+console.log("========================"); 
+   resolve(data);
       } catch (error) {
         reject(error);
       }
@@ -52,25 +57,38 @@ const importUsers = async (file, roleMap, orgData) => {
     console.log("Starting user import for:", file.name);
     const rows = await parseCSV(file);
     
-    if (!rows || rows.length === 0) {
-      return [];
-    }
+  console.log("📊 Parsed CSV rows:", rows.length);
+console.log("First row sample:", rows[0]);
 
-    // Validate required fields
-    const validRows = rows.filter(row => {
-      const hasName = row.Name && row.Name.trim().length > 0;
-      const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
-      const hasRole = row.Role && row.Role.trim().length > 0;
-      
-      if (!hasName || !hasEmail || !hasRole) {
-        console.warn("Skipping invalid row:", row);
-        return false;
-      }
-      return true;
-    });
+if (!rows || rows.length === 0) {
+  console.error("❌ No rows parsed from CSV!");
+  return [];
+}
+
+// Validate required fields
+const validRows = rows.filter(row => {
+  const hasName = row.Name && row.Name.trim().length > 0;
+  const hasEmail = row.Email && row.Email.includes('@') && row.Email.includes('.');
+  const hasRole = row.Role && row.Role.trim().length > 0;
+  
+  if (!hasName || !hasEmail || !hasRole) {
+    console.warn("Skipping invalid row:", row);
+    return false;
+  }
+  return true;
+});
+
+// ✅ MOVE THE LOGS HERE (AFTER filtering)
+console.log("✔️ Valid rows after filtering:", validRows.length);
+console.log("Valid rows sample:", validRows[0]);
+
+if (validRows.length === 0) {
+  console.error("❌ No valid rows found after validation!");
+  return [];
+}
 
     const usersWithCredentials = [];
-
+  
     // Process each user individually
     for (const row of validRows) {
       try {
@@ -80,7 +98,7 @@ const importUsers = async (file, roleMap, orgData) => {
         console.log(`Creating Supabase Auth account for: ${email}`);
         
         // Create Supabase Auth user
-        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+       const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email: email,
           password: tempPassword,
           email_confirm: true, // Auto-confirm email
@@ -142,7 +160,7 @@ const importUsers = async (file, roleMap, orgData) => {
       // Cleanup: Delete created auth users if database insert fails
       for (const user of usersWithCredentials) {
         try {
-          await supabase.auth.admin.deleteUser(user.auth_uid);
+         await supabaseAdmin.auth.admin.deleteUser(user.auth_uid);
         } catch (cleanupError) {
           console.error(`Failed to cleanup auth user ${user.email}:`, cleanupError);
         }
@@ -164,9 +182,9 @@ const importUsers = async (file, roleMap, orgData) => {
 
   const importAssets = async (file, orgData) => {
   try {
-    console.log("Ã°Å¸â€Â Starting asset import...");
+    console.log("Starting asset import...");
     const rows = await parseCSV(file);
-    console.log("Ã°Å¸â€œÅ  Parsed asset rows:", rows);
+    console.log("arsed asset rows:", rows);
 
   if (!rows || rows.length === 0) {
     console.log("No valid asset rows found");
@@ -245,21 +263,20 @@ const importUsers = async (file, roleMap, orgData) => {
         }
         
         insertedAssets.push(data);
-        console.log(`Ã¢Å“â€¦ Inserted asset: ${assetData.asset_code}`);
+        console.log(`Inserted asset: ${assetData.asset_code}`);
       } catch (assetError) {
         console.error(`Error inserting asset:`, assetError);
       }
     }
 
-    console.log(`Ã¢Å“â€¦ Successfully imported ${insertedAssets.length} assets`);
+    console.log(`Successfully imported ${insertedAssets.length} assets`);
     return insertedAssets.length;
     
   } catch (err) {
-    console.error("Ã¢ÂÅ’ Asset import failed:", err.message);
+    console.error("Asset import failed:", err.message);
     return 0;
   }
 };
-// Sa SetupWizard.js, replace ang getRoleMap function:
 const getRoleMap = async () => {
   try {
     const { data: roles, error } = await supabase
@@ -268,39 +285,61 @@ const getRoleMap = async () => {
     
     if (error) throw error;
     
-    // Create mapping from role names to IDs
+    console.log("📋 Database roles:", roles);
+    
+    // Create mapping - match CSV role names to database role IDs
     const roleMap = {};
+    
     roles.forEach(role => {
-      const roleName = role.role_name.toLowerCase();
-      if (roleName.includes('system') && roleName.includes('admin')) {
+      const dbRoleName = role.role_name.toLowerCase().trim();
+      
+      // System Admin (role_id: 1)
+      if (dbRoleName === 'system admin') {
+        roleMap['System Admin'] = role.role_id;
         roleMap['system admin'] = role.role_id;
         roleMap['System admin'] = role.role_id;
-      } else if (roleName.includes('admin') && roleName.includes('official')) {
-        roleMap['Admin official'] = role.role_id;
-        roleMap['admin official'] = role.role_id;
-      } else if (roleName.includes('personnel')) {
+      }
+      
+      // Facility Manager (role_id: 2)
+      if (dbRoleName === 'facility manager') {
+        roleMap['Facility Manager'] = role.role_id;
+        roleMap['facility manager'] = role.role_id;
+        roleMap['Facility manager'] = role.role_id;
+      }
+      
+      // Personnel (role_id: 3)
+      if (dbRoleName === 'personnel') {
         roleMap['Personnel'] = role.role_id;
         roleMap['personnel'] = role.role_id;
-      } else if (roleName.includes('standard') || roleName.includes('user')) {
-        roleMap['Standard user'] = role.role_id;
+      }
+      
+      // Standard User (role_id: 4)
+      if (dbRoleName === 'standard user') {
+        roleMap['Standard User'] = role.role_id;
         roleMap['standard user'] = role.role_id;
+        roleMap['Standard user'] = role.role_id;
       }
     });
     
-    console.log("Role mapping created:", roleMap);
+    console.log("✅ Role mapping created:", roleMap);
     return roleMap;
+    
   } catch (err) {
     console.error("Error fetching roles:", err);
-    // Fallback - based sa typical OpenFMS role structure
+    
+    // Fallback with your exact role IDs
     return {
+      'System Admin': 1,
       'system admin': 1,
-      'System admin': 1, 
-      'Admin official': 2,
-      'admin official': 2,
+      'System admin': 1,
+      'Facility Manager': 2,
+      'facility manager': 2,
+      'Facility manager': 2,
       'Personnel': 3,
       'personnel': 3,
-      'Standard user': 4,
-      'standard user': 4
+      'Standard User': 4,
+      'standard user': 4,
+      'Standard user': 4
     };
   }
 };
@@ -465,8 +504,8 @@ useEffect(() => {
   // UPDATE downloadTemplate function:
   const downloadTemplate = (type) => {
     const templates = {
-      heads: `Name,Email,Status,Role
-John Admin,john.admin@company.com,active,Admin official
+heads: `Name,Email,Status,Role
+John Admin,john.admin@company.com,active,Facility manager
 Jane Head,jane.head@company.com,active,system admin`,
       personnel: `Name,Email,Status,Role
 Mike Staff,mike.staff@company.com,active,Personnel
@@ -730,7 +769,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
             <ul className="mb-0 small text-muted">
               <li><strong>Standard user</strong> - Basic access to assigned assets</li>
               <li><strong>Personnel</strong> - Can manage assets and view reports</li>
-              <li><strong>Admin official</strong> - Full management capabilities</li>
+              <li><strong>Facility manager</strong> - Full management capabilities</li>
               <li><strong>System admin</strong> - Complete system control</li>
             </ul>
           </div>
@@ -816,8 +855,8 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
           <div className="p-4 border rounded-3 h-100" style={{ borderColor: styles.lightColor }}>
             <div className="text-center mb-3">
               <Upload style={{ color: styles.accentColor }} size={24} />
-              <h5 className="fw-semibold mt-2" style={{ color: styles.primaryColor }}>Heads</h5>
-              <p className="text-muted small">Admin officials & System admins</p>
+              <h5 className="fw-semibold mt-2" style={{ color: styles.primaryColor }}>Facility Manager</h5>
+              <p className="text-muted small">Heads: Facility Manager or system administrator</p>
             </div>
             
             <button
@@ -1075,7 +1114,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
           <div className="d-flex">
             <CheckCircle className="text-success me-3 mt-1 flex-shrink-0" size={20} />
             <div>
-              <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Ã°Å¸Å½â€° Congratulations!</h6>
+              <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Congratulations!</h6>
               <p className="mb-0 small text-muted">
                 Your OpenFMS system has been successfully set up! All data has been imported and your system is now ready for full operation. 
                 You'll be redirected to your System Admin dashboard where you can manage users, assets, and system settings.
@@ -1306,25 +1345,47 @@ onClick={async () => {
     // Import users and collect all users for email sending
     let allUsersForEmail = [];
     let userImportResults = { heads: 0, personnel: 0, standardUsers: 0 };
+// Process each user type and collect users with passwords
+console.log("=== STARTING USER IMPORTS ===");
+console.log("uploadedFiles.heads:", uploadedFiles.heads);
+console.log("uploadedFiles.personnel:", uploadedFiles.personnel);
+console.log("uploadedFiles.standardUsers:", uploadedFiles.standardUsers);
 
-    // Process each user type and collect users with passwords
-    if (uploadedFiles.heads) {
-      const headUsers = await importUsers(uploadedFiles.heads, roleMap, orgResult);
-      allUsersForEmail.push(...headUsers);
-      userImportResults.heads = headUsers.length;
-    }
+if (uploadedFiles.heads) {
+  console.log("🔵 IMPORTING HEADS - File:", uploadedFiles.heads.name);
+  const headUsers = await importUsers(uploadedFiles.heads, roleMap, orgResult);
+  console.log("✅ HEADS RESULT:", headUsers.length, "users");
+  console.log("Head users data:", headUsers);
+  allUsersForEmail.push(...headUsers);
+  userImportResults.heads = headUsers.length;
+} else {
+  console.log("⚠️ SKIPPED: No heads file");
+}
 
-    if (uploadedFiles.personnel) {
-      const personnelUsers = await importUsers(uploadedFiles.personnel, roleMap, orgResult);
-      allUsersForEmail.push(...personnelUsers);
-      userImportResults.personnel = personnelUsers.length;
-    }
+if (uploadedFiles.personnel) {
+  console.log("🔵 IMPORTING PERSONNEL - File:", uploadedFiles.personnel.name);
+  const personnelUsers = await importUsers(uploadedFiles.personnel, roleMap, orgResult);
+  console.log("✅ PERSONNEL RESULT:", personnelUsers.length, "users");
+  console.log("Personnel users data:", personnelUsers);
+  allUsersForEmail.push(...personnelUsers);
+  userImportResults.personnel = personnelUsers.length;
+} else {
+  console.log("⚠️ SKIPPED: No personnel file");
+}
 
-    if (uploadedFiles.standardUsers) {
-      const standardUsers = await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
-      allUsersForEmail.push(...standardUsers);
-      userImportResults.standardUsers = standardUsers.length;
-    }
+if (uploadedFiles.standardUsers) {
+  console.log("🔵 IMPORTING STANDARD USERS - File:", uploadedFiles.standardUsers.name);
+  const standardUsers = await importUsers(uploadedFiles.standardUsers, roleMap, orgResult);
+  console.log("✅ STANDARD USERS RESULT:", standardUsers.length, "users");
+  console.log("Standard users data:", standardUsers);
+  allUsersForEmail.push(...standardUsers);
+  userImportResults.standardUsers = standardUsers.length;
+} else {
+  console.log("⚠️ SKIPPED: No standard users file");
+}
+
+console.log("=== USER IMPORTS COMPLETE ===");
+console.log("Total users for email:", allUsersForEmail.length);
 
     // Import assets
     let assetImportResult = 0;

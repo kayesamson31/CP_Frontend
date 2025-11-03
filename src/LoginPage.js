@@ -299,7 +299,7 @@ if (userData.first_login === true) {
         >
           Log In
         </button>
-
+{/* 
         <p style={{
           textAlign: 'center',
           marginTop: '1rem',
@@ -309,6 +309,7 @@ if (userData.first_login === true) {
         }}>
           Forgot your password?
         </p>
+        */}
         
         </form>
       </div>

@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { assetService } from '../../services/assetService';
 import { logActivity } from '../../utils/ActivityLogger';
 import { AuthUtils } from '../../utils/AuthUtils';
-import { supabase } from '../../supabaseClient';  // Ã¢â€ Â Make sure this line exists
+import { supabase } from '../../supabaseClient';  // Make sure this line exists
 import { AuditLogger } from '../../utils/AuditLogger';
 
 import {
@@ -361,10 +361,9 @@ const newAssets = [];
           category: matchedCategory ? matchedCategory.category_name : 'HVAC Equipment',
           location: values[headers.indexOf('location')] || values[2],
           status: values[headers.indexOf('status')] || values[3] || 'Operational',
-          acquisitionDate: values[headers.indexOf('acquisitionDate')] || values[4] || ''
         };
         
-        // Ã¢Å“â€¦ CHECK FOR DUPLICATES (name + location)
+        //  CHECK FOR DUPLICATES (name + location)
         const isDuplicate = existingAssets.some(existing => 
           existing.name.toLowerCase().trim() === asset.name.toLowerCase().trim() &&
           existing.location.toLowerCase().trim() === asset.location.toLowerCase().trim()
@@ -378,16 +377,16 @@ const newAssets = [];
       }
     }
     
-    // Ã¢Å“â€¦ SHOW DUPLICATE WARNING IF FOUND
+    //SHOW DUPLICATE WARNING IF FOUND
     if (duplicates.length > 0) {
       const duplicateList = duplicates
         .slice(0, 5)
-        .map(d => `Ã¢â‚¬Â¢ ${d.name} (${d.location})`)
+        .map(d => `${d.name} (${d.location})`)
         .join('\n');
       const moreText = duplicates.length > 5 ? `\n...and ${duplicates.length - 5} more` : '';
       
       const userChoice = window.confirm(
-        `Ã¢Å¡ Ã¯Â¸Â DUPLICATE DETECTION\n\n` +
+        `DUPLICATE DETECTION\n\n` +
         `Found ${duplicates.length} asset(s) that already exist in the system:\n\n` +
         `${duplicateList}${moreText}\n\n` +
         `These duplicates will be SKIPPED.\n` +
@@ -401,9 +400,9 @@ const newAssets = [];
       }
     }
     
-    // Ã¢Å“â€¦ CHECK IF NO NEW ASSETS TO UPLOAD
+    // CHECK IF NO NEW ASSETS TO UPLOAD
     if (newAssets.length === 0) {
-      alert('Ã¢ÂÅ’ No new assets to upload.\n\nAll assets in the CSV already exist in the system.');
+      alert('No new assets to upload.\n\nAll assets in the CSV already exist in the system.');
       setShowBulkUploadModal(false);
       setCsvFile(null);
       setCsvPreview([]);
@@ -420,7 +419,7 @@ const orgId = currentUser.organizationId;
 
 for (const asset of newAssets) {
   try {
-    // Ã¢Å“â€¦ EXTRA CHECK: Verify this asset doesn't exist in database before inserting
+    //EXTRA CHECK: Verify this asset doesn't exist in database before inserting
     const assetNameClean = asset.name.trim().replace(/\s+/g, '_');
     
     const { data: existingCheck } = await supabase
@@ -432,7 +431,7 @@ for (const asset of newAssets) {
       .limit(1);
     
     if (existingCheck && existingCheck.length > 0) {
-      console.log(`Ã¢Å¡ Ã¯Â¸Â Skipping duplicate in DB: ${asset.name}`);
+      console.log(`Skipping duplicate in DB: ${asset.name}`);
       failCount++;
       continue; // Skip this asset
     }
@@ -440,11 +439,11 @@ for (const asset of newAssets) {
     // Proceed with insert if no duplicate found in database
     await assetService.addAsset(asset);
     successCount++;
-    console.log('Ã¢Å“â€¦ Uploaded:', asset.name);
+    console.log('Uploaded:', asset.name);
     
   } catch (uploadErr) {
     failCount++;
-    console.error('Ã¢ÂÅ’ Failed:', asset.name, uploadErr.message);
+    console.error('Failed:', asset.name, uploadErr.message);
   }
 }
     
@@ -454,28 +453,28 @@ for (const asset of newAssets) {
     setCsvFile(null);
     setCsvPreview([]);
     
-// Ã¢Å“â€¦ SIMPLE & DIRECT MESSAGE
+// SIMPLE & DIRECT MESSAGE
 let resultMessage = '';
 
 if (successCount > 0) {
   // SUCCESS SCENARIO
-  resultMessage = `Ã¢Å“â€¦ Upload Successful!\n\n`;
+  resultMessage = `Upload Successful!\n\n`;
   resultMessage += `${successCount} asset(s) added successfully`;
   
   // Show what was skipped
   if (duplicates.length > 0 || failCount > 0) {
     resultMessage += `\n\nSkipped:`;
     if (duplicates.length > 0) {
-      resultMessage += `\nÃ¢â‚¬Â¢ ${duplicates.length} duplicate(s)`;
+      resultMessage += `\n${duplicates.length} duplicate(s)`;
     }
     if (failCount > 0) {
-      resultMessage += `\nÃ¢â‚¬Â¢ ${failCount} asset(s) already exist in database`;
+      resultMessage += `\n${failCount} asset(s) already exist in database`;
     }
   }
   
 } else {
   // FAILURE SCENARIO - Nothing was uploaded
-  resultMessage = `Ã¢ÂÅ’ Upload Failed\n\n`;
+  resultMessage = `Upload Failed\n\n`;
   resultMessage += `No assets were added to the system.\n\n`;
   
   // Explain WHY
@@ -493,8 +492,8 @@ if (successCount > 0) {
 alert(resultMessage);
 // Log activity
 await logActivity('bulk_add_assets', `Bulk uploaded ${successCount} assets to system`);
-// Ã¢Å“â€¦ ADD: Audit log for bulk upload
-   // Ã¢Å“â€¦ ONLY LOG IF SUCCESSFUL
+//ADD: Audit log for bulk upload
+   //ONLY LOG IF SUCCESSFUL
 if (successCount > 0) {
   await AuditLogger.logWithIP({
    userId: currentUser.id,  
@@ -504,37 +503,36 @@ if (successCount > 0) {
     organizationId: currentUser.organizationId
   });
 }
-      // Ã¢Å“â€¦ ADD NOTIFICATION FOR SYSTEM ADMIN
-// Line 472-486 - NEW FIXED VERSION
-try {
-  // Get organization_id from database
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  const { data: adminUserData } = await supabase
-    .from('users')
-    .select('user_id, organization_id')
-    .eq('email', authUser.email)
-    .single();
+// ✅ ONLY notify if there are successful uploads
+if (successCount > 0) {
+  try {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    const { data: adminUserData } = await supabase
+      .from('users')
+      .select('user_id, organization_id')
+      .eq('email', authUser.email)
+      .single();
 
-  await supabase
-    .from('notifications')
-    .insert([{
-      notification_type_id: 21,
-      created_by: currentUser.id,  // âœ… FIXED - use .id
-      title: 'Bulk Asset Upload Completed',
-      message: `${currentUser.fullName || 'Facility Manager'} uploaded ${successCount} assets via CSV`,
-      target_roles: '1',
-      priority_id: 2,
-      related_table: 'assets',
-      related_id: 0,
-      organization_id: adminUserData.organization_id,  // âœ… FIXED - from DB
-      is_active: true
-    }]);
-  
-  console.log(' System Admin notified about bulk asset upload');
-} catch (notifErr) {
-  console.error('Notification failed:', notifErr);
+    await supabase
+      .from('notifications')
+      .insert([{
+        notification_type_id: 21,
+        created_by: currentUser.id,
+        title: 'Bulk Asset Upload Completed',
+        message: `${currentUser.fullName || 'Facility Manager'} uploaded ${successCount} assets via CSV`,
+        target_roles: '1',
+        priority_id: 2,
+        related_table: 'assets',
+        related_id: 0,
+        organization_id: adminUserData.organization_id,
+        is_active: true
+      }]);
+    
+    console.log('✅ System Admin notified about bulk asset upload');
+  } catch (notifErr) {
+    console.error('❌ Notification failed:', notifErr);
+  }
 }
-
   } catch (err) {
     console.error('CSV Upload Error:', err);
     alert('Failed to upload CSV: ' + err.message);
@@ -544,13 +542,13 @@ try {
 // Add this function with the other handlers (around line 280)
 const handleDownloadTemplate = () => {
   // Use first available category or fallback
-  const sampleCategory = categories.length > 0 
-    ? categories[0].category_name 
-    : 'HVAC Equipment';
-  
-  const templateHeaders = ['name', 'category', 'location', 'status', 'acquisitionDate'];
-  const sampleRow = ['Sample Asset Name', sampleCategory, 'Building A - Room 101', 'Operational', '2024-01-15'];
-  
+ const sampleCategory = categories.length > 0 
+  ? categories[0].category_name 
+  : 'HVAC Equipment';
+
+// ✅ REMOVE acquisition date from template
+const templateHeaders = ['name', 'category', 'location', 'status'];
+const sampleRow = ['Sample Asset Name', sampleCategory, 'Building A - Room 101', 'Operational'];
   const csvContent = [
     templateHeaders.join(','),
     sampleRow.join(',')
@@ -946,7 +944,7 @@ const Pagination = () => {
    <Alert variant="info">
   <div className="d-flex justify-content-between align-items-center">
     <div>
-      <strong>CSV Format:</strong> name, category, location, status, acquisitionDate
+      <strong>CSV Format:</strong> name, category, location, status
       <br />
       <small>Header row should match these column names (case sensitive)</small>
     </div>
@@ -1079,7 +1077,7 @@ const Pagination = () => {
   {asset.status}
 </span>
     
-    {/* Ã¢Å“â€¦ IMPROVED: Show failed badge regardless of status */}
+    {/*IMPROVED: Show failed badge regardless of status */}
     {asset.hasFailedMaintenance && (
       <span 
         className="badge bg-danger" 
@@ -1181,7 +1179,7 @@ const Pagination = () => {
   {selectedAsset.status}
 </span>
     
-    {/* Ã¢Å“â€¦ IMPROVED: Show failed badge with better label */}
+    {/*IMPROVED: Show failed badge with better label */}
     {selectedAsset.hasFailedMaintenance && (
       <span className="badge bg-danger">
         <i className="fas fa-wrench me-1"></i>
@@ -1553,7 +1551,7 @@ const Pagination = () => {
     ))}
   </Form.Select>
   
-  {/* Ã¢â€ Â ADD THIS WARNING BELOW */}
+  {/*ADD THIS WARNING BELOW */}
   {newTask.assigneeId && personnel.find(p => p.id === parseInt(newTask.assigneeId))?.activeTaskCount > 0 && (
     <Alert variant="warning" className="mt-2 mb-0">
       <small>
