@@ -309,7 +309,7 @@ async fetchMyTasks() {
     
     if (!currentUser) throw new Error('User not found');
     
-  const { data: tasks, error } = await supabase
+const { data: tasks, error } = await supabase
   .from('maintenance_tasks')
   .select(`
     task_id,
@@ -332,7 +332,7 @@ async fetchMyTasks() {
 
     statuses(status_name, color_code),
     priority_levels(priority_name, color_code),
-    assets!maintenance_tasks_asset_id_fkey(
+    assets(
       asset_name, 
       asset_code, 
       location,
@@ -383,7 +383,7 @@ async fetchMyTasks() {
   extensionHistory: task.maintenance_task_extensions || [],
   asset: task.assets ? {
     id: task.assets.asset_code,
-    name: task.assets.asset_name,
+    name: task.assets.asset_name || task.assets.asset_code,
     location: task.assets.location,
     category: task.assets.asset_categories?.category_name
   } : null,
@@ -578,20 +578,19 @@ await supabase
 // âœ… CREATE NOTIFICATION FOR PERSONNEL
 try {
   const notificationInsert = {
-    notification_type_id: 13, // asset_maintenance_assigned
-    created_by: currentUser.user_id,
-    title: 'New Maintenance Task Assigned',
-    message: `You have been assigned: ${taskData.title} for ${assetData.asset_name}. Due: ${taskData.dueDate}`,
-    target_roles: null, // Personnel role
-    target_user_id: parseInt(taskData.assigneeId),
-    priority_id: priorityMap[taskData.priority] || 2,
-    related_table: 'maintenance_tasks',
-    related_id: taskResult.task_id,
-    organization_id: organizationId,
-    is_active: true,
-    created_at: new Date().toISOString()
-    
-  };
+  notification_type_id: 13,
+  created_by: currentUser.user_id,
+  title: 'New Maintenance Task Assigned',
+  message: `You have been assigned: ${taskData.title} for asset ${taskData.assetId}. Due: ${taskData.dueDate}`,
+  target_roles: null,
+  target_user_id: parseInt(taskData.assigneeId),
+  priority_id: priorityMap[taskData.priority] || 2,
+  related_table: 'maintenance_tasks',
+  related_id: taskResult.task_id,
+  organization_id: organizationId,
+  is_active: true,
+  created_at: new Date().toISOString()
+};
   
 
   console.log('ðŸ”” Creating notification:', notificationInsert);

@@ -631,22 +631,6 @@ const formatDate = (dateString) => {
         <Form.Control type="text" value={selectedAsset.location} readOnly />
       </Form.Group>
     </div>
-    <div className="col-md-12">
-      <Form.Group>
-        <Form.Label><strong>Next Maintenance:</strong></Form.Label>
-        <Form.Control 
-          type="text" 
-          value={selectedAsset.nextMaintenance || 'Not scheduled'} 
-          readOnly 
-        />
-        {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
-          <Form.Text className="text-muted d-block mt-1">
-            <i className="fas fa-repeat me-1"></i>
-            Repeats: {selectedAsset.nextMaintenanceRepeat}
-          </Form.Text>
-        )}
-      </Form.Group>
-    </div>
   </div>
 
 {/* Active Incidents Section */}
@@ -747,6 +731,11 @@ const formatDate = (dateString) => {
           <Form.Label>Category</Form.Label>
           <Form.Control type="text" value={incidentAsset.category} readOnly />
         </Form.Group>
+
+      <Form.Group className="mb-3">
+      <Form.Label>Location</Form.Label>
+      <Form.Control type="text" value={incidentAsset.location} readOnly />
+      </Form.Group>
 
         <Form.Group className="mb-3">
           <Form.Label>Incident Type *</Form.Label>

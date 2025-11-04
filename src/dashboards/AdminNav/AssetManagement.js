@@ -1236,23 +1236,7 @@ const Pagination = () => {
     <Form.Control type="text" value={selectedAsset.location} readOnly />
   </Form.Group>
 </div>
-
- <div className="col-md-12">
-  <Form.Group>
-  <Form.Label><strong>Next Maintenance:</strong></Form.Label>
-    <Form.Control 
-      type="text" 
-      value={selectedAsset.nextMaintenance || 'Not scheduled'} 
-      readOnly 
-    />
-    {selectedAsset.nextMaintenanceRepeat && selectedAsset.nextMaintenanceRepeat !== 'none' && (
-      <Form.Text className="text-muted d-block mt-1">
-        <i className="fas fa-repeat me-1"></i>
-        Repeats: {selectedAsset.nextMaintenanceRepeat}
-      </Form.Text>
-    )}
-  </Form.Group>
-</div>              
+             
 {/* Active Incidents Section - View Only */}
 <div className="mt-4 pt-3 border-top">
   <div className="d-flex justify-content-between align-items-center mb-3">
@@ -1362,41 +1346,6 @@ const Pagination = () => {
                             />
                           </Form.Group>
                         </div>
-                       <div className="col-md-4">
-  <Form.Group>
-    <Form.Label>Next Maintenance Date</Form.Label>
-    <Form.Control 
-      type="date" 
-      value={editingAsset.nextMaintenance || ''}
-      onChange={(e) => setEditingAsset({...editingAsset, nextMaintenance: e.target.value})}
-    />
-  </Form.Group>
-</div>
-<div className="col-md-4">
-  <Form.Group>
-    <Form.Label>Next Maintenance Time</Form.Label>
-    <Form.Control 
-      type="time" 
-      value={editingAsset.nextMaintenanceTime || ''}
-      onChange={(e) => setEditingAsset({...editingAsset, nextMaintenanceTime: e.target.value})}
-    />
-  </Form.Group>
-</div>
-<div className="col-md-4">
-  <Form.Group>
-    <Form.Label>Repeat Schedule</Form.Label>
-    <Form.Select
-      value={editingAsset.nextMaintenanceRepeat || 'none'}
-      onChange={(e) => setEditingAsset({...editingAsset, nextMaintenanceRepeat: e.target.value})}
-    >
-      <option value="none">No Repeat</option>
-      <option value="weekly">Weekly</option>
-      <option value="monthly">Monthly</option>
-      <option value="yearly">Yearly</option>
-      <option value="custom">Custom</option>
-    </Form.Select>
-  </Form.Group>
-</div>
                       </div>
                     )}
           

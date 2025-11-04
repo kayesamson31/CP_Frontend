@@ -32,9 +32,18 @@ export default function SysadAuditLogs() {
     
     return () => clearTimeout(timer);
   }, [search]);
+
 useEffect(() => {
+  const currentUser = localStorage.getItem('currentUser');
+  
+  if (!currentUser) {
+    setError('Session not found. Please log in again.');
+    setLoading(false);
+    return;
+  }
+  
   fetchAuditLogs();
-}, [currentPage, searchDebounce, dateRange, roleFilter, actionFilter]);  // ✅ ADD actionFilter
+}, [currentPage, searchDebounce, dateRange, roleFilter, actionFilter]);
 const fetchAuditLogs = async () => {
   try {
     setLoading(true);

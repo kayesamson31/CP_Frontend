@@ -56,7 +56,7 @@ const fetchMaintenanceTasks = async () => {
       .from('maintenance_tasks')
       .select(`
         *,
-        assets!maintenance_tasks_asset_id_fkey(asset_id, asset_name, asset_code, location),
+      assets(asset_id, asset_name, asset_code, location),
         statuses(status_name, color_code),
         priority_levels(priority_name, color_code),
         assigned_user:users!assigned_to(full_name, email),
@@ -109,7 +109,7 @@ const fetchMaintenanceTasks = async () => {
    return {
   id: `MT-${task.task_id}`,
   taskName: task.task_name,
-  assetName: task.assets?.asset_name || 'Unknown Asset',
+ assetName: task.assets?.asset_name || task.assets?.asset_code || 'Asset Not Found',
   location: task.assets?.location || '-',
   status: statusName,
   priority: task.priority_levels?.priority_name || 'Low',

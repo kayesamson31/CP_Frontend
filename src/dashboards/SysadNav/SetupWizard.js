@@ -1316,29 +1316,38 @@ onClick={async () => {
       throw orgError;
     }
 
-    // Create admin user profile
-    const { error: userInsertError } = await supabase
-      .from("users")
-      .insert([{
-        username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
-        full_name: orgData.contactPerson,
-        email: orgData.contactEmail.toLowerCase().trim(),
-        role_id: 1,
-        user_status: "active",
-        password_hash: PasswordUtils.hashPassword(orgData.password),
-        auth_uid: user.id,
-        organization_id: orgResult.organization_id
-      }]);
+const { data: userInsertResult, error: userInsertError } = await supabase
+  .from("users")
+  .insert([{
+    username: `${orgData.contactEmail.split("@")[0]}_admin_${Date.now()}`,
+    full_name: orgData.contactPerson,
+    email: orgData.contactEmail.toLowerCase().trim(),
+    role_id: 1,
+    user_status: "active",
+    password_hash: PasswordUtils.hashPassword(orgData.password),
+    auth_uid: user.id,
+    organization_id: orgResult.organization_id
+  }])
+  .select();  // ✅ Add this to get the inserted data
 
     if (userInsertError) {
       throw userInsertError;
     }
+// ✅ Store complete user session data FIRST
+const completeUserData = {
+  id: userInsertResult[0].user_id,  // ✅ Use the actual database user_id
+  email: orgData.contactEmail.toLowerCase().trim(),
+  name: orgData.contactPerson,
+  role: 1, // System Admin
+  organizationId: orgResult.organization_id,
+  authUid: user.id
+};
 
-    localStorage.setItem('userEmail', orgData.contactEmail.toLowerCase().trim());
-    localStorage.setItem('userId', user.id);
-    localStorage.setItem('userRole', 'sysadmin');
-    localStorage.setItem('organizationId', orgResult.organization_id.toString());
-
+localStorage.setItem('currentUser', JSON.stringify(completeUserData));
+localStorage.setItem('userEmail', orgData.contactEmail.toLowerCase().trim());
+localStorage.setItem('userId', userInsertResult[0].user_id.toString());  // ✅ Use database ID
+localStorage.setItem('userRole', 'sysadmin');
+localStorage.setItem('organizationId', orgResult.organization_id.toString());
     // Get role mapping
     const roleMap = await getRoleMap();
 
@@ -1502,7 +1511,10 @@ ${allUsersForEmail.length > 0 ? 'Login credentials are being sent to users via e
 You will now be redirected to your dashboard.`);
     
     // Navigate to dashboard
-    navigate("/dashboard-sysadmin");
+  // ✅ Wait for localStorage to sync before navigation
+setTimeout(() => {
+  navigate("/dashboard-sysadmin", { replace: true });
+}, 300);
 
   } catch (err) {
     console.error("Setup completion failed:", err);
