@@ -46,7 +46,7 @@ const { data: failedTasks } = await supabase
   .eq('organization_id', organizationId) 
   .eq('status_id', 11); // Failed status
 
-// ✅ Filter to show ONLY unresolved failures
+// âœ… Filter to show ONLY unresolved failures
 const activeFailedTasks = [];
 for (const task of failedTasks || []) {
   // Check if there's a newer task for this asset after this failed task
@@ -121,7 +121,7 @@ activeFailedTasks.forEach(task => {
       .in('asset_id', assets.map(a => a.asset_id))
       .order('date_reported', { ascending: false });
 
-// ✅ SIMPLIFIED: Separate active incidents (for badge) vs history (for modal)
+// âœ… SIMPLIFIED: Separate active incidents (for badge) vs history (for modal)
 const activeIncidentsByAsset = {};
 const incidentHistoryByAsset = {};
 
@@ -143,7 +143,7 @@ allIncidents?.forEach(incident => {
   }
   incidentHistoryByAsset[incident.asset_id].push(incidentObj);
   
-  // ✅ SIMPLE RULE: Show badge ONLY if status = "Reported" (status_id = 4)
+  // âœ… SIMPLE RULE: Show badge ONLY if status = "Reported" (status_id = 4)
   if (incident.status_id === 4) {
     if (!activeIncidentsByAsset[incident.asset_id]) {
       activeIncidentsByAsset[incident.asset_id] = [];
@@ -167,7 +167,7 @@ allIncidents?.forEach(incident => {
       task: asset.task || '',
       hasFailedMaintenance: (failedCountMap[asset.asset_id] || 0) > 0,
       failedMaintenanceCount: failedCountMap[asset.asset_id] || 0,
-      maintenanceHistory: tasksByAsset[asset.asset_id] || [], // âœ… Now populated!
+      maintenanceHistory: tasksByAsset[asset.asset_id] || [], // Ã¢Å“â€¦ Now populated!
      incidentReports: activeIncidentsByAsset[asset.asset_id] || [],
       incidentHistory: incidentHistoryByAsset[asset.asset_id] || [],
       maintenanceSchedule: null
@@ -359,7 +359,8 @@ const { data: tasks, error } = await supabase
       .order('due_date', { ascending: true });
     
     if (error) throw error;
-    
+    // ✅ ADD THIS DEBUG LOG
+console.log('🔍 Raw task data from Supabase:', JSON.stringify(tasks[0], null, 2));
   return tasks.map(task => ({
   id: task.task_id,
   taskId: task.task_id,
@@ -558,7 +559,7 @@ const taskInsert = {
   scheduled_time: taskData.dueTime || null, 
   assigned_to: parseInt(taskData.assigneeId),
   incident_id: taskData.incidentId || null,
-  organization_id: organizationId  // â† ADD THIS
+  organization_id: organizationId  // Ã¢â€ Â ADD THIS
 };
     
 const { data: taskResult, error: taskError } = await supabase
@@ -575,7 +576,7 @@ await supabase
   .update({ asset_status: 'maintenance' })
   .eq('asset_code', taskData.assetId);
 
-// âœ… CREATE NOTIFICATION FOR PERSONNEL
+// Ã¢Å“â€¦ CREATE NOTIFICATION FOR PERSONNEL
 try {
   const notificationInsert = {
   notification_type_id: 13,
@@ -593,7 +594,7 @@ try {
 };
   
 
-  console.log('ðŸ”” Creating notification:', notificationInsert);
+  console.log('Ã°Å¸â€â€ Creating notification:', notificationInsert);
 
 const { data: notifResult, error: notifError } = await supabase
     .from('notifications')
@@ -601,14 +602,14 @@ const { data: notifResult, error: notifError } = await supabase
     .select(); // Add .select() to get the inserted data
 
   if (notifError) {
-    console.error('âŒ Notification error:', notifError);
-    console.error('âŒ Insert data was:', notificationInsert);
-    console.error('âŒ Full error details:', JSON.stringify(notifError, null, 2));
+    console.error('Ã¢ÂÅ’ Notification error:', notifError);
+    console.error('Ã¢ÂÅ’ Insert data was:', notificationInsert);
+    console.error('Ã¢ÂÅ’ Full error details:', JSON.stringify(notifError, null, 2));
   } else {
-    console.log('âœ… Notification created successfully:', notifResult);
+    console.log('Ã¢Å“â€¦ Notification created successfully:', notifResult);
   }
 } catch (notifErr) {
-  console.error('âŒ Notification creation failed:', notifErr);
+  console.error('Ã¢ÂÅ’ Notification creation failed:', notifErr);
   // Don't throw - task was created successfully
 }
 
@@ -787,7 +788,7 @@ const insertData = {
   reported_by: currentUser.user_id,
   status_id: 4,
   date_reported: new Date().toISOString(),
-  organization_id: assetOrg.organization_id  // â† ADD THIS
+  organization_id: assetOrg.organization_id  // Ã¢â€ Â ADD THIS
 };
 
     console.log('Insert data:', insertData);
@@ -818,7 +819,7 @@ const insertData = {
     console.log('Insert successful:', data);
     console.log('Insert successful:', data);
 
-// âœ… CREATE NOTIFICATION FOR ADMIN
+// Ã¢Å“â€¦ CREATE NOTIFICATION FOR ADMIN
 try {
   const priorityMap = { 'Low': 1, 'Medium': 2, 'High': 3 };
   
@@ -837,7 +838,7 @@ try {
     created_at: new Date().toISOString()
   };
 
-  console.log('ðŸ“¢ Creating admin notification:', notificationData);
+  console.log('Ã°Å¸â€œÂ¢ Creating admin notification:', notificationData);
 
   const { error: notifError } = await supabase
     .from('notifications')
@@ -849,7 +850,7 @@ try {
     console.log(' Facility Manager notified about incident report');
   }
 } catch (notifErr) {
-  console.error('âŒ Notification error:', notifErr);
+  console.error('Ã¢ÂÅ’ Notification error:', notifErr);
   // Don't throw - incident was created successfully
 }
 
@@ -873,7 +874,7 @@ try {
   // Add this to assetService.js, before the closing };
 async updateIncidentStatus(incidentId, newStatus) {
   try {
-    // ✅ HANDLE BOTH FORMATS: "INC-123" or just "123"
+    // âœ… HANDLE BOTH FORMATS: "INC-123" or just "123"
     const numericId = typeof incidentId === 'string' && incidentId.startsWith('INC-')
       ? parseInt(incidentId.replace('INC-', ''))
       : parseInt(incidentId);

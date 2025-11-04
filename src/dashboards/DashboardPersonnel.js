@@ -13,6 +13,20 @@ import {
   CalendarDays
 } from 'lucide-react';
 
+const globalStyles = document.createElement('style');
+globalStyles.innerHTML = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
+
+// Only add styles once
+if (typeof document !== 'undefined' && !document.querySelector('#personnel-dashboard-styles')) {
+  globalStyles.id = 'personnel-dashboard-styles';
+  document.head.appendChild(globalStyles);
+}
+
 // API service functions (replace with actual API calls later)
 const apiService = {
   async updateTaskStatus(taskId, taskType, status, reason, newDate = null) {
@@ -45,16 +59,23 @@ if (taskType === 'maintenance_task') {
       .eq('task_id', taskId)
       .single();
 
-    // Insert extension history
-    await supabase
-      .from('maintenance_task_extensions')
-      .insert({
-        task_id: taskId,
-        old_due_date: currentTask.due_date,
-        new_due_date: newDate,
-        extension_reason: reason,
-        extended_by: userProfile.user_id
-      });
+  const { data: userOrgData } = await supabase
+  .from('users')
+  .select('organization_id')
+  .eq('user_id', userProfile.user_id)
+  .single();
+
+// ✅ Then insert with organization_id
+await supabase
+  .from('maintenance_task_extensions')
+  .insert({
+    task_id: taskId,
+    old_due_date: currentTask.due_date,
+    new_due_date: newDate,
+    extension_reason: reason,
+    extended_by: userProfile.user_id,
+    organization_id: userOrgData.organization_id  // ✅ ADD THIS
+  });
 
     // Update maintenance_tasks with extension data
     const taskUpdate = {
@@ -74,6 +95,19 @@ if (taskType === 'maintenance_task') {
       .select();
 
     if (error) throw error;
+    // ✅ FETCH EXTENSION HISTORY AFTER INSERT
+const { data: extensionHistory } = await supabase
+  .from('maintenance_task_extensions')
+  .select('*')
+  .eq('task_id', taskId)
+  .order('extension_date', { ascending: false });
+
+// ✅ ATTACH TO RETURNED DATA
+const taskWithExtensions = {
+  ...data[0],
+  maintenance_task_extensions: extensionHistory || []
+};
+
     await logActivity('request_task_extension', `Requested extension for maintenance task #${taskId} from ${new Date(currentTask.due_date).toLocaleDateString()} to ${new Date(newDate).toLocaleDateString()} - Reason: ${reason}`);
     try {
 const { data: userOrgData } = await supabase
@@ -100,7 +134,7 @@ await supabase.from('notifications').insert({
       console.error('❌ Failed to notify admin about extension:', notifError);
     }
 
-    return { success: true, data: data?.[0] };
+   return { success: true, data: taskWithExtensions };
   }
 
   // Regular status update for maintenance tasks (non-extension)
@@ -648,6 +682,7 @@ const orgId = userProfile.organization_id;
       const transformedMaintenanceTasks = maintenanceTasks
   .filter(task => !task.workOrderId)
   .map(task => {
+    console.log('📦 Mapping task:', task.taskId, 'Extensions:', task.maintenance_task_extensions); 
         const dueDate = new Date(task.dueDate);
         const currentDate = new Date();
         currentDate.setHours(0, 0, 0, 0);
@@ -667,14 +702,14 @@ const orgId = userProfile.organization_id;
         category: task.asset?.category || task.workOrder?.category || 'Maintenance',
           dueDate: task.dueDate,
           scheduledTime: task.scheduledTime || null,
-          originalDueDate: null,
+          originalDueDate: task.originalDueDate,
           priority: task.priority.toLowerCase(),
           status: statusName,
           isOverdue: isOverdue,
           failureReason: task.remarks,
-          extensionCount: 0,
-          lastExtensionReason: null,
-          extensionHistory: [],
+           extensionCount: task.extension_count || 0,
+          lastExtensionReason: task.last_extension_reason, 
+         extensionHistory: task.extensionHistory || task.maintenance_task_extensions || [],
           dateCompleted: task.dateCompleted,
           logs: [],
           // Keep maintenance task specific data
@@ -797,17 +832,45 @@ const getCompletedTasks = () => {
   };
 
   // FIXED: Updated to handle modal transitions properly
-  const handleTaskClick = task => {
-    setSelectedTask(task);
-    // Close calendar modal first if it's open
-    if (showCalendarModal) {
-      setShowCalendarModal(false);
+const handleTaskClick = async (task) => {
+  // ✅ CLOSE CALENDAR MODAL FIRST
+  if (showCalendarModal) {
+    setShowCalendarModal(false);
+  }
+  
+  // ✅ RE-FETCH FRESH DATA FOR MAINTENANCE TASKS
+  if (task.type === 'maintenance_task') {
+    try {
+      const { data: freshTask } = await supabase
+        .from('maintenance_tasks')
+        .select(`
+          *,
+          maintenance_task_extensions(
+            extension_id,
+            old_due_date,
+            new_due_date,
+            extension_reason,
+            extension_date
+          )
+        `)
+        .eq('task_id', task.id)
+        .single();
+      
+      if (freshTask) {
+        task.extensionHistory = freshTask.maintenance_task_extensions || [];
+        console.log('✅ Fresh extension history loaded:', task.extensionHistory);
+      }
+    } catch (error) {
+      console.error('⚠️ Failed to fetch fresh task data:', error);
     }
-    // Small delay to ensure calendar modal is closed before opening task modal
-    setTimeout(() => {
-      setShowTaskModal(true);
-    }, 100);
-  };
+  }
+  
+  setSelectedTask(task);
+  
+  setTimeout(() => {
+    setShowTaskModal(true);
+  }, 100);
+};
 
   // FIXED: Separate handler for calendar modal task clicks
   const handleCalendarTaskClick = (task, event) => {
@@ -879,23 +942,38 @@ const updateTaskStatus = async (status, requireReason = false, requireDate = fal
   try {
     const result = await apiService.updateTaskStatus(
       selectedTask.id,
-      selectedTask.type, // Add this - pass the task type
+      selectedTask.type,
       status,
       statusReason,
       requireDate ? newDueDate : null
     );
 
     if (result.success) {
-      const updatedTask = addLogLocally(
-        selectedTask,
-        status,
-        statusReason,
-        requireDate ? newDueDate : null
-      );
-
-      setTasks(tasks.map(t => (t.id === selectedTask.id ? updatedTask : t)));
-      closeAllModals();
+      // ✅ Reload all tasks
       await loadTasks();
+      
+      // ✅ Keep modal open but update selectedTask with fresh data from result
+      if (result.data && selectedTask.type === 'maintenance_task') {
+        // ✅ ADD CONSOLE LOG HERE
+    console.log('📦 Updated task data:', result.data);
+    console.log('📜 Extension history:', result.data.maintenance_task_extensions);
+        // Transform the returned data to match our display format
+        setSelectedTask({
+          ...selectedTask,
+          dueDate: result.data.due_date,
+          extensionCount: result.data.extension_count || 0,
+          lastExtensionReason: result.data.last_extension_reason,
+          extensionHistory: result.data.maintenance_task_extensions || [],
+          status: status
+        });
+      }
+      
+      // ✅ Close only the extend/failed modals, keep task modal open
+      setShowExtendModal(false);
+      setShowFailedModal(false);
+      setStatusReason('');
+      setNewDueDate('');
+      
     } else {
       alert('Failed to update task status: ' + result.error);
     }
@@ -1176,6 +1254,7 @@ const TaskCard = ({ task }) => (
             color: #6c757d;
             font-weight: 500;
           }
+            
         `}</style>
         
         <div className="calendar-header">
@@ -1249,6 +1328,7 @@ const twoColumnGrid = {
 
   return (
       <Col md={12} className="p-4">
+     
 <div style={{
   backgroundColor: '#f8f9fa',
   borderLeft: '4px solid #0d6efd',
@@ -1264,12 +1344,70 @@ const twoColumnGrid = {
       Welcome back, {personnelName}!
     </h1>
   </div>
+<div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+  {/* Date Display */}
   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
     <CalendarIcon size={18} style={{ color: '#6c757d' }} />
     <span style={{ color: '#6c757d', fontSize: '14px' }}>
-      {new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+      {new Date().toLocaleDateString('en-US', { 
+        weekday: 'long', 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      })}
     </span>
   </div>
+  
+  {/* Refresh Button */}
+  <button
+    onClick={loadTasks}
+    disabled={loading}
+    style={{
+      backgroundColor: '#0d6efd',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      padding: '8px 16px',
+      fontSize: '14px',
+      fontWeight: '500',
+      cursor: loading ? 'not-allowed' : 'pointer',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      transition: 'all 0.2s ease',
+      opacity: loading ? 0.6 : 1
+    }}
+    onMouseEnter={(e) => {
+      if (!loading) {
+        e.currentTarget.style.backgroundColor = '#0b5ed7';
+        e.currentTarget.style.transform = 'translateY(-1px)';
+      }
+    }}
+    onMouseLeave={(e) => {
+      e.currentTarget.style.backgroundColor = '#0d6efd';
+      e.currentTarget.style.transform = 'translateY(0)';
+    }}
+  >
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width="16" 
+      height="16" 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round"
+      style={{
+        animation: loading ? 'spin 1s linear infinite' : 'none'
+      }}
+    >
+      <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+    </svg>
+    {loading ? 'Refreshing...' : 'Refresh'}
+  </button>
+</div>
+  
 </div>
   <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px', paddingLeft: '40px' }}>
 <span style={{ 
@@ -1812,12 +1950,14 @@ getTodayTasks().map((task, index) => (
                     {selectedTask.extensionHistory?.length > 0 && (
                       <div className="mt-4">
                         <h6>Extension History</h6>
+                         {console.log('🔍 Rendering extensions:', selectedTask.extensionHistory)} 
                         {selectedTask.extensionHistory.map((ext, i) => (
                           <div key={i} className="border p-2 mb-2 bg-warning bg-opacity-10 rounded">
                             <small><b>Extended</b> - {ext.extension_reason}</small><br />
                             <small className="text-info">
-                              From: {new Date(ext.old_due_date).toLocaleDateString()} â†’ 
-                              To: {new Date(ext.new_due_date).toLocaleDateString()}
+                              From: {new Date(ext.old_due_date).toLocaleDateString()}
+
+                               To: {new Date(ext.new_due_date).toLocaleDateString()}
                             </small><br />
                             <small className="text-muted">{new Date(ext.extension_date).toLocaleString()}</small>
                           </div>
