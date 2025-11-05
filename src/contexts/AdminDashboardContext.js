@@ -37,19 +37,18 @@ export const AdminDashboardProvider = ({ children }) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      // Fetch all data in parallel
-      const [
-        orgData,
-        pendingApprovalsResult,
-       [overdueMaintenanceResult, overdueWorkOrdersResult],
-        maintenanceExtensionsResult,  // ← CHANGED
-  workOrderExtensionsResult,     // ← ADDED (line 5)
-        assetMaintenanceResult,
-        recentActivityResult,
-        personnelResult,
-        workOrdersResult,
-        maintenanceTasksResult
-      ] = await Promise.all([
+const [
+  orgData,
+  pendingApprovalsResult,
+  [overdueMaintenanceResult, overdueWorkOrdersResult],
+  maintenanceExtensionsResult,
+  workOrderExtensionsResult,
+  [scheduledMaintenanceResult, activeMaintenanceTasksResult],  // ✅ NOW IT'S AN ARRAY!
+  recentActivityResult,
+  personnelResult,
+  workOrdersResult,
+  maintenanceTasksResult
+] = await Promise.all([
         // Organization name
         supabase
           .from('organizations')
@@ -93,13 +92,23 @@ supabase
   .from('work_order_extensions')
   .select('work_order_id'),
 
-        // Asset Maintenance
-        supabase
-          .from('assets')
-          .select('*', { count: 'exact', head: true })
-          .eq('organization_id', organizationId)
-          .eq('next_maintenance', new Date().toISOString().split('T')[0])  // ✅ Today only
-          .eq('asset_status', 'active'),
+       // Asset Maintenance - Check BOTH scheduled maintenance AND active tasks
+Promise.all([
+  // Assets with scheduled maintenance today
+  supabase
+    .from('assets')
+    .select('asset_id', { count: 'exact', head: true })
+    .eq('organization_id', organizationId)
+    .eq('next_maintenance', new Date().toISOString().split('T')[0])
+    .eq('asset_status', 'active'),
+  
+  // Assets with active maintenance tasks (Pending or In Progress)
+  supabase
+    .from('maintenance_tasks')
+    .select('asset_id')
+    .eq('organization_id', organizationId)
+    .in('status_id', [1, 2]) // Pending, In Progress
+]),
         
         // Recent Activity
         supabase
@@ -331,12 +340,21 @@ const personnelWithStatus = await Promise.all(
             route: "/dashboard-admin/MaintenanceTasks"
           },
           {
-            title: "Asset Maintenance",
-            value: assetMaintenanceResult.count || 0,
-            subtitle: "Assets needing service",
-            color: "#17a2b8",
-            route: "/dashboard-admin/AssetManagement"
-          }
+  title: "Asset Maintenance",
+  value: (() => {
+    // Count unique assets with active maintenance tasks
+    const uniqueAssetIds = new Set(
+      (activeMaintenanceTasksResult.data || []).map(task => task.asset_id)
+    );
+    // Add scheduled maintenance count
+    const scheduledCount = scheduledMaintenanceResult.count || 0;
+    // Total = scheduled + unique assets with active tasks
+    return scheduledCount + uniqueAssetIds.size;
+  })(),
+  subtitle: "Assets needing service",
+  color: "#17a2b8",
+  route: "/dashboard-admin/AssetManagement"
+}
         ],
         recentActivities: formattedActivities,
         availablePersonnel: personnelWithStatus,

@@ -200,7 +200,7 @@ if (isChangingPassword) {
     
     if (authUpdateError) {
       console.error('Failed to update Supabase Auth password:', authUpdateError);
-      alert('Failed to update authentication password. Please try again.');
+      alert('Do use the old password to change password. Create new Password');
       setIsUpdating(false);
       return;
     }
