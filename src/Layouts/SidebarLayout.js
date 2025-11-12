@@ -1,7 +1,7 @@
 // Fixed SidebarLayout.js - Using Supabase instead of localStorage
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Container, Row, Col, Button, Nav } from 'react-bootstrap';
+import {Button, Nav } from 'react-bootstrap';
 import dashboardlogo from '../assets/OpenFMSLogo.png';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import { supabase } from '../supabaseClient';
