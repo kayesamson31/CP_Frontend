@@ -165,14 +165,21 @@ const assignedIncidentIds = new Set(existingTasks?.map(t => t.incident_id) || []
 
 // Filter out incidents that already have tasks assigned
 const unassignedIncidents = incidents?.filter(inc => !assignedIncidentIds.has(inc.incident_id)) || [];
-    const transformedIncidents = unassignedIncidents.map(inc => ({
-      id: `INC-${inc.incident_id}`,
-      taskName: inc.incident_types?.type_name || 'Incident Report',
-      assetName: inc.assets?.asset_name || 'Unknown Asset',
-      assetCode: inc.assets?.asset_code || null,
-      location: inc.assets?.location || '-',
-      status: 'To Review',
-      priority: inc.severity_levels?.severity_name || 'Medium',
+   // Map severity names to priority display (add before transformedIncidents)
+const severityToPriorityMap = {
+  'Minor': 'Low',
+  'Major': 'Medium',
+  'Critical': 'High'
+};
+
+const transformedIncidents = unassignedIncidents.map(inc => ({
+  id: `INC-${inc.incident_id}`,
+  taskName: inc.incident_types?.type_name || 'Incident Report',
+  assetName: inc.assets?.asset_name || 'Unknown Asset',
+  assetCode: inc.assets?.asset_code || null,
+  location: inc.assets?.location || '-',
+  status: 'To Review',
+  priority: severityToPriorityMap[inc.severity_levels?.severity_name] || 'Medium',  // ⬅️ FIXED!
       dueDate: null,
       dateCreated: inc.date_reported,
       description: inc.description,
@@ -181,7 +188,7 @@ const unassignedIncidents = incidents?.filter(inc => !assignedIncidentIds.has(in
       assignedTo: 'Unassigned',
       type: 'incident',
       reportedBy: inc.users?.full_name || 'Unknown',
-      severity: inc.severity_levels?.severity_name || 'Medium'
+      severity: severityToPriorityMap[inc.severity_levels?.severity_name] || 'Medium'
     })) || [];
 
     // Combine incidents and tasks
@@ -214,7 +221,7 @@ const fetchPersonnel = async () => {
 
     if (error) throw error;
 
-    // ✅ Transform personnel and add active task count + work orders
+    // âœ… Transform personnel and add active task count + work orders
     const transformedPersonnel = await Promise.all(
       data.map(async (user) => {
         // Check active maintenance tasks
@@ -224,7 +231,7 @@ const fetchPersonnel = async () => {
           .eq('assigned_to', user.user_id)
           .in('status_id', [1, 2]); // Pending or In Progress
 
-        // ✅ ADD THIS: Check active work orders
+        // âœ… ADD THIS: Check active work orders
         const { count: activeWorkOrders } = await supabase
           .from('work_orders')
           .select('*', { count: 'exact', head: true })
@@ -238,7 +245,7 @@ const fetchPersonnel = async () => {
           name: user.full_name,
           email: user.email,
           department: user.job_position || 'Personnel',
-          activeTaskCount: totalActive // ✅ Combined count
+          activeTaskCount: totalActive // âœ… Combined count
         };
       })
     );
@@ -326,20 +333,18 @@ const confirmIncidentAssignment = async () => {
     
     const assignedPerson = personnel.find(p => p.id === parseInt(assignedPersonnel));
     
-    const severityToPriority = {
-      'Critical': 'high',
-      'Major': 'high', 
-      'Minor': 'low',
-      'High': 'high',
-      'Medium': 'medium',
-      'Low': 'low'
-    };
+    // Map personnel's priority (which is already Low/Medium/High) to API format
+const priorityMap = {
+  'Low': 'low',
+  'Medium': 'medium',
+  'High': 'high'
+};
     
-    const priority = severityToPriority[selectedTask.priority] || 'medium';
+ const priority = priorityMap[selectedTask.priority] || 'medium';
     
    const taskData = {
   assetId: selectedTask.assetCode,
-  title: `${selectedTask.taskName} - ${selectedTask.priority} Priority`,
+ title: selectedTask.taskName,
   description: incidentTaskForm.description || selectedTask.description,
   assigneeId: assignedPersonnel,
   priority: priority,
@@ -806,7 +811,7 @@ const formatTimeTo12Hour = (time24) => {
           <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
             <div className="d-flex justify-content-between align-items-start mb-1">
               <span className="fw-semibold text-dark">
-                {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].old_due_date)} → {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].new_due_date)}
+                {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].old_due_date)} â†’ {formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].new_due_date)}
               </span>
               <small className="text-muted">{formatDate(selectedTask.extensionHistory[selectedTask.extensionHistory.length - 1].extension_date)}</small>
             </div>
@@ -828,7 +833,7 @@ const formatTimeTo12Hour = (time24) => {
               <div className="flex-grow-1" style={{fontSize: '0.85rem'}}>
                 <div className="d-flex justify-content-between align-items-start mb-1">
                   <span className="fw-semibold">
-                    {formatDate(ext.old_due_date)} → {formatDate(ext.new_due_date)}
+                    {formatDate(ext.old_due_date)} â†’ {formatDate(ext.new_due_date)}
                   </span>
                   <small className="text-muted">{formatDate(ext.extension_date)}</small>
                 </div>
@@ -914,11 +919,6 @@ const formatTimeTo12Hour = (time24) => {
           ></button>
         </div>
         <div className="modal-body">
-          <div className="alert alert-info">
-            <strong>Incident:</strong> {selectedTask.taskName}<br />
-            <strong>Asset:</strong> {selectedTask.assetName}<br />
-            <strong>Priority:</strong> {selectedTask.priority}
-          </div>
           
 <div className="mb-3">
   <label className="form-label">Select Personnel *</label>
@@ -937,7 +937,7 @@ const formatTimeTo12Hour = (time24) => {
 ))}
   </select>
   
-  {/* ← ADD THIS WARNING BELOW */}
+  {/* â† ADD THIS WARNING BELOW */}
   {assignedPersonnel && personnel.find(p => p.id === parseInt(assignedPersonnel))?.activeTaskCount > 0 && (
     <div className="alert alert-warning mt-2 mb-0">
       <small>
@@ -985,7 +985,6 @@ const formatTimeTo12Hour = (time24) => {
     onChange={(e) => setIncidentTaskForm({...incidentTaskForm, description: e.target.value})}
     placeholder="Add any additional instructions..."
   />
-  <small className="text-muted">Default: {selectedTask?.description}</small>
 </div>
         </div>
         <div className="modal-footer">

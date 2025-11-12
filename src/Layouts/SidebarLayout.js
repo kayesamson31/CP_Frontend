@@ -47,6 +47,8 @@ export default function SidebarLayout({ children }) {
   const location = useLocation();
   const activeTab = location.pathname;
   const [notificationCount, setNotificationCount] = useState(0);
+  const [workOrderToReviewCount, setWorkOrderToReviewCount] = useState(0); 
+const [maintenanceToReviewCount, setMaintenanceToReviewCount] = useState(0); 
   const [role, setRole] = useState('standard');
   const [loading, setLoading] = useState(true);
   const menus = menuConfig[role] || menuConfig.standard;
@@ -104,31 +106,126 @@ export default function SidebarLayout({ children }) {
     getUserRoleFromSupabase();
   }, []);
 
+  // Fetch Work Order "To Review" count
+const fetchWorkOrderToReviewCount = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('user_id, role_id, organization_id')
+      .eq('email', user.email)
+      .single();
+
+    if (!userData) return;
+
+    // Get "To Review" status_id
+    const { data: statusData } = await supabase
+      .from('statuses')
+      .select('status_id')
+      .eq('status_name', 'To Review')
+      .eq('status_category', 'work_order')
+      .single();
+
+    if (!statusData) return;
+
+    // Count work orders with "To Review" status
+    const { count, error } = await supabase
+      .from('work_orders')
+      .select('*', { count: 'exact', head: true })
+      .eq('organization_id', userData.organization_id)
+      .eq('status_id', statusData.status_id);
+
+    if (error) throw error;
+
+    setWorkOrderToReviewCount(count || 0);
+    console.log('✅ Work Order To Review Count:', count);
+
+  } catch (error) {
+    console.error('Error fetching work order count:', error);
+    setWorkOrderToReviewCount(0);
+  }
+};
+
+// Fetch Maintenance Tasks "To Review" count
+const fetchMaintenanceToReviewCount = async () => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('user_id, organization_id')
+      .eq('email', user.email)
+      .single();
+
+    if (!userData) return;
+
+    // Count incidents with status_id = 4 (Reported) that DON'T have tasks yet
+    const { data: incidents, error: incidentError } = await supabase
+      .from('incident_reports')
+      .select('incident_id')
+      .eq('organization_id', userData.organization_id)
+      .eq('status_id', 4); // Reported status
+
+    if (incidentError) throw incidentError;
+
+    // Get incidents that already have tasks
+    const { data: existingTasks } = await supabase
+      .from('maintenance_tasks')
+      .select('incident_id')
+      .not('incident_id', 'is', null);
+
+    const assignedIncidentIds = new Set(existingTasks?.map(t => t.incident_id) || []);
+    
+    // Count unassigned incidents
+    const unassignedCount = incidents?.filter(inc => !assignedIncidentIds.has(inc.incident_id)).length || 0;
+
+    setMaintenanceToReviewCount(unassignedCount);
+    console.log('✅ Maintenance To Review Count:', unassignedCount);
+
+  } catch (error) {
+    console.error('Error fetching maintenance count:', error);
+    setMaintenanceToReviewCount(0);
+  }
+};
 useEffect(() => {
   // Skip if role is still loading
   if (loading || !role) return;
 
+  let channel = null;
+  let userData = null; // ✅ Store user data for subscription filters
+  
   const fetchNotificationCount = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: userData } = await supabase
+      // ✅ Store userData for use in subscription
+      const { data: fetchedUserData } = await supabase
         .from('users')
         .select('user_id, role_id, organization_id')
         .eq('email', user.email)
         .single();
 
-      if (!userData) return;
+      if (!fetchedUserData) return;
+      userData = fetchedUserData; // ✅ Save for later use
 
       const { data: notifications, error } = await supabase
         .from('notifications')
-        .select('notification_id')
-        .eq('organization_id', userData.organization_id)
-        .or(`target_roles.eq.${userData.role_id},target_user_id.eq.${userData.user_id}`)
+        .select('notification_id, target_roles, target_user_id')
+        .eq('organization_id', userData.organization_id) // ✅ Already filtered
         .eq('is_active', true);
 
       if (error) throw error;
+
+      // Filter for this user's role
+      const filteredNotifs = notifications.filter(n => {
+        const targetRoles = n.target_roles?.split(',').map(r => r.trim()) || [];
+        return targetRoles.includes(userData.role_id.toString()) || 
+               n.target_user_id === userData.user_id;
+      });
 
       const { data: readNotifs } = await supabase
         .from('notification_user_reads')
@@ -136,7 +233,7 @@ useEffect(() => {
         .eq('user_id', userData.user_id);
 
       const readIds = (readNotifs || []).map(r => r.notification_id);
-      const unreadCount = notifications.filter(n => !readIds.includes(n.notification_id)).length;
+      const unreadCount = filteredNotifs.filter(n => !readIds.includes(n.notification_id)).length;
 
       setNotificationCount(unreadCount);
       setNotificationsFetched(true);
@@ -147,44 +244,106 @@ useEffect(() => {
     }
   };
   
-  // Initial fetch
+  // ✅ Initial fetch
   fetchNotificationCount();
+  fetchWorkOrderToReviewCount(); 
+fetchMaintenanceToReviewCount();
+
+  // ✅ Reduced polling to 10 seconds (from 30s) for faster fallback
+ // ✅ Reduced polling to 10 seconds (from 30s) for faster fallback
+const interval = setInterval(() => {
+  fetchNotificationCount();
+  fetchWorkOrderToReviewCount();  // ← ADD THIS
+  fetchMaintenanceToReviewCount();  // ← ADD THIS
+}, 10000);
   
-  // Poll every 30 seconds instead of 10 (reduces load)
-  const interval = setInterval(fetchNotificationCount, 30000);
+  // ✅ Real-time subscription with ORG FILTER
+  const setupSubscription = async () => {
+    // Wait for userData to be available
+    while (!userData) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    console.log('📡 Setting up sidebar subscription for org:', userData.organization_id);
+    
+    channel = supabase
+      .channel('sidebar-notifications-' + userData.user_id)
+      .on(
+  'postgres_changes',
+  {
+    event: '*',
+    schema: 'public',
+    table: 'notifications',
+    filter: `organization_id=eq.${userData.organization_id}`
+  },
+  (payload) => {
+    console.log('🔔 Sidebar: Notification changed for my org');
+    fetchNotificationCount();
+  }
+)
+.on(
+  'postgres_changes',
+  {
+    event: '*',
+    schema: 'public',
+    table: 'work_orders',
+    filter: `organization_id=eq.${userData.organization_id}`
+  },
+  (payload) => {
+    console.log('📋 Sidebar: Work order changed');
+    fetchWorkOrderToReviewCount();
+  }
+)
+.on(
+  'postgres_changes',
+  {
+    event: '*',
+    schema: 'public',
+    table: 'incident_reports',
+    filter: `organization_id=eq.${userData.organization_id}`
+  },
+  (payload) => {
+    console.log('🔧 Sidebar: Incident report changed');
+    fetchMaintenanceToReviewCount();
+  }
+)
+.on(
+  'postgres_changes',
+  {
+    event: '*',
+    schema: 'public',
+    table: 'maintenance_tasks'
+  },
+  (payload) => {
+    console.log('🔧 Sidebar: Maintenance task changed');
+    fetchMaintenanceToReviewCount();
+  }
+)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'notification_user_reads',
+          filter: `user_id=eq.${userData.user_id}` // ✅ CRITICAL FIX
+        },
+        (payload) => {
+          console.log('📖 Sidebar: Read status changed');
+          fetchNotificationCount();
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 Sidebar subscription status:', status);
+      });
+  };
   
-  // Real-time subscription for instant updates
-  const channel = supabase
-    .channel('sidebar-notifications-' + role)
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notifications'
-      },
-      () => {
-        fetchNotificationCount();
-      }
-    )
-    .on(
-      'postgres_changes',
-      {
-        event: '*',
-        schema: 'public',
-        table: 'notification_user_reads'
-      },
-      () => {
-        fetchNotificationCount();
-      }
-    )
-    .subscribe();
+  setupSubscription();
   
   return () => {
     clearInterval(interval);
-    supabase.removeChannel(channel);
+    if (channel) supabase.removeChannel(channel);
   };
-}, [role, loading]); // Only re-run when role or loading changes
+}, [role, loading]);
 
   const handleLogout = async () => {
     try {
@@ -301,6 +460,49 @@ useEffect(() => {
     )
   ) : null
 )}
+
+{/* Orange badge for Work Order "To Review" */}
+{tab.label === 'Work Order' && workOrderToReviewCount > 0 && (
+  <span
+    style={{
+      backgroundColor: '#FF8C00',  // Orange color
+      color: 'white',
+      borderRadius: '50%',
+      width: '20px',
+      height: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '12px',
+      fontWeight: 'bold',
+      marginLeft: 'auto'
+    }}
+  >
+    {workOrderToReviewCount > 99 ? '99+' : workOrderToReviewCount}
+  </span>
+)}
+
+{/* Orange badge for Maintenance Tasks "To Review" */}
+{tab.label === 'Maintenance Tasks' && maintenanceToReviewCount > 0 && (
+  <span
+    style={{
+      backgroundColor: '#FF8C00',  // Orange color
+      color: 'white',
+      borderRadius: '50%',
+      width: '20px',
+      height: '20px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '12px',
+      fontWeight: 'bold',
+      marginLeft: 'auto'
+    }}
+  >
+    {maintenanceToReviewCount > 99 ? '99+' : maintenanceToReviewCount}
+  </span>
+)}
+
               </Nav.Link>
             );
           })}

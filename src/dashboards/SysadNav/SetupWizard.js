@@ -244,7 +244,7 @@ if (validRows.length === 0) {
       const row = validRows[i];
       try {
         const assetData = {
-          asset_code: `${row["Asset Name"].trim()}_${Date.now()}_${i}`,
+          asset_code: row["Asset Name"].trim(),
           asset_category_id: categoryMap[row.Category.trim()],
           asset_status: (row.Status || 'operational').toLowerCase(),
           location: row.Location ? row.Location.trim() : 'Not specified',
@@ -752,7 +752,7 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
       <div className="text-center mb-4">
         <Users style={{ color: styles.accentColor }} className="mb-3" size={40} />
         <h2 className="h3 fw-bold mb-2" style={{ color: styles.primaryColor }}>Import Users</h2>
-        <p className="text-muted">Add your team members to the system</p>
+        <p className="text-muted">Add users to the system</p>
       </div>
 
       <div 
@@ -767,10 +767,15 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
           <div>
             <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Available User Roles:</h6>
             <ul className="mb-0 small text-muted">
-              <li><strong>Standard user</strong> - Basic access to assigned assets</li>
-              <li><strong>Personnel</strong> - Can manage assets and view reports</li>
-              <li><strong>Facility manager</strong> - Full management capabilities</li>
-              <li><strong>System admin</strong> - Complete system control</li>
+              <li><strong>Standard user</strong> - Basic access to the system, can request work order and track their request.</li>
+              <li><strong>Personnel</strong> - Can submit incident reports, view assets and update status of assigned tasks. </li>
+              <li><strong>Facility manager</strong> - Full day to day management operation capabilities.</li>
+              <li><strong>System admin</strong> - Set up system.</li>
+            
+            </ul>
+             <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Note:</h6>
+              <ul className="mb-0 small text-muted">
+              <li><strong>Please download the template below for smooth upload of users to the system to avoid delays and errors.</strong></li>
             </ul>
           </div>
         </div>
@@ -985,6 +990,14 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
                 <ul className="mb-0 small text-muted">
                   <li><strong>Operational</strong> - Asset is active and in use</li>
                   <li><strong>Retired</strong> - Asset is no longer in active use</li>
+                </ul>
+                 <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Asset Categories:</h6>
+                <ul className="mb-0 small text-muted">
+                  <li>Electrical, Plumbing, HVAC, Office Equipment, General, HVAC Equipment, Safety Equipment, Groundskeeping tools, Electrical Equipment, Plumbing Fixtures, Carpentry, Structural Assets, Miscellaneous, Computer, General Facilities </li>
+                </ul>
+                 <h6 className="fw-semibold mb-2" style={{ color: styles.primaryColor }}>Note:</h6>
+                <ul className="mb-0 small text-muted">
+                  <li>Please download the template below for smooth upload of assets to the system to avoid delays and errors.</li>
                 </ul>
               </div>
             </div>
@@ -1242,20 +1255,28 @@ Printer HP LaserJet,Office Equipment,Operational,Reception`
             </button>
             
             <div className="d-flex gap-3">
-              {(currentStep === 2 || currentStep === 3) && (
-                <button
-                  onClick={() => handleSkip(currentStep === 2 ? 'users' : 'assets')}
-                  className="btn px-4 py-2"
-                  style={{
-                    borderColor: styles.lightColor,
-                    color: styles.primaryColor,
-                    backgroundColor: 'transparent',
-                    borderRadius: '8px'
-                  }}
-                >
-                  Skip & Continue
-                </button>
-              )}
+             {(currentStep === 2 || currentStep === 3) && (
+  <button
+    onClick={() => handleSkip(currentStep === 2 ? 'users' : 'assets')}
+    disabled={currentStep === 2 && (!orgData.password || !orgData.confirmPassword || orgData.password !== orgData.confirmPassword)}
+    className="btn px-4 py-2"
+    style={{
+      borderColor: styles.lightColor,
+      color: (currentStep === 2 && (!orgData.password || !orgData.confirmPassword || orgData.password !== orgData.confirmPassword)) 
+        ? '#999' 
+        : styles.primaryColor,
+      backgroundColor: (currentStep === 2 && (!orgData.password || !orgData.confirmPassword || orgData.password !== orgData.confirmPassword))
+        ? '#f0f0f0'
+        : 'transparent',
+      borderRadius: '8px',
+      cursor: (currentStep === 2 && (!orgData.password || !orgData.confirmPassword || orgData.password !== orgData.confirmPassword))
+        ? 'not-allowed'
+        : 'pointer'
+    }}
+  >
+    Skip & Continue
+  </button>
+)}
               
               {currentStep < totalSteps ? (
                 <button
@@ -1326,7 +1347,8 @@ const { data: userInsertResult, error: userInsertError } = await supabase
     user_status: "active",
     password_hash: PasswordUtils.hashPassword(orgData.password),
     auth_uid: user.id,
-    organization_id: orgResult.organization_id
+    organization_id: orgResult.organization_id,
+    first_login: false  
   }])
   .select();  // ✅ Add this to get the inserted data
 

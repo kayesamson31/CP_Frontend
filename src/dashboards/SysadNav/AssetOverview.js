@@ -278,104 +278,41 @@ console.log('CSV row structure:', csvRows[0]); // Current assets in state
         }
 
        // Get unique categories from CSV (use uniqueRows instead of csvRows)
-        const uniqueCategories = [...new Set(uniqueRows.map(row => row.Category.trim()))];
-        console.log('Categories to process:', uniqueCategories);
-
-        // Create/get asset categories first
-        const categoryMap = {};
-        
-        for (const categoryName of uniqueCategories) {
-          try {
-            // Try to get existing category first
-            const { data: existingCategory } = await supabase
-              .from('asset_categories')
-              .select('category_id, category_name')
-              .eq('category_name', categoryName)
-              .single();
-
-            if (existingCategory) {
-              categoryMap[categoryName] = existingCategory.category_id;
-            } else {
-              // Create new category
-              const { data: newCategory, error: categoryError } = await supabase
-                .from('asset_categories')
-                .insert([{ category_name: categoryName }])
-                .select('category_id, category_name')
-                .single();
-
-              if (categoryError) {
-                console.error(`Failed to create category ${categoryName}:`, categoryError);
-                throw new Error(`Failed to create category: ${categoryName}`);
-              }
-
-              categoryMap[categoryName] = newCategory.category_id;
-            }
-          } catch (categoryError) {
-            console.error(`Error processing category ${categoryName}:`, categoryError);
-            throw new Error(`Error processing category: ${categoryName}`);
-          }
-        }
-
-        console.log('Category mapping:', categoryMap);
+     
 
        // Prepare assets for insertion (use uniqueRows instead of csvRows)
-        const assetsToInsert = uniqueRows.map((row, index) => ({
-          asset_code: `${row['Asset Name'].trim().replace(/\s+/g, '_')}_${Date.now()}_${index}`,
-          asset_category_id: categoryMap[row.Category.trim()],
-          asset_status: (row.Status || 'operational').toLowerCase(),
-          location: row.Location ? row.Location.trim() : 'Not specified',
-          organization_id: orgId
-        }));
-
-        console.log('Assets to insert:', assetsToInsert);
-
-      // Insert assets one by one to handle individual failures
+// Insert assets one by one using assetService (similar to AssetManagement.js)
 const insertedAssets = [];
 const failedAssets = [];
 
-for (const assetData of assetsToInsert) {
+for (const row of uniqueRows) {
   try {
-    // ✅ EXTRA CHECK: Verify this asset doesn't exist before inserting
-    const assetNameFromCode = assetData.asset_code.split('_').slice(0, -2).join('_'); // Remove timestamp and index
-    const { data: existingCheck } = await supabase
-      .from('assets')
-      .select('asset_id')
-      .eq('organization_id', orgId)
-      .ilike('asset_code', `%${assetNameFromCode}%`)
-      .eq('location', assetData.location)
-      .limit(1);
+    // Prepare asset data (similar to AssetManagement.js)
+    const assetData = {
+      name: row['Asset Name'].trim(),
+      category: row.Category.trim(),
+      location: row.Location ? row.Location.trim() : 'Not specified',
+      status: row.Status ? row.Status.trim() : 'Operational'
+    };
     
-    if (existingCheck && existingCheck.length > 0) {
-      console.log(`⚠️ Skipping duplicate: ${assetData.asset_code}`);
-      failedAssets.push({ 
-        asset_code: assetData.asset_code, 
-        error: 'Duplicate asset (already exists in database)' 
-      });
-      continue; // Skip this asset
-    }
+    // Use assetService to add asset (this handles asset_code generation properly)
+    const insertedAsset = await assetService.addAsset(assetData);
+    insertedAssets.push(insertedAsset);
+    console.log(`✅ Successfully inserted: ${assetData.name}`);
     
-    // Proceed with insert if no duplicate found
-    const { data, error } = await supabase
-      .from('assets')
-      .insert([assetData])
-      .select()
-      .single();
-
-    if (error) {
-      console.error(`Failed to insert asset ${assetData.asset_code}:`, error);
-      failedAssets.push({ asset_code: assetData.asset_code, error: error.message });
-    } else {
-      insertedAssets.push(data);
-      console.log(`✅ Successfully inserted: ${assetData.asset_code}`);
-    }
   } catch (insertError) {
-    console.error(`Error inserting asset ${assetData.asset_code}:`, insertError);
-    failedAssets.push({ asset_code: assetData.asset_code, error: insertError.message });
+    console.error(`Error inserting asset ${row['Asset Name']}:`, insertError);
+    failedAssets.push({ 
+      asset_code: row['Asset Name'], 
+      error: insertError.message 
+    });
   }
 }
 
-        const successCount = insertedAssets.length;
+const successCount = insertedAssets.length;
 const failCount = failedAssets.length;
+
+
         // Refresh assets list
         await fetchAssets();
 

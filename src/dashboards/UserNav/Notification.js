@@ -130,7 +130,7 @@ const fetchNotifications = async () => {
     const roleId = getRoleId(role);
     const organizationId = await getCurrentUserOrganization(); // Ã¢Å“â€¦ ADD THIS
 
-    console.log('Ã°Å¸â€Â Fetching notifications for Org:', organizationId); // Ã¢Å“â€¦ Debug
+    console.log('Fetching notifications for Org:', organizationId); // Ã¢Å“â€¦ Debug
 
     // Fetch notifications for this role AND organization
 const { data: notificationsData, error } = await supabase

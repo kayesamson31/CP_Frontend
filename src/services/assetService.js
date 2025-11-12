@@ -767,11 +767,12 @@ async createIncidentReport(incidentData) {
       'Other': 1
     };
 
-    const severityMap = {
-      'Low': 1,
-      'Medium': 2,
-      'High': 3
-    };
+   // Map personnel's priority input (Low/Medium/High) to database severity_id
+const priorityToSeverityMap = {
+  'Low': 1,      // Minor
+  'Medium': 2,   // Major
+  'High': 3      // Critical
+};
 
   // Get organization_id from asset
 const { data: assetOrg } = await supabase
@@ -784,7 +785,7 @@ const insertData = {
   asset_id: assetData.asset_id,
   incident_type_id: incidentTypeMap[incidentData.type] || 1,
   description: incidentData.description,
-  severity_id: severityMap[incidentData.severity] || 2,
+  severity_id: priorityToSeverityMap[incidentData.severity] || 2,
   reported_by: currentUser.user_id,
   status_id: 4,
   date_reported: new Date().toISOString(),

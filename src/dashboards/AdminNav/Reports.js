@@ -248,12 +248,17 @@ getDashboardSummary: async (period = 'monthly') => {
       .eq('organization_id', organizationId)
       .gte('date_reported', startDate.toISOString());
 
-    // Fetch maintenance
-    const { data: maintenance } = await supabase
-      .from('maintenance_schedules')
-      .select('status, scheduled_date')
-      .eq('organization_id', organizationId)
-      .gte('scheduled_date', startDate.toISOString().split('T')[0]);
+   // Fetch maintenance schedules
+const { data: maintenanceSchedules } = await supabase
+  .from('maintenance_schedules')
+  .select('status, scheduled_date, created_at')
+  .eq('organization_id', organizationId);
+
+// Fetch maintenance tasks  
+const { data: maintenanceTasks } = await supabase
+  .from('maintenance_tasks')
+  .select('status_id, due_date, date_created, date_completed, statuses(status_name)')
+  .eq('organization_id', organizationId);
 
     // Fetch assets (all, not filtered by date)
     const { data: assets } = await supabase
@@ -284,16 +289,66 @@ getDashboardSummary: async (period = 'monthly') => {
         resolved: incidents?.filter(i => i.statuses?.status_name?.toLowerCase() === 'resolved').length || 0,
         submitted: incidents?.filter(i => i.statuses?.status_name?.toLowerCase() === 'reported').length || 0
       },
-      maintenance: {
-        total: maintenance?.length || 0,
-        completed: maintenance?.filter(m => m.status?.toLowerCase() === 'completed').length || 0,
-        overdue: maintenance?.filter(m => {
-          if (!m.scheduled_date) return false;
-          const scheduledDate = new Date(m.scheduled_date);
-          const isOverdue = scheduledDate < now && m.status?.toLowerCase() !== 'completed';
-          return isOverdue;
-        }).length || 0
-      },
+    maintenance: {
+  total: (() => {
+    // Filter by date range for the selected period
+    const schedulesInPeriod = maintenanceSchedules?.filter(s => {
+      const createdDate = new Date(s.created_at || s.scheduled_date);
+      return createdDate >= startDate;
+    }).length || 0;
+    
+    const tasksInPeriod = maintenanceTasks?.filter(t => {
+      const createdDate = new Date(t.date_created);
+      return createdDate >= startDate;
+    }).length || 0;
+    
+    return schedulesInPeriod + tasksInPeriod;
+  })(),
+  
+  completed: (() => {
+    // Schedules: status = 'completed'
+    const completedSchedules = maintenanceSchedules?.filter(s => {
+      const createdDate = new Date(s.created_at || s.scheduled_date);
+      return createdDate >= startDate && s.status === 'completed';
+    }).length || 0;
+    
+    // Tasks: status_name = 'Completed' (from statuses table)
+    const completedTasks = maintenanceTasks?.filter(t => {
+      const createdDate = new Date(t.date_created);
+      return createdDate >= startDate && 
+             t.statuses?.status_name?.toLowerCase() === 'completed';
+    }).length || 0;
+    
+    return completedSchedules + completedTasks;
+  })(),
+  
+  overdue: (() => {
+    // Schedules: past scheduled_date and not completed/cancelled
+    const overdueSchedules = maintenanceSchedules?.filter(s => {
+      if (!s.scheduled_date) return false;
+      const scheduledDate = new Date(s.scheduled_date);
+      const createdDate = new Date(s.created_at || s.scheduled_date);
+      return createdDate >= startDate &&
+             scheduledDate < now && 
+             s.status !== 'completed' && 
+             s.status !== 'cancelled';
+    }).length || 0;
+    
+    // Tasks: past due_date and not completed/cancelled
+    const overdueTasks = maintenanceTasks?.filter(t => {
+      if (!t.due_date) return false;
+      const dueDate = new Date(t.due_date);
+      const createdDate = new Date(t.date_created);
+      const statusName = t.statuses?.status_name?.toLowerCase();
+      return createdDate >= startDate &&
+             dueDate < now && 
+             statusName !== 'completed' && 
+             statusName !== 'cancelled';
+    }).length || 0;
+    
+    return overdueSchedules + overdueTasks;
+  })()
+},
       assets: {
         total: assets?.length || 0,
         operational: assets?.filter(a => a.asset_status === 'active').length || 0,

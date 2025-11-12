@@ -19,7 +19,19 @@ export const AdminDashboardProvider = ({ children }) => {
   const fetchAllData = async () => {
     try {
       setLoading(true);
-      
+        // 🧪 TEMPORARY TEST - Remove after confirming realtime works
+    console.log('🧪 Testing Realtime Connection...');
+    const testChannel = supabase
+      .channel('test-connection')
+      .subscribe((status) => {
+        console.log('🧪 Realtime Status:', status);
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ Realtime is WORKING!');
+        } else if (status === 'CLOSED') {
+          console.log('❌ Realtime FAILED - Check Supabase Replication settings');
+        }
+      });
+    // 🧪 END TEST
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
@@ -377,7 +389,7 @@ const personnelWithStatus = await Promise.all(
 
   // Add this NEW useEffect for realtime subscription
 useEffect(() => {
-  if (!organizationId) return; // Wait for organizationId to be set
+  if (!organizationId) return; // ✅ Keep this check
 
   console.log('🔌 Setting up realtime subscription for org:', organizationId);
 
@@ -392,7 +404,7 @@ useEffect(() => {
       },
       (payload) => {
         console.log('🔔 Maintenance task changed:', payload);
-        refreshData();
+        refreshData(); // ✅ This is good
       }
     )
     .on('postgres_changes',
@@ -407,14 +419,15 @@ useEffect(() => {
         refreshData();
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log('📡 Subscription status:', status); // ✅ ADD THIS for debugging
+    });
 
-  // Cleanup subscription when component unmounts or organizationId changes
   return () => {
     console.log('🔌 Cleaning up realtime subscription');
     supabase.removeChannel(subscription);
   };
-}, [organizationId]); // Run when organizationId changes
+}, [organizationId]); // ✅ Keep dependency// Run when organizationId changes
 
   const refreshData = () => {
     return fetchAllData();
