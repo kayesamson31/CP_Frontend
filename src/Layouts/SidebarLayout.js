@@ -38,7 +38,7 @@ const menuConfig = {
     { label: 'User Management', path: '/dashboard-sysadmin/SysadUserManagement', icon: 'bi bi-people' },
     { label: 'Asset Overview', path: '/dashboard-sysadmin/AssetOverview', icon: 'bi-clipboard-data' },
     { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: 'bi bi-clock-history' },
-    { label: 'Report Tabs', path: '/dashboard-sysadmin/SysadReports', icon: 'bi bi-file-earmark-text' }
+    { label: 'Reports', path: '/dashboard-sysadmin/SysadReports', icon: 'bi bi-file-earmark-text' }
   ]
 };
 

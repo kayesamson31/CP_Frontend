@@ -223,10 +223,17 @@ const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
               onClick={() => setSelectedActivity(act)}
             >
               <td>
-                <small className="text-muted">
-                  {new Date(act.timestamp).toLocaleString()}
-                </small>
-              </td>
+  <small className="text-muted">
+    {new Date(new Date(act.timestamp).getTime() + (8 * 60 * 60 * 1000)).toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    })}
+  </small>
+</td>
               <td className="fw-semibold">{act.user}</td>
               <td>{act.role}</td>
               <td className="text-muted">{act.email}</td> 
@@ -316,9 +323,18 @@ const totalPages = Math.ceil(filteredActivities.length / itemsPerPage);
                       <div className="col-sm-4">
                         <strong className="text-primary">Timestamp:</strong>
                       </div>
-                      <div className="col-sm-8">
-                        {selectedActivity.timestamp ? new Date(selectedActivity.timestamp).toLocaleString() : 'N/A'}
-                      </div>
+                     <div className="col-sm-8">
+  {selectedActivity.timestamp 
+    ? new Date(new Date(selectedActivity.timestamp).getTime() + (8 * 60 * 60 * 1000)).toLocaleString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      })
+    : 'N/A'}
+</div>
 
                       <div className="col-sm-4">
                         <strong className="text-primary"> User:</strong>

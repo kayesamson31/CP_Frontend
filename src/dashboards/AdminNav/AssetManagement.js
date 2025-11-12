@@ -68,7 +68,6 @@ const [newAsset, setNewAsset] = useState({
   location: '',
   status: 'Operational',
   acquisitionDate: '',
-  nextMaintenance: '',
 });
 const [csvFile, setCsvFile] = useState(null);
 const [csvPreview, setCsvPreview] = useState([]);
@@ -245,7 +244,6 @@ const handleAddAsset = async () => {
         location: '',
         status: 'Operational',
         acquisitionDate: '',
-        nextMaintenance: '',
       });
       
      alert('Asset added successfully!');
@@ -356,12 +354,12 @@ const newAssets = [];
           return; // Stop upload
         }
         
-        const asset = {
-          name: values[headers.indexOf('name')] || values[0],
-          category: matchedCategory ? matchedCategory.category_name : 'HVAC Equipment',
-          location: values[headers.indexOf('location')] || values[2],
-          status: values[headers.indexOf('status')] || values[3] || 'Operational',
-        };
+       const asset = {
+        name: values[headers.indexOf('name')] || values[headers.indexOf('Asset Name')] || values[0],
+        category: matchedCategory ? matchedCategory.category_name : 'HVAC Equipment',
+        location: values[headers.indexOf('location')] || values[headers.indexOf('Location')] || '',
+        status: values[headers.indexOf('status')] || values[headers.indexOf('Status')] || 'Operational',
+      };
         
         //  CHECK FOR DUPLICATES (name + location)
         const isDuplicate = existingAssets.some(existing => 
@@ -905,16 +903,7 @@ const Pagination = () => {
           />
         </Form.Group>
       </Col>
-      <Col md={6}>
-        <Form.Group>
-          <Form.Label>Next Maintenance Date</Form.Label>
-          <Form.Control
-            type="date"
-            value={newAsset.nextMaintenance}
-            onChange={(e) => setNewAsset({...newAsset, nextMaintenance: e.target.value})}
-          />
-        </Form.Group>
-      </Col>
+  
      
     </Row>
   </Modal.Body>
