@@ -1,7 +1,7 @@
 // Fixed SidebarLayout.js - Using Supabase instead of localStorage
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import {Button, Nav } from 'react-bootstrap';
+import {Button, Nav, Modal } from 'react-bootstrap';
 import dashboardlogo from '../assets/OpenFMSLogo.png';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import { supabase } from '../supabaseClient';
@@ -29,7 +29,7 @@ const menuConfig = {
     { label: 'Asset Management', path: '/dashboard-admin/AssetManagement', icon: 'bi bi-box-seam' },
     { label: 'User Management', path: '/dashboard-admin/UserManagement', icon: 'bi bi-people' },
     { label: 'Activity Tracking', path: '/dashboard-admin/ActivityTracking', icon: 'bi bi-clock-history' },
-    { label: 'Reports', path: '/dashboard-admin/reports', icon: 'bi bi-file-earmark-text' }
+    { label: 'Reports and Analytics', path: '/dashboard-admin/reports', icon: 'bi bi-file-earmark-text' }
   ],
   sysadmin: [
     { label: 'Dashboard', path: '/dashboard-sysadmin', icon: 'bi bi-speedometer2' },
@@ -39,6 +39,11 @@ const menuConfig = {
     { label: 'Asset Overview', path: '/dashboard-sysadmin/AssetOverview', icon: 'bi-clipboard-data' },
     { label: 'Audit Logs', path: '/dashboard-sysadmin/SysadAuditLogs', icon: 'bi bi-clock-history' },
     { label: 'Reports', path: '/dashboard-sysadmin/SysadReports', icon: 'bi bi-file-earmark-text' }
+  ],
+  superadmin: [
+    { label: 'Organizations', path: '/dashboard-superadmin/organizations', icon: 'bi bi-building' },
+    { label: 'System Overview', path: '/dashboard-superadmin/system-overview', icon: 'bi bi-bar-chart' },
+    { label: 'Profile', path: '/dashboard-superadmin/profile', icon: 'bi bi-person' }
   ]
 };
 
@@ -53,6 +58,7 @@ const [maintenanceToReviewCount, setMaintenanceToReviewCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const menus = menuConfig[role] || menuConfig.standard;
   const [notificationsFetched, setNotificationsFetched] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
   useEffect(() => {
     const getUserRoleFromSupabase = async () => {
       try {
@@ -85,6 +91,7 @@ const [maintenanceToReviewCount, setMaintenanceToReviewCount] = useState(0);
         // Convert role_id to role string
         let userRole = 'standard';
         switch (userData.role_id) {
+          case 0: userRole = 'superadmin'; break;
           case 1: userRole = 'sysadmin'; break;
           case 2: userRole = 'admin'; break;
           case 3: userRole = 'personnel'; break;
@@ -345,10 +352,11 @@ const interval = setInterval(() => {
   };
 }, [role, loading]);
 
-  const handleLogout = async () => {
-    try {
-
-      const currentUser = JSON.parse(localStorage.getItem('currentUser'));
+const handleLogout = async () => {
+  setShowLogoutModal(false); // Close modal
+  
+  try {
+    const currentUser = JSON.parse(localStorage.getItem('currentUser'));
     if (currentUser) {
       await AuditLogger.logWithIP({
         userId: currentUser.id,
@@ -357,20 +365,20 @@ const interval = setInterval(() => {
         recordId: currentUser.id
       });
     }
-      // Sign out from Supabase Auth
-      await supabase.auth.signOut();
-      
-      // Clear any remaining localStorage (if any)
-      localStorage.clear();
-      
-      // Redirect to login
-      navigate('/login');
-    } catch (error) {
-      console.error('Logout error:', error);
-      // Still redirect even if logout fails
-      navigate('/login');
-    }
-  };
+    // Sign out from Supabase Auth
+    await supabase.auth.signOut();
+    
+    // Clear any remaining localStorage (if any)
+    localStorage.clear();
+    
+    // Redirect to login
+    navigate('/login');
+  } catch (error) {
+    console.error('Logout error:', error);
+    // Still redirect even if logout fails
+    navigate('/login');
+  }
+};
 
   const renderIcon = (tab, isActive) => {
     return (
@@ -509,24 +517,69 @@ const interval = setInterval(() => {
         </Nav>
 
         <div className="mt-auto">
-          <Button
-            className="w-100"
-            style={{
-              backgroundColor: '#FFF',
-              color: '#FF0000',
-              border: '1.5px solid #FF0000',
-              borderRadius: '8px',
-              fontWeight: '500',
-              fontSize: '14px',
-              padding: '2px 6px',
-            }}
-            onClick={handleLogout}
-          >
-            Log out
-          </Button>
-        </div>
+  <Button
+    className="w-100"
+    style={{
+      backgroundColor: '#FFF',
+      color: '#FF0000',
+      border: '1.5px solid #FF0000',
+      borderRadius: '8px',
+      fontWeight: '500',
+      fontSize: '14px',
+      padding: '2px 6px',
+    }}
+    onClick={() => setShowLogoutModal(true)}
+  >
+    Log out
+  </Button>
+</div>
       </div>
-
+ {/* Logout Confirmation Modal */}
+      <Modal 
+        show={showLogoutModal} 
+        onHide={() => setShowLogoutModal(false)}
+        centered
+      >
+        <Modal.Header closeButton style={{ borderBottom: '2px solid #f0f0f0' }}>
+          <Modal.Title style={{ fontWeight: '600', color: '#284C9A' }}>
+            <i className="bi bi-box-arrow-right me-2"></i>
+            Confirm Logout
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body style={{ padding: '20px' }}>
+          <p style={{ fontSize: '16px', marginBottom: '10px' }}>
+            Are you sure you want to log out?
+          </p>
+          <p style={{ fontSize: '14px', color: '#6c757d', marginBottom: '0' }}>
+            You will need to log in again to access your account.
+          </p>
+        </Modal.Body>
+        <Modal.Footer style={{ borderTop: '2px solid #f0f0f0' }}>
+          <Button 
+            variant="secondary" 
+            onClick={() => setShowLogoutModal(false)}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '6px'
+            }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            variant="danger" 
+            onClick={handleLogout}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '6px',
+              backgroundColor: '#dc3545',
+              border: 'none'
+            }}
+          >
+            <i className="bi bi-box-arrow-right me-2"></i>
+            Logout
+          </Button>
+        </Modal.Footer>
+      </Modal>
       {/* Main Content */}
       <div style={{ 
         flex: 1,

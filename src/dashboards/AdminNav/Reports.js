@@ -211,42 +211,66 @@ const apiService = {
     }
   },
 
-getDashboardSummary: async (period = 'monthly') => {
+getDashboardSummary: async (period = 'monthly', customDateRange = null) => {
   try {
     const organizationId = await getCurrentUserOrganization();
     
-    // Calculate date range based on period
+    // Calculate date range based on period or custom range
     const now = new Date();
     let startDate = new Date();
     
-    switch(period) {
-      case 'today':
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'weekly':
-        startDate.setDate(now.getDate() - 7);
-        break;
-      case 'monthly':
-        startDate.setMonth(now.getMonth() - 1);
-        break;
-      case 'yearly':
-        startDate.setFullYear(now.getFullYear() - 1);
-        break;
+    if (customDateRange && customDateRange.startDate && customDateRange.endDate) {
+      // Use custom date range
+      startDate = new Date(customDateRange.startDate);
+      startDate.setHours(0, 0, 0, 0);
+    } else {
+      // Use period-based range
+      switch(period) {
+        case 'today':
+          startDate.setHours(0, 0, 0, 0);
+          break;
+        case 'weekly':
+          startDate.setDate(now.getDate() - 7);
+          break;
+        case 'monthly':
+          startDate.setMonth(now.getMonth() - 1);
+          break;
+        case 'yearly':
+          startDate.setFullYear(now.getFullYear() - 1);
+          break;
+      }
     }
-
     // Fetch work orders
-    const { data: workOrders } = await supabase
+  // Fetch work orders
+    let workOrdersQuery = supabase
       .from('work_orders')
       .select('status_id, due_date, statuses(status_name)')
       .eq('organization_id', organizationId)
       .gte('date_requested', startDate.toISOString());
-
+    
+    // Add end date filter if custom range
+    if (customDateRange && customDateRange.endDate) {
+      const endDate = new Date(customDateRange.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      workOrdersQuery = workOrdersQuery.lte('date_requested', endDate.toISOString());
+    }
+    
+    const { data: workOrders } = await workOrdersQuery;
     // Fetch incidents
-    const { data: incidents } = await supabase
+   // Fetch incidents
+    let incidentsQuery = supabase
       .from('incident_reports')
       .select('status_id, statuses(status_name)')
       .eq('organization_id', organizationId)
       .gte('date_reported', startDate.toISOString());
+    
+    if (customDateRange && customDateRange.endDate) {
+      const endDate = new Date(customDateRange.endDate);
+      endDate.setHours(23, 59, 59, 999);
+      incidentsQuery = incidentsQuery.lte('date_reported', endDate.toISOString());
+    }
+    
+    const { data: incidents } = await incidentsQuery;
 
    // Fetch maintenance schedules
 const { data: maintenanceSchedules } = await supabase
@@ -376,7 +400,7 @@ const { data: maintenanceTasks } = await supabase
 // Add this inside apiService object, after getDashboardSummary
 
 // Get analytics data for charts
-getAnalyticsData: async (period = 'monthly') => {
+getAnalyticsData: async (period = 'monthly', customDateRange = null) => {
   try {
     const organizationId = await getCurrentUserOrganization();
     
@@ -451,7 +475,7 @@ getAnalyticsData: async (period = 'monthly') => {
 },
 
 // Calculate performance metrics
-getPerformanceMetrics: async (period = 'monthly') => {
+getPerformanceMetrics: async (period = 'monthly', customDateRange = null) => {
   try {
     const organizationId = await getCurrentUserOrganization();
     
@@ -685,6 +709,11 @@ const processProblematicAssets = (incidents, assets) => {
 
 export default function Reports() {
   // State management
+  const [dateRange, setDateRange] = useState({
+  startDate: null,
+  endDate: null
+});
+const [useDateRange, setUseDateRange] = useState(false);
   const [period, setPeriod] = useState('monthly');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -709,6 +738,8 @@ const fetchAllData = async (showLoading = true) => {
   setError(null);
   
   try {
+    const customRange = useDateRange ? dateRange : null;
+    
     const [
       workOrders,
       incidentReports, 
@@ -724,9 +755,9 @@ const fetchAllData = async (showLoading = true) => {
       apiService.getMaintenanceSchedules(),
       apiService.getAssets(),
       apiService.getUsers(),
-      apiService.getDashboardSummary(period),
-      apiService.getAnalyticsData(period),
-      apiService.getPerformanceMetrics(period)
+      apiService.getDashboardSummary(period, customRange),
+      apiService.getAnalyticsData(period, customRange),
+      apiService.getPerformanceMetrics(period, customRange)
     ]);
 
     setData({
@@ -754,9 +785,9 @@ const fetchAllData = async (showLoading = true) => {
   };
 
   // Effects
-  useEffect(() => {
+ useEffect(() => {
     fetchAllData();
-  }, [period]);
+  }, [period, useDateRange, dateRange]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
@@ -868,16 +899,67 @@ const chartData = useMemo(() => {
                 </small>
               </div>
             </div>
-<div className="d-flex gap-2 align-items-center">
-  <Form.Select 
-    value={period} 
-    onChange={(e) => setPeriod(e.target.value)}
-    style={{ width: '150px', fontSize: '0.875rem',height: '38px' }}
-    className="border-0 shadow-sm"
-    size="sm"
-  >
-    {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-  </Form.Select>
+<div className="d-flex gap-2 align-items-center flex-wrap">
+  {/* Toggle between Period and Date Range */}
+  <Form.Check 
+    type="switch"
+    id="date-range-toggle"
+    label="Custom Date Range"
+    checked={useDateRange}
+    onChange={(e) => {
+      setUseDateRange(e.target.checked);
+      if (!e.target.checked) {
+        setDateRange({ startDate: null, endDate: null });
+      }
+    }}
+    className="me-2"
+  />
+  
+  {!useDateRange ? (
+    <Form.Select 
+      value={period} 
+      onChange={(e) => setPeriod(e.target.value)}
+      style={{ width: '150px', fontSize: '0.875rem', height: '38px' }}
+      className="border-0 shadow-sm"
+      size="sm"
+    >
+      {PERIODS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+    </Form.Select>
+  ) : (
+    <>
+      <InputGroup size="sm" style={{ width: 'auto' }}>
+        <InputGroup.Text className="border-0 shadow-sm">From</InputGroup.Text>
+        <Form.Control
+          type="date"
+          value={dateRange.startDate || ''}
+          onChange={(e) => setDateRange({...dateRange, startDate: e.target.value})}
+          className="border-0 shadow-sm"
+          style={{ fontSize: '0.875rem' }}
+        />
+      </InputGroup>
+      
+      <InputGroup size="sm" style={{ width: 'auto' }}>
+        <InputGroup.Text className="border-0 shadow-sm">To</InputGroup.Text>
+        <Form.Control
+          type="date"
+          value={dateRange.endDate || ''}
+          onChange={(e) => setDateRange({...dateRange, endDate: e.target.value})}
+          className="border-0 shadow-sm"
+          style={{ fontSize: '0.875rem' }}
+        />
+      </InputGroup>
+      
+      {dateRange.startDate && dateRange.endDate && (
+        <Button 
+          variant="outline-danger" 
+          size="sm"
+          onClick={() => setDateRange({ startDate: null, endDate: null })}
+        >
+          <i className="fas fa-times"></i>
+        </Button>
+      )}
+    </>
+  )}
   
   {/* Export Buttons */}
   <Button 
@@ -885,13 +967,16 @@ const chartData = useMemo(() => {
     size="sm"
     className="px-3 py-2"
     style={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}
-    onClick={() => {
-      const headers = ['ID', 'Title', 'Category', 'Status', 'Created', 'Assigned', 'Requestee'];
-      const rows = [headers, ...data.workOrders.map(w => [
-        w.id, w.title, w.category, w.status, w.created_at, w.assigned, w.requestee
-      ])];
-      downloadCSV(`work_orders_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
-    }}
+   onClick={() => {
+  const dateInfo = useDateRange && dateRange.startDate && dateRange.endDate
+    ? `${dateRange.startDate}_to_${dateRange.endDate}`
+    : period;
+  const headers = ['ID', 'Title', 'Category', 'Status', 'Created', 'Assigned', 'Requestee'];
+  const rows = [headers, ...data.workOrders.map(w => [
+    w.id, w.title, w.category, w.status, w.created_at, w.assigned, w.requestee
+  ])];
+  downloadCSV(`work_orders_${dateInfo}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+}}
   >
     <i className="fas fa-file-csv me-1"></i>
     Work Orders
@@ -903,12 +988,15 @@ const chartData = useMemo(() => {
     className="px-3 py-2"
     style={{ fontSize: '0.875rem', whiteSpace: 'nowrap' }}
     onClick={() => {
-      const headers = ['ID', 'Title', 'Reporter', 'Status', 'Submitted'];
-      const rows = [headers, ...data.incidentReports.map(i => [
-        i.id, i.title, i.reporter, i.status, i.created_at
-      ])];
-      downloadCSV(`incidents_${period}_${new Date().toISOString().split('T')[0]}.csv`, rows);
-    }}
+  const dateInfo = useDateRange && dateRange.startDate && dateRange.endDate
+    ? `${dateRange.startDate}_to_${dateRange.endDate}`
+    : period;
+  const headers = ['ID', 'Title', 'Category', 'Status', 'Created', 'Assigned', 'Requestee'];
+  const rows = [headers, ...data.workOrders.map(w => [
+    w.id, w.title, w.category, w.status, w.created_at, w.assigned, w.requestee
+  ])];
+  downloadCSV(`work_orders_${dateInfo}_${new Date().toISOString().split('T')[0]}.csv`, rows);
+}}
   >
     <i className="fas fa-file-excel me-1"></i>
     Incidents

@@ -357,8 +357,8 @@ const Pagination = () => {
     onChange={(e) => handleFilterChange('role', e.target.value)}
   >
     <option value="all">All Roles</option>
-    <option value="System Admin">System Admin</option>  {/* ✅ FIXED - removed "istrator" */}
-    <option value="Admin Official">Admin Official</option>
+    <option value="System Admin">Organization Admin</option>  {/* ✅ FIXED - removed "istrator" */}
+    <option value="Admin Official">Facility Manager</option>
     <option value="Personnel">Personnel</option>
     <option value="Standard User">Standard User</option>
   </Form.Select>

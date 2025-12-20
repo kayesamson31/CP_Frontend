@@ -4,6 +4,8 @@
 // para sa ibaâ€™t ibang user roles (standard, personnel, admin, sysadmin).
 import { supabase } from './supabaseClient'; // ✅ ADD THIS
 import React, { useEffect } from 'react';
+import DashboardSuperAdmin from './dashboards/DashboardSuperAdmin';
+import Organizations from './dashboards/SuperAdminNav/Organizations';
 import { EmailService } from './utils/EmailService';
 import PrivateRoute from './PrivateRoute'; 
 import { SysAdminDashboardProvider } from './contexts/SysAdminDashboardContext';
@@ -135,6 +137,27 @@ const overdueCheckInterval = setInterval(() => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/setup-wizard" element={<SetupWizard />} />
+
+{/* ADD THIS - Unauthorized page */}
+<Route 
+  path="/unauthorized" 
+  element={
+    <div style={{
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'center',
+      alignItems: 'center',
+      height: '100vh',
+      textAlign: 'center'
+    }}>
+      <h1>⛔ Unauthorized Access</h1>
+      <p>You don't have permission to access this page.</p>
+      <a href="/login" style={{ marginTop: '20px', color: '#007bff' }}>
+        Go back to Login
+      </a>
+    </div>
+  } 
+/>
 
         {/* STANDARD USER ROUTES */}
         {/* Gumamit ako ng PrivateRoute para masigurado na
@@ -380,6 +403,50 @@ const overdueCheckInterval = setInterval(() => {
   element={
     <PrivateRoute allowedRoles={['sysadmin']}>
       <SetupWizard />
+    </PrivateRoute>
+  } 
+/>
+
+{/* SuperAdmin Routes */}
+<Route 
+  path="/dashboard-superadmin" 
+  element={
+    <PrivateRoute allowedRoles={['superadmin']}>
+      <SidebarLayout role="superadmin">
+        <DashboardSuperAdmin />
+      </SidebarLayout>
+    </PrivateRoute>
+  } 
+/>
+
+<Route 
+  path="/dashboard-superadmin/organizations" 
+  element={
+    <PrivateRoute allowedRoles={['superadmin']}>
+      <Organizations />
+    </PrivateRoute>
+  } 
+/>
+
+<Route 
+  path="/dashboard-superadmin/profile" 
+  element={
+    <PrivateRoute allowedRoles={['superadmin']}>
+      <Profile role="superadmin" />
+    </PrivateRoute>
+  } 
+/>
+
+<Route 
+  path="/dashboard-superadmin/system-overview" 
+  element={
+    <PrivateRoute allowedRoles={['superadmin']}>
+      <SidebarLayout role="superadmin">
+        <div className="p-4">
+          <h2>System Overview</h2>
+          <p>Coming soon - Advanced analytics and monitoring</p>
+        </div>
+      </SidebarLayout>
     </PrivateRoute>
   } 
 />

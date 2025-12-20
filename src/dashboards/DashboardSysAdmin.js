@@ -969,7 +969,7 @@ const displayActivities = recentActivities.length > 0 ? recentActivities.slice(0
       fontSize: '14px',
       fontWeight: '600'
     }}>
-      System Administrator
+      Organization Admin
     </span>
     <span style={{ color: '#6c757d', fontSize: '14px' }}>|</span>
     <span style={{ color: '#495057', fontSize: '14px', fontWeight: '500' }}>{organizationData.name}</span>

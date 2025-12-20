@@ -19,6 +19,14 @@ export default function UserManagement() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [showBulkUploadModal, setShowBulkUploadModal] = useState(false);
+  const [showTasksModal, setShowTasksModal] = useState(false);
+const [selectedPersonnel, setSelectedPersonnel] = useState(null);
+const [personnelTasks, setPersonnelTasks] = useState({
+  workOrders: [],
+  maintenanceTasks: [],
+  loading: false
+});
+  
   const [dragActive, setDragActive] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -134,6 +142,72 @@ const handleEmailProgressClose = () => {
   } finally {
     setLoading(false);
   }
+};
+
+const fetchPersonnelTasks = async (userId, userName) => {
+  try {
+    setPersonnelTasks({ workOrders: [], maintenanceTasks: [], loading: true });
+    setSelectedPersonnel({ id: userId, name: userName });
+    setShowTasksModal(true);
+
+    const orgId = AuthUtils.getCurrentOrganizationId();
+    if (!orgId) throw new Error('Organization not found');
+
+    // Fetch work orders assigned to this personnel
+    const { data: workOrders, error: woError } = await supabase
+      .from('work_orders')
+      .select(`
+        work_order_id,
+        title,
+        status_id,
+        date_requested,
+        due_date,
+        statuses(status_name)
+      `)
+      .eq('organization_id', orgId)
+      .eq('assigned_to', userId)
+      .order('date_requested', { ascending: false });
+
+    if (woError) throw woError;
+
+
+  // Fetch maintenance tasks assigned to this personnel
+const { data: maintenanceTasks, error: mtError } = await supabase
+  .from('maintenance_tasks')
+  .select(`
+    task_id,
+    task_name,
+    status_id,
+    date_created,
+    due_date,
+    statuses(status_name)
+  `)
+  .eq('organization_id', orgId)
+  .eq('assigned_to', userId)
+  .order('date_created', { ascending: false });
+
+    if (mtError) throw mtError;
+
+    setPersonnelTasks({
+      workOrders: workOrders || [],
+      maintenanceTasks: maintenanceTasks || [],
+      loading: false
+    });
+
+  } catch (err) {
+    console.error('Error fetching personnel tasks:', err);
+    setPersonnelTasks({ workOrders: [], maintenanceTasks: [], loading: false });
+    alert('Failed to load tasks: ' + err.message);
+  }
+};
+
+const getTaskStatusBadge = (status) => {
+  const statusLower = status?.toLowerCase() || '';
+  if (statusLower === 'completed') return 'success';
+  if (statusLower === 'in progress') return 'primary';
+  if (statusLower === 'pending') return 'warning';
+  if (statusLower === 'cancelled') return 'secondary';
+  return 'info';
 };
 
 // Helper function to get role_id from role name
@@ -1117,13 +1191,29 @@ const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com",
   {user.role === 'Facility Manager' ? (
     <span className="badge bg-secondary">View Only</span>
   ) : (
-    <button
-      className="btn btn-sm btn-outline-primary"
-      onClick={() => handleEditRole(user)}
-      disabled={loading}
-    >
-      Edit
-    </button>
+    <div className="d-flex gap-2">
+      <button
+        className="btn btn-sm btn-outline-primary"
+        onClick={() => handleEditRole(user)}
+        disabled={loading}
+      >
+        Edit
+      </button>
+      {user.role === 'Personnel' && (
+        <button
+          className="btn btn-sm btn-outline-info"
+          onClick={() => fetchPersonnelTasks(user.id, user.name)}
+          disabled={loading}
+          title="View assigned tasks"
+        >
+          <svg width="14" height="14" fill="currentColor" className="bi bi-list-task" viewBox="0 0 16 16">
+            <path fillRule="evenodd" d="M2 2.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V3a.5.5 0 0 0-.5-.5H2zM3 3H2v1h1V3z"/>
+            <path d="M5 3.5a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5zM5.5 7a.5.5 0 0 0 0 1h9a.5.5 0 0 0 0-1h-9zm0 4a.5.5 0 0 0 0 1h9a.5.5 0 0 0 0-1h-9z"/>
+            <path fillRule="evenodd" d="M1.5 7a.5.5 0 0 1 .5-.5h1a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-.5.5H2a.5.5 0 0 1-.5-.5V7zM2 7h1v1H2V7zm0 3.5a.5.5 0 0 0-.5.5v1a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5H2zm1 .5H2v1h1v-1z"/>
+          </svg>
+        </button>
+      )}
+    </div>
   )}
 </td>
                   </tr>
@@ -1361,6 +1451,170 @@ const csvContent = 'name,email,role,job_position\n"John Doe","john@example.com",
                     disabled={loading}
                   >
                     {loading ? 'Saving...' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+{/* Personnel Tasks Modal */}
+        {showTasksModal && selectedPersonnel && (
+          <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+            <div className="modal-dialog modal-xl">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h5 className="modal-title">
+                    Assigned Tasks - {selectedPersonnel.name}
+                  </h5>
+                  <button
+                    type="button"
+                    className="btn-close"
+                    onClick={() => {
+                      setShowTasksModal(false);
+                      setSelectedPersonnel(null);
+                      setPersonnelTasks({ workOrders: [], maintenanceTasks: [], loading: false });
+                    }}
+                  ></button>
+                </div>
+                <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                  
+                  {personnelTasks.loading ? (
+                    <div className="text-center py-5">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                      <p className="mt-3 text-muted">Loading tasks...</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Summary Stats */}
+                      <div className="row mb-4">
+                        <div className="col-md-4">
+                          <div className="card bg-primary bg-opacity-10 border-primary">
+                            <div className="card-body text-center">
+                              <h3 className="mb-0 text-primary">
+                                {personnelTasks.workOrders.length + personnelTasks.maintenanceTasks.length}
+                              </h3>
+                              <small className="text-muted">Total Tasks</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="card bg-success bg-opacity-10 border-success">
+                            <div className="card-body text-center">
+                              <h3 className="mb-0 text-success">
+                                {personnelTasks.workOrders.filter(w => w.statuses?.status_name?.toLowerCase() === 'completed').length +
+                                 personnelTasks.maintenanceTasks.filter(m => m.statuses?.status_name?.toLowerCase() === 'completed').length}
+                              </h3>
+                              <small className="text-muted">Completed</small>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="col-md-4">
+                          <div className="card bg-warning bg-opacity-10 border-warning">
+                            <div className="card-body text-center">
+                              <h3 className="mb-0 text-warning">
+                                {personnelTasks.workOrders.filter(w => w.statuses?.status_name?.toLowerCase() !== 'completed' && w.statuses?.status_name?.toLowerCase() !== 'cancelled').length +
+                                 personnelTasks.maintenanceTasks.filter(m => m.statuses?.status_name?.toLowerCase() !== 'completed' && m.statuses?.status_name?.toLowerCase() !== 'cancelled').length}
+                              </h3>
+                              <small className="text-muted">In Progress</small>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Work Orders Section */}
+                      <div className="mb-4">
+                        <h6 className="fw-bold mb-3">
+                          Work Orders ({personnelTasks.workOrders.length})
+                        </h6>
+                        {personnelTasks.workOrders.length > 0 ? (
+                          <div className="table-responsive">
+                            <table className="table table-hover">
+                              <thead className="table-light">
+                                <tr>
+                                  <th>ID</th>
+                                  <th>Title</th>
+                                  <th>Status</th>
+                                  <th>Assigned Date</th>
+                                  <th>Due Date</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {personnelTasks.workOrders.map(wo => (
+                                  <tr key={wo.work_order_id}>
+                                    <td>WO-{wo.work_order_id.toString().padStart(3, '0')}</td>
+                                    <td>{wo.title}</td>
+                                    <td>
+                                      <span className={`badge bg-${getTaskStatusBadge(wo.statuses?.status_name)}`}>
+                                        {wo.statuses?.status_name || 'Unknown'}
+                                      </span>
+                                    </td>
+                                    <td>{new Date(wo.date_requested).toLocaleDateString()}</td>
+                                    <td>{wo.due_date ? new Date(wo.due_date).toLocaleDateString() : 'N/A'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="alert alert-light">No work orders assigned</div>
+                        )}
+                      </div>
+
+                      {/* Maintenance Tasks Section */}
+                      <div>
+                        <h6 className="fw-bold mb-3">
+                          Maintenance Tasks ({personnelTasks.maintenanceTasks.length})
+                        </h6>
+                        {personnelTasks.maintenanceTasks.length > 0 ? (
+                          <div className="table-responsive">
+                            <table className="table table-hover">
+                              <thead className="table-light">
+                                <tr>
+                                  <th>ID</th>
+                                  <th>Title</th>
+                                  <th>Status</th>
+                                  <th>Created Date</th>
+                                  <th>Due Date</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                               {personnelTasks.maintenanceTasks.map(mt => (
+                                <tr key={mt.task_id}>
+                                  <td>MT-{mt.task_id.toString().padStart(3, '0')}</td>
+                                  <td>{mt.task_name}</td>
+                                  <td>
+                                      <span className={`badge bg-${getTaskStatusBadge(mt.statuses?.status_name)}`}>
+                                        {mt.statuses?.status_name || 'Unknown'}
+                                      </span>
+                                    </td>
+                                    <td>{new Date(mt.date_created).toLocaleDateString()}</td>
+                                    <td>{mt.due_date ? new Date(mt.due_date).toLocaleDateString() : 'N/A'}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : (
+                          <div className="alert alert-light">No maintenance tasks assigned</div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="modal-footer">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => {
+                      setShowTasksModal(false);
+                      setSelectedPersonnel(null);
+                      setPersonnelTasks({ workOrders: [], maintenanceTasks: [], loading: false });
+                    }}
+                  >
+                    Close
                   </button>
                 </div>
               </div>

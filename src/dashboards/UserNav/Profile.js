@@ -72,7 +72,7 @@ const fallbackData = {
       // Convert role_id to string
       let userRole = "";
       switch (userData.role_id) {
-        case 1: userRole = "System Administrator"; break;
+        case 1: userRole = "Organization Admin"; break;
         case 2: userRole = "Facility Manager"; break;
         case 3: userRole = "Personnel"; break;
         case 4: userRole = "Standard User"; break;

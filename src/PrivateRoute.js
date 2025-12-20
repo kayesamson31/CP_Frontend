@@ -48,6 +48,7 @@ const PrivateRoute = ({ children, allowedRoles }) => {
       // Convert role_id (number) into readable role string
       let userRole = '';
       switch(userData.role_id) {
+        case 0: userRole = 'superadmin'; break;
         case 1: userRole = 'sysadmin'; break;
         case 2: userRole = 'admin'; break;
         case 3: userRole = 'personnel'; break;
@@ -55,17 +56,28 @@ const PrivateRoute = ({ children, allowedRoles }) => {
         default: userRole = 'standard';
       }
 
-      console.log('PrivateRoute: User role:', userRole, 'Required roles:', allowedRoles);
-      
-      // Check kung pasok yung role ng user sa allowedRoles
-      if (allowedRoles && !allowedRoles.includes(userRole)) {
-        console.log('PrivateRoute: Role not authorized');
-        setRedirect('/unauthorized'); // redirect sa unauthorized page
-        setAuthorized(false);
-      } else {
-        console.log('PrivateRoute: Authorization successful');
-        setAuthorized(true);  // allow access
-      }
+    console.log('PrivateRoute: User role:', userRole, 'Required roles:', allowedRoles);
+console.log('PrivateRoute: Role type:', typeof userRole);
+console.log('PrivateRoute: AllowedRoles includes check:', allowedRoles.includes(userRole));
+
+// Check kung pasok yung role ng user sa allowedRoles
+if (allowedRoles && allowedRoles.length > 0) {
+  const isAuthorized = allowedRoles.includes(userRole);
+  console.log('PrivateRoute: Is authorized?', isAuthorized);
+  
+  if (!isAuthorized) {
+    console.log('PrivateRoute: Role not authorized');
+    setRedirect('/unauthorized');
+    setAuthorized(false);
+  } else {
+    console.log('PrivateRoute: Authorization successful');
+    setAuthorized(true);
+  }
+} else {
+  // No role restrictions, allow access
+  console.log('PrivateRoute: No role restrictions, allowing access');
+  setAuthorized(true);
+}
       
       setLoading(false);  // tapos na ang checking
     };

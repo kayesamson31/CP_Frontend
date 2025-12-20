@@ -155,6 +155,7 @@ const handleSuccessfulLogin = async (userData) => {
   // Your existing user role and redirect logic here
   let userRole = "";
   switch (userData.role_id) {
+    case 0: userRole = "superadmin"; break; 
     case 1: userRole = "sysadmin"; break;
     case 2: userRole = "admin"; break; 
     case 3: userRole = "personnel"; break;
@@ -191,6 +192,7 @@ if (userData.first_login === true) {
       .eq('user_id', userData.user_id);
     alert("Welcome! Please change your temporary password to continue.");
     switch (userRole) {
+      case "superadmin": navigate("/dashboard-superadmin/profile"); return; 
       case "sysadmin": navigate("/dashboard-sysadmin/profile"); return;
       case "admin": navigate("/dashboard-admin/profile"); return;
       case "personnel": navigate("/dashboard-personnel/profile"); return;
@@ -205,6 +207,7 @@ if (userData.first_login === true) {
   }
 
   switch (userRole) {
+    case "superadmin": navigate("/dashboard-superadmin/organizations"); break;
     case "sysadmin": navigate("/dashboard-sysadmin"); break;
     case "admin": navigate("/dashboard-admin"); break;
     case "personnel": navigate("/dashboard-personnel"); break;

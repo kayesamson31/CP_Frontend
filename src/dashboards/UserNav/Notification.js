@@ -416,7 +416,7 @@ useEffect(() => {
       'standard': 'Standard User',
       'admin': 'Facility Manager',
       'personnel': 'Personnel',
-      'sysadmin': 'System Administrator'
+      'sysadmin': 'Organization Admin'
     };
     return roleNames[role] || role;
   };
